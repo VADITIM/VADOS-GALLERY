@@ -7,6 +7,13 @@ import com.vaditim.gallery.access.AccessState
 import com.vaditim.gallery.access.StorageAccess
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.CoverStore
+import com.vaditim.gallery.media.LocationGroup
+import com.vaditim.gallery.media.LocationIndex
+import com.vaditim.gallery.media.Place
+import com.vaditim.gallery.media.groupByCity
+import android.Manifest
+import android.content.pm.PackageManager
+import kotlinx.coroutines.flow.collectLatest
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
 import com.vaditim.gallery.media.groupIntoAlbums
@@ -55,6 +62,32 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val locationIndex = LocationIndex(application)
+    private val mutablePlaces = MutableStateFlow<Map<Long, Place>>(emptyMap())
+    val places: StateFlow<Map<Long, Place>> = mutablePlaces
+    private val canReadLocation = MutableStateFlow(hasLocationPermission())
+
+    val locations: StateFlow<List<LocationGroup>> =
+        combine(library, mutablePlaces) { items, places -> groupByCity(items, places) }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    init {
+        // Re-run whenever the library changes or the location permission arrives; only photos not read before cost anything.
+        viewModelScope.launch {
+            combine(library, canReadLocation) { items, canRead -> items to canRead }.collectLatest { (items, canRead) ->
+                if (items.isNotEmpty()) locationIndex.index(items, canRead) { mutablePlaces.value = it }
+            }
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean =
+        getApplication<Application>().checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    fun refreshLocationPermission() {
+        canReadLocation.value = hasLocationPermission()
+    }
+
     val vault = PrivateVault(application)
 
     private val mutablePrivate = MutableStateFlow(PrivateContents(emptyList(), emptyList()))
@@ -93,6 +126,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     // Both permissions are granted on a settings page outside the app, so they are re-read every time the app comes back to the front.
     fun refreshAccess() {
         mutableAccess.value = StorageAccess.read(getApplication())
+        refreshLocationPermission()
         refreshPrivate()
     }
 }

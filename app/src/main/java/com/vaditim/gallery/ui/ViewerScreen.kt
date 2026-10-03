@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.media.Place
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -108,6 +109,7 @@ fun ViewerScreen(
     onCurrentChanged: (Long) -> Unit = {},
     onPhotoRatio: (Long, Float) -> Unit = { _, _ -> },
     onPull: (Float) -> Unit = {},
+    places: Map<Long, Place> = emptyMap(),
 ) {
     if (items.isEmpty()) {
         LaunchedEffect(Unit) { onClose() }
@@ -269,6 +271,10 @@ fun ViewerScreen(
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicText(current.name, style = Type.caption.copy(color = Palette.textBright))
                     BasicText(formatStamp(current), style = Type.value)
+                    places[current.id]?.let { place ->
+                        place.label?.let { BasicText(it, style = Type.caption.copy(color = Palette.textBright)) }
+                        BasicText("%.5f, %.5f".format(java.util.Locale.ROOT, place.latitude, place.longitude), style = Type.value)
+                    }
                     if (current.width > 0) BasicText("${current.width} × ${current.height}", style = Type.value)
                     BasicText(formatSize(current.sizeBytes), style = Type.value)
                     BasicText(if (isPrivate) "Private · ${current.bucketName}" else current.relativePath, style = Type.value)

@@ -207,3 +207,4 @@ review, which is not a goal.
 7. **Private** *(done)* — fingerprint-locked groups at the end of Albums.
 
 - **Settings.** A button at the top right of every view opens a sheet: blur amount and background opacity of the glass (the glass is black under the blur), default column count, month headers on/off, autoplay of videos on/off. Stored in preferences (`Settings.kt`) and applied at once.
+- **Locations.** Each photo's GPS (EXIF, or a video's location atom) is read once with the media-location permission and named by the system geocoder per ~1 km cell; both are cached in app files. Details shows the city, country and coordinates. A Locations row above Private in Albums lists cities by photo count; each opens as a grid.

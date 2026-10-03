@@ -1,5 +1,8 @@
 package com.vaditim.gallery.ui
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -27,7 +30,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -90,6 +95,7 @@ sealed interface ViewerSource {
     data class InAlbum(val albumId: Long) : ViewerSource
     data class InPrivateGroup(val name: String) : ViewerSource
     data object PrivateFavorites : ViewerSource
+    data class InLocation(val key: String) : ViewerSource
 }
 
 data class ViewerRequest(val source: ViewerSource, val startIndex: Int)
@@ -101,6 +107,8 @@ private sealed interface AlbumsPlace {
     data object PrivateGroups : AlbumsPlace
     data class PrivateFolder(val name: String) : AlbumsPlace
     data object PrivateFavorites : AlbumsPlace
+    data object Locations : AlbumsPlace
+    data class Location(val key: String) : AlbumsPlace
 }
 
 private val AlbumsPlace.isPrivate: Boolean
@@ -147,6 +155,11 @@ private fun Library(viewModel: GalleryViewModel) {
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val privateContents by viewModel.privateContents.collectAsStateWithLifecycle()
     val isPrivateUnlocked by viewModel.isPrivateUnlocked.collectAsStateWithLifecycle()
+    val places by viewModel.places.collectAsStateWithLifecycle()
+    val locations by viewModel.locations.collectAsStateWithLifecycle()
+    // GPS in photos is stripped by the system unless this is granted; it is asked once, the first time the library shows.
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refreshLocationPermission() }
+    LaunchedEffect(Unit) { locationPermission.launch(Manifest.permission.ACCESS_MEDIA_LOCATION) }
     val actions = rememberMediaActions(viewModel.repository, viewModel.vault, onPrivateChanged = { viewModel.refreshPrivate() })
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -177,6 +190,7 @@ private fun Library(viewModel: GalleryViewModel) {
     val favoritesMemory = remember { GridMemory() }
     val privateFavoritesMemory = remember { GridMemory() }
     val albumMemories = remember { mutableMapOf<Long, GridMemory>() }
+    val locationMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateMemories = remember { mutableMapOf<String, GridMemory>() }
     val albumsListState = rememberLazyGridState()
     val hazeState = rememberHazeState()
@@ -192,6 +206,7 @@ private fun Library(viewModel: GalleryViewModel) {
     val openAlbum = (place as? AlbumsPlace.Folder)?.let { folder -> albums.firstOrNull { it.id == folder.albumId } }
     val openPrivateGroup = (place as? AlbumsPlace.PrivateFolder)?.let { folder -> privateContents.groups.firstOrNull { it.name == folder.name } }
     val isInPrivate = place?.isPrivate == true
+    val openLocation = (place as? AlbumsPlace.Location)?.let { shown -> locations.firstOrNull { it.key == shown.key } }
 
     // The items of the grid on screen, which is what a selection is made of.
     val gridItems: List<MediaItem> = when {
@@ -199,6 +214,7 @@ private fun Library(viewModel: GalleryViewModel) {
         section == Section.FAVORITES -> favorites
         openAlbum != null -> openAlbum.items
         openPrivateGroup != null -> openPrivateGroup.items
+        openLocation != null -> openLocation.items
         place is AlbumsPlace.PrivateFavorites -> privateContents.favorites
         else -> emptyList()
     }
@@ -249,11 +265,13 @@ private fun Library(viewModel: GalleryViewModel) {
         is ViewerSource.InAlbum -> albums.firstOrNull { it.id == source.albumId }?.items.orEmpty()
         is ViewerSource.InPrivateGroup -> if (isPrivateUnlocked) privateContents.groups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
         ViewerSource.PrivateFavorites -> if (isPrivateUnlocked) privateContents.favorites else emptyList()
+        is ViewerSource.InLocation -> locations.firstOrNull { it.key == source.key }?.items.orEmpty()
     }
 
     val folderMemory = when {
         openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory() }
         openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory() }
+        openLocation != null -> locationMemories.getOrPut(openLocation.key) { GridMemory() }
         place is AlbumsPlace.PrivateFavorites -> privateFavoritesMemory
         section == Section.RECENT -> recentMemory
         section == Section.FAVORITES -> favoritesMemory
@@ -333,7 +351,12 @@ private fun Library(viewModel: GalleryViewModel) {
                             },
                             onNewAlbum = { sheet = AppSheet.NEW_ALBUM },
                             contentPadding = insetPadding,
-                            footer = { PrivateEntry(onClick = openPrivate) },
+                            footer = {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    LocationsEntry(onClick = { albumsPlace = AlbumsPlace.Locations })
+                                    PrivateEntry(onClick = openPrivate)
+                                }
+                            },
                         )
                         is AlbumsPlace.Folder -> albums.firstOrNull { it.id == shownPlace.albumId }?.let { album ->
                             AlbumScreen(
@@ -341,6 +364,22 @@ private fun Library(viewModel: GalleryViewModel) {
                                 memory = albumMemories.getOrPut(album.id) { GridMemory() },
                                 onOpen = { viewer = ViewerRequest(ViewerSource.InAlbum(album.id), it) },
                                 onBack = { albumsPlace = AlbumsPlace.Folders },
+                                contentPadding = insetPadding,
+                                selection = selection,
+                            )
+                        }
+                        AlbumsPlace.Locations -> LocationsScreen(
+                            groups = locations,
+                            onOpen = { albumsPlace = AlbumsPlace.Location(it.key) },
+                            onBack = { albumsPlace = AlbumsPlace.Folders },
+                            contentPadding = insetPadding,
+                        )
+                        is AlbumsPlace.Location -> locations.firstOrNull { it.key == shownPlace.key }?.let { group ->
+                            LocationScreen(
+                                items = group.items,
+                                memory = locationMemories.getOrPut(group.key) { GridMemory() },
+                                onOpen = { viewer = ViewerRequest(ViewerSource.InLocation(group.key), it) },
+                                onBack = { albumsPlace = AlbumsPlace.Locations },
                                 contentPadding = insetPadding,
                                 selection = selection,
                             )
@@ -398,6 +437,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     openAlbum != null -> openAlbum.name
                     openPrivateGroup != null -> "Private · ${openPrivateGroup.name}"
                     place is AlbumsPlace.PrivateFavorites -> "Private · Favorites"
+                    openLocation != null -> openLocation.city
                     else -> null
                 },
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
@@ -408,7 +448,11 @@ private fun Library(viewModel: GalleryViewModel) {
                     else -> null
                 },
                 onBack = {
-                    albumsPlace = if (place is AlbumsPlace.Folder) AlbumsPlace.Folders else AlbumsPlace.PrivateGroups
+                    albumsPlace = when (place) {
+                        is AlbumsPlace.Folder -> AlbumsPlace.Folders
+                        is AlbumsPlace.Location -> AlbumsPlace.Locations
+                        else -> AlbumsPlace.PrivateGroups
+                    }
                 },
                 onCancelSelection = clearSelection,
                 onSettings = { sheet = AppSheet.SETTINGS },
@@ -700,6 +744,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 viewerRatio = photoRatios[viewerCurrentId] ?: viewerRatio
                                 viewerPull = fraction
                             },
+                            places = places,
                         )
                     }
                 }

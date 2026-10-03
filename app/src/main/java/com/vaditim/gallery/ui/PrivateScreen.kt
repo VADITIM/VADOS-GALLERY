@@ -160,7 +160,7 @@ private fun FavoritesFolder(cover: MediaItem?, count: Int, onClick: () -> Unit) 
 }
 
 @Composable
-private fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     val context = LocalContext.current
     val request = remember(cover?.uri) { cover?.let { ImageRequest.Builder(context).data(it.uri).size(COVER_PIXELS).build() } }
     Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
