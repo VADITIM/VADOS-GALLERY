@@ -70,6 +70,7 @@ class VideoState(val player: ExoPlayer) {
     var isLooping by mutableStateOf(false)
     // Set while a hold on the picture is speeding playback up or slowing it down; null otherwise.
     var holdSpeed by mutableStateOf<Float?>(null)
+    var isHoldReverse by mutableStateOf(false)
 
     fun seekToFraction(fraction: Float) {
         positionMs = (fraction * durationMs).toLong()
@@ -139,6 +140,15 @@ fun VideoControls(state: VideoState, isFavorite: Boolean, onFavorite: () -> Unit
             .glass(Shapes.panel, Palette.viewerGround)
             .padding(horizontal = 6.dp, vertical = 8.dp),
     ) {
+        // Always this tall, so the controls do not jump when a hold starts and the speed appears here.
+        Box(Modifier.fillMaxWidth().height(22.dp), contentAlignment = Alignment.Center) {
+            state.holdSpeed?.let { speed ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SpeedArrows(isReverse = state.isHoldReverse, count = if (speed < 1.25f) 1 else if (speed < 2.5f) 2 else 3, color = LocalAccent.current)
+                    MicroLabel("%.2f×".format(speed))
+                }
+            }
+        }
         Timeline(state, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             val isFine = state.isScrubbing && state.scrubSpeed < 1f

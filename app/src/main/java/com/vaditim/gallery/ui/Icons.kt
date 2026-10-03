@@ -93,3 +93,27 @@ fun LoopIcon(color: Color, size: Dp = 24.dp) {
         drawPath(lower, color, style = stroke)
     }
 }
+
+// Chevrons pointing the way the picture is moving: one for gentle speeds, up to three for fast ones.
+@Composable
+fun SpeedArrows(isReverse: Boolean, count: Int, color: Color, size: Dp = 14.dp) {
+    Canvas(Modifier.size(width = size * count, height = size)) {
+        val unit = this.size.height / 14f
+        val stroke = Stroke(2f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        for (index in 0 until count) {
+            val left = index * 14f * unit
+            val chevron = Path().apply {
+                if (isReverse) {
+                    moveTo(left + 9f * unit, 2f * unit)
+                    lineTo(left + 4f * unit, 7f * unit)
+                    lineTo(left + 9f * unit, 12f * unit)
+                } else {
+                    moveTo(left + 5f * unit, 2f * unit)
+                    lineTo(left + 10f * unit, 7f * unit)
+                    lineTo(left + 5f * unit, 12f * unit)
+                }
+            }
+            drawPath(chevron, color, style = stroke)
+        }
+    }
+}

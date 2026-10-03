@@ -5,6 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import androidx.media3.exoplayer.SeekParameters
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -81,6 +84,7 @@ import java.util.Locale
 private val PAGE_GAP = 18.dp
 private const val MAX_ZOOM = 5f
 private const val HOLD_SPEED = 1.5f
+private const val REVERSE_STEP_MS = 90L
 private const val MIN_HOLD_SPEED = 0.25f
 private const val MAX_HOLD_SPEED = 4f
 // Sliding this far while holding changes the speed by 1x.
@@ -137,18 +141,6 @@ fun ViewerScreen(
                     onSwipeUp = { overlay = Overlay.DETAILS },
                     onRatio = { onPhotoRatio(items[page].id, it) },
                 )
-            }
-
-            // While a hold is speeding the video up or slowing it down, its speed shows at the top.
-            video?.holdSpeed?.let { speed ->
-                Box(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .padding(top = 8.dp)
-                        .glass(Shapes.capsule, Palette.viewerGround)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                ) { MicroLabel("%.2f×".format(speed)) }
             }
 
             AnimatedVisibility(
@@ -329,7 +321,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     },
                 )
             }
-            // Holding on a video plays it at 1.5x for as long as the finger stays down; sliding right or left while holding speeds it up or slows it down.
+            // Holding on a video: the right half plays it forward at 1.5x, the left half plays it backwards at 1.5x, for as long as the finger stays down. Sliding towards the middle speeds it up; sliding towards the edge slows it down.
             .then(
                 if (video == null) Modifier else Modifier.pointerInput(video) {
                     awaitEachGesture {
@@ -337,25 +329,48 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                         if (scale > 1.01f) return@awaitEachGesture
                         val held = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val isReverse = down.position.x < size.width / 2f
                         val wasPlaying = video.player.isPlaying
-                        if (!wasPlaying) video.player.play()
                         var speed = HOLD_SPEED
-                        video.player.setPlaybackSpeed(speed)
                         video.holdSpeed = speed
+                        video.isHoldReverse = isReverse
+                        var reverseJob: Job? = null
+                        if (isReverse) {
+                            // ExoPlayer cannot play backwards, so rewinding is a run of small seeks to the nearest keyframe, which is what keeps it smooth.
+                            video.player.pause()
+                            video.player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                            reverseJob = scope.launch {
+                                while (true) {
+                                    delay(REVERSE_STEP_MS)
+                                    val position = (video.player.currentPosition - (REVERSE_STEP_MS * (video.holdSpeed ?: HOLD_SPEED)).toLong()).coerceAtLeast(0L)
+                                    video.player.seekTo(position)
+                                    video.positionMs = position
+                                    if (position == 0L) break
+                                }
+                            }
+                        } else {
+                            if (!wasPlaying) video.player.play()
+                            video.player.setPlaybackSpeed(speed)
+                        }
                         var lastX = held.position.x
                         held.consume()
                         do {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull() ?: break
-                            speed = (speed + (change.position.x - lastX) / HOLD_SLIDE_DISTANCE.toPx()).coerceIn(MIN_HOLD_SPEED, MAX_HOLD_SPEED)
+                            val towardMiddle = if (isReverse) change.position.x - lastX else lastX - change.position.x
+                            speed = (speed + towardMiddle / HOLD_SLIDE_DISTANCE.toPx()).coerceIn(MIN_HOLD_SPEED, MAX_HOLD_SPEED)
                             lastX = change.position.x
-                            video.player.setPlaybackSpeed(speed)
                             video.holdSpeed = speed
+                            if (!isReverse) video.player.setPlaybackSpeed(speed)
                             change.consume()
                         } while (event.changes.any { it.pressed })
+                        reverseJob?.cancel()
+                        video.player.setSeekParameters(SeekParameters.EXACT)
                         video.player.setPlaybackSpeed(1f)
                         video.holdSpeed = null
-                        if (!wasPlaying) video.player.pause()
+                        // Rewinding leaves the video paused; a video that was playing carries on from where the rewind stopped.
+                        if (isReverse && wasPlaying) video.player.play()
+                        if (!isReverse && !wasPlaying) video.player.pause()
                     }
                 },
             )

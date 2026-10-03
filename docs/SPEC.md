@@ -117,7 +117,7 @@ Tapping a thumbnail opens it full screen, on black.
   - **Shared-element zoom** (done): the photo's own frame (no black around it) is cropped to the tile's square and moved onto the tile of whichever photo you ended on, scrolling the grid to it first when needed; a quiet fade when no tile applies.
   - Pinch and double-tap to zoom (done); photos sit in a rounded frame with a gap between pages when swiping.
   - Swipe down to dismiss back into the grid (done); swipe up shows the details sheet (done). Both only at normal size, so zoomed panning and the horizontal pager are untouched.
-  - Inline video playback (done): plays on open, a timeline above the action bar with loop, play/pause and favourite icons beneath it. Holding on the video plays it at 1.5x; sliding right or left while holding speeds it up or slows it down, and letting go returns to normal. Hold the timeline and slide up for finer scrubbing: half, quarter, then a tenth of finger speed, with hundredths of a second shown.
+  - Inline video playback (done): plays on open, a timeline above the action bar with loop, play/pause and favourite icons beneath it. Holding on the right half plays the video forward at 1.5x, holding on the left half plays it backwards at 1.5x; sliding towards the middle speeds it up, towards the edge slows it down. The speed shows as chevrons and a number above the timeline. Letting go returns to normal. Hold the timeline and slide up for finer scrubbing: half, quarter, then a tenth of finger speed, with hundredths of a second shown.
 
 ### The action bar
 
