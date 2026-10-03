@@ -70,7 +70,17 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
   not need the fingerprint; looking does.
 - **Inside a private photo:** SHARE, DELETE (a second tap to confirm — private photos are outside the
   system trash, so this one is final), and ••• → *Move to group*, *Move out to album*, *Details*.
+- **Private favourites.** A favourite that goes into Private stays a favourite — but only as a
+  *private* favourite, kept in the private folder itself (`.favorites`), never in MediaStore, so it can
+  never appear in the normal FAVORITES. Moving it back out to an album makes it an ordinary favourite
+  again. Private has its own **Private Favorites** card, first among the groups.
+- **"Today's selection for you 😏"** — a large card at the top of Private showing one random private
+  favourite; the pick is seeded by the date, so it stays the same all day and changes at midnight.
 - **Screenshots and the recent-apps preview are blocked** while anything private is on screen.
+- **Nothing private is visible anywhere else on the phone.** The folder carries `.nomedia`, so
+  MediaStore never indexes it and no gallery can list it; this app's own library query also excludes
+  the folder by path. Thumbnails are decoded in memory only — nothing private is written to a cache.
+  (A copy uploaded to a cloud backup *before* it was hidden is outside this app's reach.)
 - **Storage:** plain files in `/storage/emulated/0/.vados-private/<group>/`, with a `.nomedia` marker
   so no gallery (Samsung's included) indexes them. Moving in or out is a rename on the same disk —
   instant, no copy. They live outside the app's own storage so **uninstalling the app does not delete
@@ -126,8 +136,19 @@ Any of them can come back if it turns out to be missed — that is the bar, not 
 
 ## Selection
 
-*Planned.* Long-press a thumbnail to start selecting, then drag across thumbnails to select a run (the
-Apple swipe-select). Actions on a selection: SHARE, FAVORITE, MOVE TO ALBUM, DELETE.
+**Long-press a thumbnail** (with the system's long-press haptic) to start selecting; while a selection
+is open, a tap adds or removes a photo. The top shows *Cancel* and the count; back also cancels. The
+section bar is replaced by the selection's own bar:
+
+| Where | Actions |
+|---|---|
+| Recent, Favorites, an album | SHARE · MOVE (to an album) · PRIVATE (to a group) · DELETE (to the trash) |
+| A private group, Private Favorites | SHARE · GROUP (to another group) · OUT (back to an album) · DELETE (forever, second tap confirms) |
+
+*Planned:* dragging across thumbnails to select a run (the Apple swipe-select).
+
+**Long-press an album** for its menu: **Move album to private** — every photo in the folder goes into a
+private group, an existing one or a new one named after the album by default.
 
 ## Becoming the default gallery
 
@@ -165,7 +186,7 @@ review, which is not a goal.
 1. **Scaffold** *(this commit)* — the three sections, newest-at-bottom grids, albums, the viewer with
    SHARE / FAVORITE / DELETE / ••• (MOVE, EDIT, DETAILS), permissions, CI build.
 2. **The viewer, properly** — shared-element zoom, pinch / double-tap zoom, swipe-down dismiss, video playback.
-3. **Selection** — long-press and drag-select, batch actions.
+3. **Selection** — long-press and batch actions *(done)*; drag-select still to come.
 4. **Moving, properly** — create an album from the move picker, recently-used albums first.
 5. **Grid polish** — pinch to change columns, the date scrubber, the trash row.
 6. **Default app** — verify the camera hand-off, open an external photo inside its album.

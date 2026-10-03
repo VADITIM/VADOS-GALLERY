@@ -3,7 +3,8 @@ package com.vaditim.gallery.vas
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -39,9 +40,10 @@ fun MicroLabel(text: String, modifier: Modifier = Modifier) {
     BasicText(text.uppercase(), modifier, style = Type.microLabel)
 }
 
-// The platform ripple is removed everywhere, so every pressable owns its press (dna/05-motion.md §8): in fast, out on the enter curve.
+// The platform ripple is removed everywhere, so every pressable owns its press (dna/05-motion.md §8): in fast, out on the enter curve. A long press, where there is one, gets the system's long-press haptic from combinedClickable.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Modifier.pressable(onClick: () -> Unit, pressedScale: Float = 0.95f): Modifier {
+fun Modifier.pressable(onClick: () -> Unit, pressedScale: Float = 0.95f, onLongClick: (() -> Unit)? = null): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -51,5 +53,5 @@ fun Modifier.pressable(onClick: () -> Unit, pressedScale: Float = 0.95f): Modifi
     )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+        .combinedClickable(interactionSource = interactionSource, indication = null, onLongClick = onLongClick, onClick = onClick)
 }

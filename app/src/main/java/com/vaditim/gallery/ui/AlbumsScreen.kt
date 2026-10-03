@@ -36,7 +36,7 @@ private const val COVER_PIXELS = 512
 
 // Folders only. No "Recent" and no "Favorites" album: both are sections already, and an album that repeats a section is the Samsung habit this app exists to drop.
 @Composable
-fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> Unit, contentPadding: PaddingValues, footer: @Composable () -> Unit) {
+fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> Unit, onLongPress: (Album) -> Unit, contentPadding: PaddingValues, footer: @Composable () -> Unit) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         state = state,
@@ -56,18 +56,18 @@ fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> U
                 MicroLabel("${albums.size} folders", Modifier.padding(top = 6.dp))
             }
         }
-        items(albums, key = { it.id }, contentType = { "album" }) { album -> AlbumCard(album, onClick = { onOpen(album) }) }
+        items(albums, key = { it.id }, contentType = { "album" }) { album -> AlbumCard(album, onClick = { onOpen(album) }, onLongClick = { onLongPress(album) }) }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { footer() }
     }
 }
 
 @Composable
-private fun AlbumCard(album: Album, onClick: () -> Unit) {
+private fun AlbumCard(album: Album, onClick: () -> Unit, onLongClick: () -> Unit) {
     val context = LocalContext.current
     val request = remember(album.cover.uri) {
         ImageRequest.Builder(context).data(Thumbnail(album.cover.uri, COVER_PIXELS)).size(COVER_PIXELS).build()
     }
-    Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
+    Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
         AsyncImage(
             model = request,
             contentDescription = album.name,
@@ -85,7 +85,8 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
 
 // The header (back and the album's name) floats over the grid in the app's top layer, so it can blur what scrolls under it.
 @Composable
-fun AlbumScreen(album: Album, memory: GridMemory, onOpen: (Int) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues) {
-    BackHandler(onBack = onBack)
-    MediaGrid(items = album.items, memory = memory, onOpen = onOpen, contentPadding = contentPadding)
+fun AlbumScreen(album: Album, memory: GridMemory, onOpen: (Int) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
+    // While selecting, back clears the selection first (the app root handles that), so this one stands aside.
+    BackHandler(enabled = !selection.isActive, onBack = onBack)
+    MediaGrid(items = album.items, memory = memory, onOpen = onOpen, contentPadding = contentPadding, selection = selection)
 }

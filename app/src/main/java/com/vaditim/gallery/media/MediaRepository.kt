@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.BaseColumns
 import android.provider.MediaStore
+import com.vaditim.gallery.vault.PrivateVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -60,10 +61,12 @@ class MediaRepository(private val resolver: ContentResolver) {
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.DATA,
         )
-        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
+        // The private folder is excluded by path as well as by its .nomedia marker: if a stale row ever survives a move into Private, it still never reaches Recent or Favorites.
+        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?) AND ${MediaStore.MediaColumns.DATA} NOT LIKE ?"
         val arguments = arrayOf(
             MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
             MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+            "%/${PrivateVault.ROOT.name}/%",
         )
         val items = ArrayList<MediaItem>()
         resolver.query(FILES, projection, selection, arguments, null)?.use { cursor ->

@@ -2,14 +2,9 @@ package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,12 +14,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.BasicText
@@ -46,18 +38,18 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
-import com.vaditim.gallery.vault.PrivateGroup
 import com.vaditim.gallery.vas.LocalAccent
+import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
-import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.Shapes
+import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.glass
+import com.vaditim.gallery.vas.pressable
+import com.vaditim.gallery.vault.PrivateGroup
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import com.vaditim.gallery.vas.Type
-import com.vaditim.gallery.vas.pressable
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -135,21 +127,21 @@ fun ViewerScreen(
                         .glass(Shapes.capsule, Palette.viewerGround)
                         .padding(5.dp),
                 ) {
-                    ActionButton("SHARE") { actions.share(current) }
+                    ActionButton("SHARE") { actions.share(listOf(current)) }
+                    ActionButton(if (current.isFavorite) "FAVORITED" else "FAVORITE", isLit = current.isFavorite) { actions.toggleFavorite(current) }
                     if (isPrivate) {
                         // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
-                        ActionButton(if (isDeleteArmed) "DELETE FOREVER" else "DELETE", color = Palette.danger) {
-                            if (isDeleteArmed) actions.deletePrivate(current) else isDeleteArmed = true
+                        ActionButton(if (isDeleteArmed) "FOREVER?" else "DELETE", color = Palette.danger) {
+                            if (isDeleteArmed) actions.deletePrivate(listOf(current)) else isDeleteArmed = true
                         }
                     } else {
-                        ActionButton(if (current.isFavorite) "FAVORITED" else "FAVORITE", isLit = current.isFavorite) { actions.toggleFavorite(current) }
-                        ActionButton("DELETE", color = Palette.danger) { actions.trash(current) }
+                        ActionButton("DELETE", color = Palette.danger) { actions.trash(listOf(current)) }
                     }
                     ActionButton("•••") { overlay = Overlay.MORE }
                 }
             }
 
-            OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", onDismiss = { overlay = Overlay.NONE }) {
+            OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
                 if (isPrivate) {
                     SheetRow("Move to group") { overlay = Overlay.HIDE }
                     SheetRow("Move out to album") { overlay = Overlay.MOVE }
@@ -161,28 +153,32 @@ fun ViewerScreen(
                 SheetRow("Details") { overlay = Overlay.DETAILS }
             }
 
-            OverlaySheet(visible = overlay == Overlay.MOVE, label = "MOVE TO", onDismiss = { overlay = Overlay.NONE }) {
-                LazyColumn(Modifier.heightIn(max = 380.dp)) {
-                    items(albums.filter { it.id != current.bucketId }, key = { it.id }) { album ->
-                        SheetRow(album.name, trailing = album.items.size.toString()) {
-                            overlay = Overlay.NONE
-                            if (isPrivate) actions.unhide(current, album) else actions.move(current, album)
-                        }
-                    }
-                }
-            }
+            AlbumPickerSheet(
+                visible = overlay == Overlay.MOVE,
+                label = if (isPrivate) "MOVE OUT TO" else "MOVE TO",
+                albums = albums,
+                excludedAlbumId = if (isPrivate) null else current.bucketId,
+                ground = Palette.viewerGround,
+                onPick = { album ->
+                    overlay = Overlay.NONE
+                    if (isPrivate) actions.unhide(listOf(current), album) else actions.move(listOf(current), album)
+                },
+                onDismiss = { overlay = Overlay.NONE },
+            )
 
-            OverlaySheet(visible = overlay == Overlay.HIDE, label = if (isPrivate) "MOVE TO GROUP" else "MOVE TO PRIVATE", onDismiss = { overlay = Overlay.NONE }) {
-                LazyColumn(Modifier.heightIn(max = 380.dp)) {
-                    items(privateGroups.filter { it.name != current.bucketName || !isPrivate }, key = { it.directory.absolutePath }) { group ->
-                        SheetRow(group.name, trailing = group.items.size.toString()) {
-                            overlay = Overlay.NONE
-                            if (isPrivate) actions.moveToGroup(current, group.name) else actions.hide(current, group.name)
-                        }
-                    }
-                    item { SheetRow("+ New group") { overlay = Overlay.NEW_GROUP } }
-                }
-            }
+            GroupPickerSheet(
+                visible = overlay == Overlay.HIDE,
+                label = if (isPrivate) "MOVE TO GROUP" else "MOVE TO PRIVATE",
+                groups = privateGroups,
+                excludedGroupName = if (isPrivate) current.bucketName else null,
+                ground = Palette.viewerGround,
+                onPick = { name ->
+                    overlay = Overlay.NONE
+                    if (isPrivate) actions.moveToGroup(listOf(current), name) else actions.hide(listOf(current), name)
+                },
+                onNewGroup = { overlay = Overlay.NEW_GROUP },
+                onDismiss = { overlay = Overlay.NONE },
+            )
 
             if (overlay == Overlay.NEW_GROUP) {
                 NameSheet(
@@ -191,13 +187,13 @@ fun ViewerScreen(
                     ground = Palette.viewerGround,
                     onConfirm = { name ->
                         overlay = Overlay.NONE
-                        if (isPrivate) actions.moveToGroup(current, name) else actions.hide(current, name)
+                        if (isPrivate) actions.moveToGroup(listOf(current), name) else actions.hide(listOf(current), name)
                     },
                     onDismiss = { overlay = Overlay.NONE },
                 )
             }
 
-            OverlaySheet(visible = overlay == Overlay.DETAILS, label = "DETAILS", onDismiss = { overlay = Overlay.NONE }) {
+            OverlaySheet(visible = overlay == Overlay.DETAILS, label = "DETAILS", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicText(current.name, style = Type.caption.copy(color = Palette.textBright))
                     BasicText(formatStamp(current), style = Type.value)
@@ -221,65 +217,15 @@ private fun ViewerPage(item: MediaItem, onTap: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(model = request, contentDescription = item.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-        if (item.isVideo) MicroLabel("VIDEO · ${formatDuration(item.durationMillis)}")
+        if (item.isVideo) MicroLabel(if (item.durationMillis > 0) "VIDEO · ${formatDuration(item.durationMillis)}" else "VIDEO")
     }
 }
 
 @Composable
-private fun ActionButton(text: String, isLit: Boolean = false, color: Color? = null, onClick: () -> Unit) {
+fun ActionButton(text: String, isLit: Boolean = false, color: Color? = null, onClick: () -> Unit) {
     val ink = color ?: if (isLit) LocalAccent.current else Palette.textBody
     Box(Modifier.pressable(onClick = onClick).clip(Shapes.capsule).padding(horizontal = 14.dp, vertical = 13.dp)) {
         BasicText(text, style = Type.action.copy(color = ink))
-    }
-}
-
-// A menu over a photo: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps the photo.
-@OptIn(ExperimentalAnimationApi::class)
-@Composable
-private fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
-        exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)),
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color(0x4D000000))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Column(
-                Modifier
-                    .animateEnterExit(
-                        enter = slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut)) { it / 6 } +
-                            scaleIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut), initialScale = 0.96f),
-                        exit = slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) { it / 8 } +
-                            scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.98f),
-                    )
-                    .navigationBarsPadding()
-                    .padding(12.dp)
-                    .fillMaxWidth()
-                    .glass(Shapes.sheet, Palette.viewerGround)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                    .padding(top = 18.dp, bottom = 10.dp),
-            ) {
-                MicroLabel(label, Modifier.padding(start = 20.dp, bottom = 6.dp))
-                content()
-            }
-        }
-    }
-}
-
-@Composable
-private fun SheetRow(text: String, trailing: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BasicText(text, style = Type.cardTitle, maxLines = 1)
-        if (trailing != null) BasicText(trailing, style = Type.value)
     }
 }
 

@@ -42,8 +42,8 @@ import com.vaditim.gallery.vas.pressable
 
 // One text field on a pane of glass, sitting on the keyboard. Used to name a new private group.
 @Composable
-fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, ground: Color = Palette.ground) {
-    var name by remember { mutableStateOf("") }
+fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, ground: Color = Palette.ground, initialName: String = "") {
+    var name by remember { mutableStateOf(initialName) }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val confirm = { if (name.isNotBlank()) onConfirm(name.trim()) }

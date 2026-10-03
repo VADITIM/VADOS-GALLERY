@@ -9,7 +9,7 @@ import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
 import com.vaditim.gallery.media.groupIntoAlbums
-import com.vaditim.gallery.vault.PrivateGroup
+import com.vaditim.gallery.vault.PrivateContents
 import com.vaditim.gallery.vault.PrivateVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,8 +53,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     val vault = PrivateVault(application)
 
-    private val mutablePrivateGroups = MutableStateFlow<List<PrivateGroup>>(emptyList())
-    val privateGroups: StateFlow<List<PrivateGroup>> = mutablePrivateGroups
+    private val mutablePrivate = MutableStateFlow(PrivateContents(emptyList(), emptyList()))
+    val privateContents: StateFlow<PrivateContents> = mutablePrivate
 
     private val mutableIsPrivateUnlocked = MutableStateFlow(false)
     val isPrivateUnlocked: StateFlow<Boolean> = mutableIsPrivateUnlocked
@@ -62,7 +62,7 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     // Read from disk rather than observed: nothing but this app writes into the private folder, so a re-read after each of its own changes is the whole story.
     fun refreshPrivate() {
         if (!mutableAccess.value.hasFileAccess) return
-        viewModelScope.launch { mutablePrivateGroups.value = vault.readGroups() }
+        viewModelScope.launch { mutablePrivate.value = vault.read() }
     }
 
     fun unlockPrivate() {

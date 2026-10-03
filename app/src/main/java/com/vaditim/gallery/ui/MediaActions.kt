@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,7 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
 
-// Every change to a photo goes through a MediaStore request. With media management granted Android approves it without a popup; without it, the user sees one system confirmation. Either way the request is the one code path.
+// Every action takes a list: one photo from the viewer, a selection from a grid, or a whole album are the same call. Changes to MediaStore go through its requests — with media management granted Android approves them without a popup, without it the user sees one confirmation for the whole batch.
 class MediaActions(
     private val context: Context,
     private val repository: MediaRepository,
@@ -33,12 +34,16 @@ class MediaActions(
     private val scope: CoroutineScope,
     private val startRequest: (PendingIntent, (Boolean) -> Unit) -> Unit,
 ) {
-    fun share(item: MediaItem) {
-        val uri = if (item.uri.scheme == "file") FileProvider.getUriForFile(context, "${context.packageName}.files", File(item.absolutePath)) else item.uri
-        val send = Intent(Intent.ACTION_SEND)
-            .setType(item.mimeType)
-            .putExtra(Intent.EXTRA_STREAM, uri)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    fun share(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        val uris = ArrayList(items.map { shareableUri(it) })
+        val send = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.first())
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        }
+        send.setType(if (items.all { it.isVideo }) "video/*" else if (items.none { it.isVideo }) "image/*" else "*/*")
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(Intent.createChooser(send, null))
     }
 
@@ -54,31 +59,61 @@ class MediaActions(
     }
 
     fun toggleFavorite(item: MediaItem) {
-        startRequest(MediaStore.createFavoriteRequest(context.contentResolver, listOf(item.uri), !item.isFavorite)) { }
+        if (isPrivate(item)) {
+            runVault(if (item.isFavorite) "Removed from private favorites" else "Added to private favorites", "Could not change favorite") {
+                vault.setFavorite(item, !item.isFavorite)
+                true
+            }
+        } else {
+            startRequest(MediaStore.createFavoriteRequest(context.contentResolver, listOf(item.uri), !item.isFavorite)) { }
+        }
     }
 
-    fun trash(item: MediaItem) {
-        startRequest(MediaStore.createTrashRequest(context.contentResolver, listOf(item.uri), true)) { }
+    fun trash(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, true)) { }
     }
 
-    fun move(item: MediaItem, album: Album) {
-        startRequest(MediaStore.createWriteRequest(context.contentResolver, listOf(item.uri))) { isGranted ->
+    fun move(items: List<MediaItem>, album: Album) {
+        if (items.isEmpty()) return
+        startRequest(MediaStore.createWriteRequest(context.contentResolver, items.map { it.uri })) { isGranted ->
             if (isGranted) {
                 scope.launch {
-                    val isMoved = runCatching { repository.moveTo(item, album.relativePath) }.getOrDefault(false)
-                    notify(if (isMoved) "Moved to ${album.name}" else "Could not move to ${album.name}")
+                    val moved = items.count { runCatching { repository.moveTo(it, album.relativePath) }.getOrDefault(false) }
+                    notify(summary(moved, items.size, "Moved to ${album.name}"))
                 }
             }
         }
     }
 
-    fun hide(item: MediaItem, groupName: String) = runVault("Moved to Private · $groupName", "Could not move to Private") { vault.hide(item, groupName) }
+    fun hide(items: List<MediaItem>, groupName: String) =
+        runVaultBatch(items, "Moved to Private · $groupName") { vault.hide(it, groupName) }
 
-    fun moveToGroup(item: MediaItem, groupName: String) = runVault("Moved to $groupName", "Could not move to $groupName") { vault.moveToGroup(item, groupName) }
+    fun moveToGroup(items: List<MediaItem>, groupName: String) =
+        runVaultBatch(items, "Moved to $groupName") { vault.moveToGroup(it, groupName) }
 
-    fun unhide(item: MediaItem, album: Album) = runVault("Moved to ${album.name}", "Could not move to ${album.name}") { vault.unhide(item, album.relativePath) }
+    // Back out to an album; anything that was a private favourite becomes an ordinary favourite again once MediaStore has indexed it.
+    fun unhide(items: List<MediaItem>, album: Album) {
+        scope.launch {
+            val restored = items.map { item -> item to runCatching { vault.unhide(item, album.relativePath) }.getOrNull() }
+            onPrivateChanged()
+            notify(summary(restored.count { it.second != null }, items.size, "Moved to ${album.name}"))
+            val favoriteUris = restored.filter { (item, uri) -> item.isFavorite && uri != null }.mapNotNull { it.second }
+            if (favoriteUris.isNotEmpty()) startRequest(MediaStore.createFavoriteRequest(context.contentResolver, favoriteUris, true)) { }
+        }
+    }
 
-    fun deletePrivate(item: MediaItem) = runVault("Deleted", "Could not delete") { vault.delete(item) }
+    fun deletePrivate(items: List<MediaItem>) =
+        runVaultBatch(items, "Deleted") { vault.delete(it) }
+
+    private fun runVaultBatch(items: List<MediaItem>, success: String, operation: suspend (MediaItem) -> Boolean) {
+        if (items.isEmpty()) return
+        scope.launch {
+            val done = items.count { runCatching { operation(it) }.getOrDefault(false) }
+            onPrivateChanged()
+            notify(summary(done, items.size, success))
+        }
+    }
 
     private fun runVault(success: String, failure: String, operation: suspend () -> Boolean) {
         scope.launch {
@@ -86,6 +121,17 @@ class MediaActions(
             onPrivateChanged()
             notify(if (isDone) success else failure)
         }
+    }
+
+    private fun shareableUri(item: MediaItem): Uri =
+        if (isPrivate(item)) FileProvider.getUriForFile(context, "${context.packageName}.files", File(item.absolutePath)) else item.uri
+
+    private fun isPrivate(item: MediaItem): Boolean = item.uri.scheme == "file"
+
+    private fun summary(done: Int, total: Int, success: String): String = when {
+        done == total -> if (total == 1) success else "$success · $total"
+        done == 0 -> "Could not complete that"
+        else -> "$success · $done of $total"
     }
 
     private fun notify(message: String) {
