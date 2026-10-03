@@ -217,3 +217,5 @@ review, which is not a goal.
 - **Album layout.** Pinch the Albums grid (or Settings → Album columns) for 1–4 albums per row. Long-press an album → Rearrange albums: drag cards into any order, confirm with the check. The order is stored by folder path.
 - **Today's selection** plays a picked video silently on a loop.
 - **Haptics.** Every action answers with a vibration: a click on icon buttons and menu rows, toggle on/off in Settings, ticks on sliders, column changes, each tile reached by drag-select and each album swap while rearranging, a threshold buzz when a rearrange drag starts, a confirm when rearranging ends. Opening and closing photos stay silent.
+- **Album names fit:** at three or four per row the name and count shrink until they fit (down to 9sp), then cut. One per row is a list: small cover at the start, large name and count beside it.
+- **Month chip** reads "September 25" (two-digit year) and never wraps.

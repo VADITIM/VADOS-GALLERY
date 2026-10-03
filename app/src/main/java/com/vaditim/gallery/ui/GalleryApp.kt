@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.ui.text.style.TextOverflow
+
 import com.vaditim.gallery.CrashLog
 import androidx.compose.ui.unit.sp
 import android.content.Intent
@@ -953,6 +955,7 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd:
 @Composable
 private fun Chip(text: String, modifier: Modifier = Modifier) {
     Box(modifier.glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-        MicroLabel(text)
+        // One line always: a long month must not grow the pill into two.
+        BasicText(text.uppercase(), style = Type.microLabel, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }

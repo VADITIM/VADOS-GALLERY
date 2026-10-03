@@ -15,6 +15,15 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.vaditim.gallery.vas.LocalAccent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -95,6 +104,7 @@ fun AlbumsScreen(
         awaitedOffset = target.offset
     }
 
+    val isList = Settings.albumColumns == 1
     LazyVerticalGrid(
         columns = GridCells.Fixed(Settings.albumColumns),
         state = state,
@@ -105,7 +115,7 @@ fun AlbumsScreen(
             bottom = contentPadding.calculateBottomPadding() + 12.dp,
         ),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (isList) 12.dp else 20.dp),
         modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
@@ -116,8 +126,9 @@ fun AlbumsScreen(
             val modifier = if (!isRearranging) {
                 Modifier
             } else {
+                // The chain keeps the same shape whether dragged or not: swapping an element out recreates the pointer input below it and cancels the drag that just started.
                 Modifier
-                    .then(if (isDragged) Modifier else Modifier.animateItem())
+                    .animateItem(placementSpec = if (isDragged) null else spring<IntOffset>())
                     .zIndex(if (isDragged) 1f else 0f)
                     .graphicsLayer {
                         if (isDragged) {
@@ -146,14 +157,23 @@ fun AlbumsScreen(
                         )
                     }
             }
-            AlbumCard(
-                album,
-                onClick = { if (!isRearranging) onOpen(album) },
-                onLongClick = { if (!isRearranging) onLongPress(album) },
-                modifier = modifier,
-            )
+            if (isList) {
+                AlbumRow(
+                    album,
+                    onClick = { if (!isRearranging) onOpen(album) },
+                    onLongClick = { if (!isRearranging) onLongPress(album) },
+                    modifier = modifier,
+                )
+            } else {
+                AlbumCard(
+                    album,
+                    onClick = { if (!isRearranging) onOpen(album) },
+                    onLongClick = { if (!isRearranging) onLongPress(album) },
+                    modifier = modifier,
+                )
+            }
         }
-        item(contentType = "new-album") { AddCard("New album", onClick = onNewAlbum) }
+        item(contentType = "new-album") { if (isList) AddRow("New album", onClick = onNewAlbum) else AddCard("New album", onClick = onNewAlbum) }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { footer() }
     }
 }
@@ -175,10 +195,57 @@ private fun AlbumCard(album: Album, onClick: () -> Unit, onLongClick: () -> Unit
                 .clip(Shapes.cover)
                 .background(Palette.sunken),
         )
-        BasicText(album.name, style = Type.cardTitle, maxLines = 1, modifier = Modifier.padding(start = 4.dp, top = 10.dp))
-        BasicText(album.items.size.toString(), style = Type.value, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+        // Narrow cards shrink the name until it fits, down to a size that still reads; only past that is it cut.
+        BasicText(
+            album.name,
+            style = Type.cardTitle,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
+            modifier = Modifier.padding(start = 4.dp, top = 10.dp),
+        )
+        BasicText(
+            album.items.size.toString(),
+            style = Type.value,
+            maxLines = 1,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.value.fontSize, stepSize = 0.5.sp),
+            modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+        )
     }
 }
+
+// One album per row reads as a list: the cover small at the start, the name large beside it.
+@Composable
+private fun AlbumRow(album: Album, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val request = remember(album.cover.uri) {
+        ImageRequest.Builder(context).data(Thumbnail(album.cover.uri, COVER_PIXELS)).size(COVER_PIXELS).build()
+    }
+    Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(
+            model = request,
+            contentDescription = album.name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.sunken),
+        )
+        Column(Modifier.padding(start = 18.dp).weight(1f)) {
+            BasicText(album.name, style = Type.cardTitle.copy(fontSize = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicText(album.items.size.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun AddRow(label: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) {
+            BasicText("+", style = Type.title.copy(color = LocalAccent.current))
+        }
+        BasicText(label, style = Type.cardTitle.copy(fontSize = 20.sp, color = Palette.textMuted), modifier = Modifier.padding(start = 18.dp))
+    }
+}
+
+private val LIST_COVER = 84.dp
 
 // Two fingers change how many albums sit in a row; one finger still scrolls.
 private fun Modifier.pinchAlbumColumns(haptic: HapticFeedback): Modifier = pointerInput(Unit) {

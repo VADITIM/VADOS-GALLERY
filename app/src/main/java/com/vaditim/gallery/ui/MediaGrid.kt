@@ -77,7 +77,7 @@ private const val MAX_COLUMNS = 5
 private const val PINCH_STEP = 1.28f
 private const val AUTO_SCROLL_STEP = 22f
 private val GAP = 3.dp
-private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yy", Locale.ENGLISH)
 
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
 class GridMemory {
