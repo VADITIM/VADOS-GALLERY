@@ -630,8 +630,7 @@ private fun Library(viewModel: GalleryViewModel) {
             }
 
             // The viewer grows out of the tile it was opened from and shrinks back into the tile of the photo it ends on; when that tile is not on screen it falls back to a quiet fade.
-            if (shownViewer != null) {
-                val request = shownViewer
+            shownViewer?.let { request ->
                 Box(
                     Modifier
                         .fillMaxSize()
