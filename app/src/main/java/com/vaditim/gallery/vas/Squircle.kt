@@ -57,5 +57,6 @@ object Shapes {
     val panel = SquircleShape(22.dp)
     val cover = SquircleShape(20.dp)
     val tile = RoundedCornerShape(8.dp)
+    val viewerPhoto = RoundedCornerShape(24.dp)
     val capsule = RoundedCornerShape(percent = 50)
 }

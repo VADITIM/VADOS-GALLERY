@@ -46,7 +46,9 @@ the Apple order. The thumb is at the bottom of the screen and so is the photo ju
 - A 4-column grid of square thumbnails, 2dp gaps.
 - A small chip at the top names the month and year of the top visible row.
 - Videos carry their duration in the corner.
-- *Planned:* pinch to change the column count (3 / 4 / 6), a draggable date scrubber on the right edge.
+- Every grid is divided by month and year: a header ("October 2026") in front of each month's first photo.
+- Pinch in any grid steps the column count from 1 to 5 (spread = fewer, larger photos). Each folder remembers its own.
+- *Planned:* a draggable date scrubber on the right edge.
 
 ### ALBUMS
 
@@ -113,7 +115,7 @@ Tapping a thumbnail opens it full screen, on black.
 - Back, or the system back gesture, closes it.
 - *Planned:*
   - **Shared-element zoom**: the thumbnail grows into the photo and shrinks back into its cell.
-  - Pinch and double-tap to zoom.
+  - Pinch and double-tap to zoom (done); photos sit in a rounded frame with a gap between pages when swiping.
   - Swipe down to dismiss back into the grid.
   - Inline video playback with a scrubber.
 

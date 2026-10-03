@@ -5,6 +5,23 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -56,6 +73,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private val PAGE_GAP = 18.dp
+private const val MAX_ZOOM = 5f
+private const val DOUBLE_TAP_SCALE = 2.5f
 private val STAMP_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.ENGLISH)
 
 private enum class Overlay { NONE, MORE, MOVE, NEW_ALBUM, HIDE, NEW_GROUP, DETAILS }
@@ -90,6 +110,7 @@ fun ViewerScreen(
                 state = pagerState,
                 key = { items[it].id },
                 beyondViewportPageCount = 1,
+                pageSpacing = PAGE_GAP,
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { page ->
                 ViewerPage(items[page], onTap = { isChromeVisible = !isChromeVisible })
@@ -221,17 +242,87 @@ fun ViewerScreen(
     }
 }
 
+// Pinch or double-tap zooms a photo. While it is zoomed the page keeps every drag for panning, so the pager only swipes at normal size.
 @Composable
 private fun ViewerPage(item: MediaItem, onTap: () -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
+    val scope = rememberCoroutineScope()
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    // The picture's own proportions, so the rounded frame hugs the photo rather than the screen; read off the decoded image because the stored width and height ignore rotation.
+    var ratio by remember(item.id) { mutableStateOf(if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else null) }
+
+    fun clamp(candidate: Offset, forScale: Float): Offset {
+        val limitX = size.width * (forScale - 1f) / 2f
+        val limitY = size.height * (forScale - 1f) / 2f
+        return Offset(candidate.x.coerceIn(-limitX, limitX), candidate.y.coerceIn(-limitY, limitY))
+    }
+
     Box(
         Modifier
             .fillMaxSize()
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onTap),
+            .onSizeChanged { size = it }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onTap() },
+                    onDoubleTap = { tapAt ->
+                        val fromScale = scale
+                        val fromOffset = offset
+                        val toScale = if (fromScale > 1.05f) 1f else DOUBLE_TAP_SCALE
+                        val centre = Offset(size.width / 2f, size.height / 2f)
+                        scope.launch {
+                            animate(0f, 1f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { progress, _ ->
+                                val nextScale = fromScale + (toScale - fromScale) * progress
+                                // Zooming in lands on the tapped point; zooming out returns to centre.
+                                val target = if (toScale == 1f) Offset.Zero else (tapAt - centre) * (1f - toScale)
+                                scale = nextScale
+                                offset = clamp(fromOffset + (target - fromOffset) * progress, nextScale)
+                            }
+                        }
+                    },
+                )
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val isPinching = event.changes.count { it.pressed } >= 2
+                        if (isPinching || scale > 1.01f) {
+                            val zoom = if (isPinching) event.calculateZoom() else 1f
+                            val nextScale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
+                            val pan = event.calculatePan()
+                            val focus = event.calculateCentroid(useCurrent = false) - Offset(size.width / 2f, size.height / 2f)
+                            offset = if (nextScale <= 1.01f) Offset.Zero else clamp(focus - (focus - offset) * (nextScale / scale) + pan, nextScale)
+                            scale = nextScale
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(model = request, contentDescription = item.name, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        Box(
+            Modifier
+                .then(ratio?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                }
+                .clip(Shapes.viewerPhoto),
+        ) {
+            AsyncImage(
+                model = request,
+                contentDescription = item.name,
+                contentScale = ContentScale.Fit,
+                onSuccess = { success -> ratio = success.result.image.width.toFloat() / success.result.image.height },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         if (item.isVideo) MicroLabel(if (item.durationMillis > 0) "VIDEO · ${formatDuration(item.durationMillis)}" else "VIDEO")
     }
 }
