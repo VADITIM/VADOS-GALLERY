@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.Settings
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -196,6 +197,12 @@ private fun Library(viewModel: GalleryViewModel) {
     val trashMemory = remember { GridMemory() }
     // Photos about to go into Private, held while the confirmation is open.
     var pendingPrivate by remember { mutableStateOf<PendingPrivate?>(null) }
+    var isRearranging by remember { mutableStateOf(false) }
+    // Albums in the order the user dragged them into; ones never arranged keep the default order after them.
+    val arrangedAlbums = remember(albums, Settings.albumOrder) {
+        val order = Settings.albumOrder
+        albums.sortedBy { album -> order.indexOf(album.relativePath).let { if (it < 0) Int.MAX_VALUE else it } }
+    }
     val albumMemories = remember { mutableMapOf<Long, GridMemory>() }
     val locationMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateMemories = remember { mutableMapOf<String, GridMemory>() }
@@ -240,7 +247,11 @@ private fun Library(viewModel: GalleryViewModel) {
         isDeleteArmed = false
         sheet = AppSheet.NONE
     }
-    LaunchedEffect(section, albumsPlace) { clearSelection() }
+    LaunchedEffect(section, albumsPlace) {
+        clearSelection()
+        isRearranging = false
+    }
+    BackHandler(enabled = isRearranging) { isRearranging = false }
     BackHandler(enabled = isSelecting) { clearSelection() }
 
     // Leaving the app locks Private again, and drops anyone standing in it back to the albums list.
@@ -354,7 +365,13 @@ private fun Library(viewModel: GalleryViewModel) {
                         label = "place",
                     ) { shownPlace -> when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
-                            albums = albums,
+                            albums = arrangedAlbums,
+                            isRearranging = isRearranging,
+                            onMove = { from, to ->
+                                val paths = arrangedAlbums.map { it.relativePath }.toMutableList()
+                                paths.add(to, paths.removeAt(from))
+                                Settings.updateAlbumOrder(paths)
+                            },
                             state = albumsListState,
                             onOpen = { albumsPlace = AlbumsPlace.Folder(it.id) },
                             onLongPress = { album ->
@@ -483,7 +500,11 @@ private fun Library(viewModel: GalleryViewModel) {
             )
 
             val barModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp)
-            if (isSelecting) {
+            if (isRearranging) {
+                Box(barModifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
+                    CheckIcon(accent)
+                }
+            } else if (isSelecting) {
                 Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
                   if (place is AlbumsPlace.Trash) {
                     IconButton(onClick = {
@@ -584,6 +605,10 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed album: one entry, because moving the whole folder into Private is the thing it is for.
             OverlaySheet(visible = sheet == AppSheet.ALBUM_MENU, label = sheetAlbum?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.ALBUM_RENAME }
+                SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
+                    isRearranging = true
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
                     sheet = AppSheet.NONE

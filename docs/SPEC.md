@@ -213,3 +213,5 @@ review, which is not a goal.
 - **Moving into Private** is confirmed once more after the group is chosen (selection, whole album, viewer).
 - **Icons, not words,** on every action bar and menu row: share, cover (image), move, private (lock; open lock for moving out), trash, rename (pen), restore, add, close, details, more.
 - The top row keeps a fixed-width month chip so the buttons beside it never move.
+- **Album layout.** Pinch the Albums grid (or Settings → Album columns) for 1–4 albums per row. Long-press an album → Rearrange albums: drag cards into any order, confirm with the check. The order is stored by folder path.
+- **Today's selection** plays a picked video silently on a loop.

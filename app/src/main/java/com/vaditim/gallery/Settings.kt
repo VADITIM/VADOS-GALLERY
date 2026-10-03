@@ -17,6 +17,8 @@ object Settings {
     private const val DEFAULT_BLUR_DP = 26f
     private const val DEFAULT_OPACITY = 0.55f
     private const val DEFAULT_COLUMNS = 4
+    const val MAX_ALBUM_COLUMNS = 4
+    private const val DEFAULT_ALBUM_COLUMNS = 2
 
     private lateinit var preferences: SharedPreferences
 
@@ -30,6 +32,11 @@ object Settings {
         private set
     var autoplayVideos by mutableStateOf(true)
         private set
+    var albumColumns by mutableIntStateOf(DEFAULT_ALBUM_COLUMNS)
+        private set
+    // Albums in the order the user arranged them, by folder path; albums not in it keep the default order after these.
+    var albumOrder by mutableStateOf<List<String>>(emptyList())
+        private set
 
     fun init(context: Context) {
         preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -38,6 +45,8 @@ object Settings {
         defaultColumns = preferences.getInt("columns", DEFAULT_COLUMNS)
         showMonthHeaders = preferences.getBoolean("monthHeaders", true)
         autoplayVideos = preferences.getBoolean("autoplay", true)
+        albumColumns = preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS)
+        albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
     }
 
     fun updateBlur(value: Float) {
@@ -58,6 +67,16 @@ object Settings {
     fun updateShowMonthHeaders(value: Boolean) {
         showMonthHeaders = value
         preferences.edit().putBoolean("monthHeaders", value).apply()
+    }
+
+    fun updateAlbumColumns(value: Int) {
+        albumColumns = value.coerceIn(MIN_COLUMNS, MAX_ALBUM_COLUMNS)
+        preferences.edit().putInt("albumColumns", albumColumns).apply()
+    }
+
+    fun updateAlbumOrder(paths: List<String>) {
+        albumOrder = paths
+        preferences.edit().putString("albumOrder", paths.joinToString("\n")).apply()
     }
 
     fun updateAutoplayVideos(value: Boolean) {

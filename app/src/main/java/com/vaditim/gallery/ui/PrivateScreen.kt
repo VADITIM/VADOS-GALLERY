@@ -1,5 +1,14 @@
 package com.vaditim.gallery.ui
 
+import android.view.TextureView
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +29,8 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,6 +127,7 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
             .background(Palette.sunken),
     ) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (item.isVideo) LoopingPreview(item)
         Column(
             Modifier
                 .align(Alignment.TopStart)
@@ -127,9 +139,47 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
         ) {
             MicroLabel("Today's selection")
             BasicText("for you 😏", style = Type.cardTitle, modifier = Modifier.padding(top = 4.dp))
-            // A third of the title's size, as asked.
-            BasicText("Enjoy jerking off on your wife", style = Type.cardTitle.copy(fontSize = Type.cardTitle.fontSize / 3, color = Palette.textMuted), modifier = Modifier.padding(top = 2.dp))
         }
+    }
+}
+
+// A picked video plays on its own, silent and looping, cropped to fill the card like the still behind it (which shows until the first frame arrives).
+@Composable
+private fun LoopingPreview(item: MediaItem) {
+    val context = LocalContext.current
+    var ratio by remember(item.id) { mutableFloatStateOf(0f) }
+    val player = remember(item.id) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(item.uri))
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_ONE
+            prepare()
+            playWhenReady = true
+        }
+    }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) ratio = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
+            player.release()
+        }
+    }
+    if (ratio <= 0f) return
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val isWider = ratio > maxWidth / maxHeight
+        val width = if (isWider) maxHeight * ratio else maxWidth
+        val height = if (isWider) maxHeight else maxWidth / ratio
+        AndroidView(
+            factory = { TextureView(it) },
+            update = { player.setVideoTextureView(it) },
+            onRelease = { player.clearVideoTextureView(it) },
+            modifier = Modifier.requiredSize(width, height),
+        )
     }
 }
 

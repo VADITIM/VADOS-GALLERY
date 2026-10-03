@@ -37,6 +37,9 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
             Settings.updateDefaultColumns(next)
             onColumnsChanged(next)
         }
+        SheetRow("Album columns", trailing = Settings.albumColumns.toString()) {
+            Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
+        }
         SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
         SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
     }

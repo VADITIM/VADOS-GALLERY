@@ -257,3 +257,13 @@ fun PinIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, str
     }, color, style = stroke)
     drawCircle(color, 2.4f * unit, Offset(12f * unit, 9.5f * unit), style = stroke)
 }
+
+@Composable
+fun CheckIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u -> moveTo(5f * u, 12.5f * u); lineTo(10f * u, 17.5f * u); lineTo(19f * u, 7f * u) }, color, style = stroke)
+}
+
+@Composable
+fun GripIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, _ ->
+    listOf(9f, 15f).forEach { x -> listOf(6f, 12f, 18f).forEach { y -> drawCircle(color, 1.6f * unit, Offset(x * unit, y * unit)) } }
+}
