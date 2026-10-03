@@ -50,7 +50,16 @@ fun FolderEntry(title: String, icon: @Composable (Color) -> Unit, onClick: () ->
 @Composable
 fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
     BackHandler(enabled = selection.selectedIds.isEmpty(), onBack = onBack)
-    MediaGrid(items = items, memory = memory, onOpen = {}, contentPadding = contentPadding, selection = selection, emptyCaption = "Trash is empty.")
+    MediaGrid(
+        items = items,
+        memory = memory,
+        onOpen = {},
+        contentPadding = contentPadding,
+        selection = selection,
+        emptyCaption = "Trash is empty.",
+        // Days until Android removes it for good.
+        badge = { item -> if (item.expiresMillis > 0) "${((item.expiresMillis - System.currentTimeMillis()) / 86_400_000L).coerceAtLeast(0) + 1}d" else null },
+    )
 }
 
 // One card per city, the cities with the most photos first.

@@ -63,6 +63,17 @@ class MediaRepository(private val context: Context) {
         true
     }
 
+    // Android empties expired trash only during its idle maintenance, which can lag days behind; this app removes what is past its date itself. All files access lets it delete the rows directly.
+    suspend fun deleteExpired(trash: List<MediaItem>) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        trash.filter { it.expiresMillis in 1 until now }.forEach { item ->
+            val isDeleted = runCatching { resolver.delete(item.uri, null, null) > 0 }.getOrDefault(false)
+            if (!isDeleted && item.absolutePath.isNotEmpty() && File(item.absolutePath).delete()) {
+                MediaScannerConnection.scanFile(context, arrayOf(item.absolutePath), null, null)
+            }
+        }
+    }
+
     private fun query(isTrashed: Boolean): List<MediaItem> {
         val projection = arrayOf(
             BaseColumns._ID,
@@ -80,6 +91,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.DATA,
+            MediaStore.MediaColumns.DATE_EXPIRES,
         )
         // The private folder is excluded by path as well as by its .nomedia marker: if a stale row ever survives a move into Private, it still never reaches Recent or Favorites.
         val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?) AND ${MediaStore.MediaColumns.DATA} NOT LIKE ?"
@@ -111,6 +123,7 @@ class MediaRepository(private val context: Context) {
             val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
             // DATA is deprecated for apps without file access; this app has All files access, and hiding a photo into Private is a plain file move that needs the real path.
             val pathOnDiskColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+            val expiresColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_EXPIRES)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val isVideo = cursor.getInt(typeColumn) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
@@ -132,6 +145,7 @@ class MediaRepository(private val context: Context) {
                     height = cursor.getInt(heightColumn),
                     sizeBytes = cursor.getLong(sizeColumn),
                     absolutePath = cursor.getString(pathOnDiskColumn) ?: "",
+                    expiresMillis = if (isTrashed) cursor.getLong(expiresColumn) * 1000 else 0,
                 )
             }
         }

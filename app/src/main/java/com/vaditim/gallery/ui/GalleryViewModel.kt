@@ -54,6 +54,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .map { it.hasFileAccess }
             .distinctUntilChanged()
             .flatMapLatest { hasFileAccess -> if (hasFileAccess) repository.observeTrash() else flowOf(emptyList()) }
+            .map { items ->
+                repository.deleteExpired(items)
+                val now = System.currentTimeMillis()
+                items.filter { it.expiresMillis == 0L || it.expiresMillis > now }
+            }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val coverStore = CoverStore(application)

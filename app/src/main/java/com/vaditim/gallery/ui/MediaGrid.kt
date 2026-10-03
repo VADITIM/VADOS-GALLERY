@@ -117,6 +117,7 @@ fun MediaGrid(
     selection: Selection? = null,
     scrollToNewestRequest: Int = 0,
     emptyCaption: String = "Nothing here yet.",
+    badge: ((MediaItem) -> String?)? = null,
 ) {
     val state = memory.state
     val entries = remember(items, Settings.showMonthHeaders) { buildEntries(items) }
@@ -172,6 +173,7 @@ fun MediaGrid(
                         item = item,
                         sizePixels = tileSize,
                         isSelected = selection != null && item.id in selection.selectedIds,
+                        badge = badge?.invoke(item),
                         onClick = {
                             if (selection != null && selection.isActive) selection.onToggle(item) else onOpen(entry.index)
                         },
@@ -321,7 +323,7 @@ class Selection(
 }
 
 @Composable
-private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick: () -> Unit) {
+private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick: () -> Unit, badge: String? = null) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
@@ -340,6 +342,18 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick:
             .background(Palette.sunken),
     ) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (badge != null) {
+            BasicText(
+                badge,
+                style = Type.value.copy(color = Palette.textBright),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(5.dp)
+                    .clip(Shapes.capsule)
+                    .background(Palette.panel)
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            )
+        }
         if (item.isVideo) {
             BasicText(
                 if (item.durationMillis > 0) formatDuration(item.durationMillis) else "VIDEO",
