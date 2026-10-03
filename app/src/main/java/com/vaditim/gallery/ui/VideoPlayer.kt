@@ -67,6 +67,9 @@ class VideoState(val player: ExoPlayer) {
     var ratio by mutableStateOf<Float?>(null)
     var isScrubbing by mutableStateOf(false)
     var scrubSpeed by mutableFloatStateOf(1f)
+    var isLooping by mutableStateOf(false)
+    // Set while a hold on the picture is speeding playback up or slowing it down; null otherwise.
+    var holdSpeed by mutableStateOf<Float?>(null)
 
     fun seekToFraction(fraction: Float) {
         positionMs = (fraction * durationMs).toLong()
@@ -129,28 +132,34 @@ fun VideoSurface(state: VideoState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun VideoControls(state: VideoState, modifier: Modifier = Modifier) {
+fun VideoControls(state: VideoState, isFavorite: Boolean, onFavorite: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
             .glass(Shapes.panel, Palette.viewerGround)
             .padding(horizontal = 6.dp, vertical = 8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ActionButton(if (state.isPlaying) "PAUSE" else "PLAY", isLit = true) {
+        Timeline(state, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            val isFine = state.isScrubbing && state.scrubSpeed < 1f
+            MicroLabel(formatTime(state.positionMs, withFraction = isFine))
+            MicroLabel(formatTime(state.durationMs, withFraction = false))
+        }
+        val accent = LocalAccent.current
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = {
+                state.isLooping = !state.isLooping
+                state.player.repeatMode = if (state.isLooping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+            }) { LoopIcon(if (state.isLooping) accent else Palette.textMuted) }
+            IconButton(onClick = {
                 if (state.isPlaying) {
                     state.player.pause()
                 } else {
                     if (state.player.playbackState == Player.STATE_ENDED) state.player.seekTo(0)
                     state.player.play()
                 }
-            }
-            Timeline(state, Modifier.weight(1f).padding(end = 12.dp))
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            val isFine = state.isScrubbing && state.scrubSpeed < 1f
-            MicroLabel(formatTime(state.positionMs, withFraction = isFine))
-            MicroLabel(formatTime(state.durationMs, withFraction = false))
+            }) { PlayPauseIcon(state.isPlaying, Palette.textBright, size = 28.dp) }
+            IconButton(onClick = onFavorite) { HeartIcon(isFavorite, if (isFavorite) accent else Palette.textMuted) }
         }
     }
 }

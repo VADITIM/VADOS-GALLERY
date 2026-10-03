@@ -5,6 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.ui.geometry.isFinite
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.animation.core.animate
@@ -77,6 +80,11 @@ import java.util.Locale
 
 private val PAGE_GAP = 18.dp
 private const val MAX_ZOOM = 5f
+private const val HOLD_SPEED = 1.5f
+private const val MIN_HOLD_SPEED = 0.25f
+private const val MAX_HOLD_SPEED = 4f
+// Sliding this far while holding changes the speed by 1x.
+private val HOLD_SLIDE_DISTANCE = 150.dp
 private const val DOUBLE_TAP_SCALE = 2.5f
 private val STAMP_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.ENGLISH)
 
@@ -131,6 +139,18 @@ fun ViewerScreen(
                 )
             }
 
+            // While a hold is speeding the video up or slowing it down, its speed shows at the top.
+            video?.holdSpeed?.let { speed ->
+                Box(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 8.dp)
+                        .glass(Shapes.capsule, Palette.viewerGround)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) { MicroLabel("%.2f×".format(speed)) }
+            }
+
             AnimatedVisibility(
                 visible = isChromeVisible,
                 enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
@@ -162,14 +182,15 @@ fun ViewerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                if (video != null) VideoControls(video, Modifier.padding(horizontal = 16.dp))
+                if (video != null) VideoControls(video, current.isFavorite, onFavorite = { actions.toggleFavorite(current) }, modifier = Modifier.padding(horizontal = 16.dp))
                 Row(
                     Modifier
                         .glass(Shapes.capsule, Palette.viewerGround)
                         .padding(5.dp),
                 ) {
                     ActionButton("SHARE") { actions.share(listOf(current)) }
-                    ActionButton(if (current.isFavorite) "FAVORITED" else "FAVORITE", isLit = current.isFavorite) { actions.toggleFavorite(current) }
+                    // A video carries its own heart in the player controls above.
+                    if (video == null) IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) LocalAccent.current else Palette.textBody) }
                     if (isPrivate) {
                         // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
                         ActionButton(if (isDeleteArmed) "FOREVER?" else "DELETE", color = Palette.danger) {
@@ -268,6 +289,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
@@ -307,6 +329,36 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     },
                 )
             }
+            // Holding on a video plays it at 1.5x for as long as the finger stays down; sliding right or left while holding speeds it up or slows it down.
+            .then(
+                if (video == null) Modifier else Modifier.pointerInput(video) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (scale > 1.01f) return@awaitEachGesture
+                        val held = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val wasPlaying = video.player.isPlaying
+                        if (!wasPlaying) video.player.play()
+                        var speed = HOLD_SPEED
+                        video.player.setPlaybackSpeed(speed)
+                        video.holdSpeed = speed
+                        var lastX = held.position.x
+                        held.consume()
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: break
+                            speed = (speed + (change.position.x - lastX) / HOLD_SLIDE_DISTANCE.toPx()).coerceIn(MIN_HOLD_SPEED, MAX_HOLD_SPEED)
+                            lastX = change.position.x
+                            video.player.setPlaybackSpeed(speed)
+                            video.holdSpeed = speed
+                            change.consume()
+                        } while (event.changes.any { it.pressed })
+                        video.player.setPlaybackSpeed(1f)
+                        video.holdSpeed = null
+                        if (!wasPlaying) video.player.pause()
+                    }
+                },
+            )
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
