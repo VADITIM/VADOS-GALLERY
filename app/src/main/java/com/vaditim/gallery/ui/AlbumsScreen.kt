@@ -51,10 +51,7 @@ fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> U
         modifier = Modifier.fillMaxSize(),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
-            Column(Modifier.padding(start = 4.dp, bottom = 2.dp)) {
-                BasicText("Albums", style = Type.title)
-                MicroLabel("${albums.size} folders", Modifier.padding(top = 6.dp))
-            }
+            BasicText("Albums", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
         items(albums, key = { it.id }, contentType = { "album" }) { album -> AlbumCard(album, onClick = { onOpen(album) }, onLongClick = { onLongPress(album) }) }
         item(contentType = "new-album") { AddCard("New album", onClick = onNewAlbum) }

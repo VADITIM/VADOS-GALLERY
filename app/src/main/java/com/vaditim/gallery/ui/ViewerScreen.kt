@@ -377,7 +377,6 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
             // The still frame shows until the video has its first picture, then the video draws over it.
             if (video != null) VideoSurface(video, Modifier.fillMaxSize())
         }
-        if (item.isVideo && video == null) MicroLabel(if (item.durationMillis > 0) "VIDEO · ${formatDuration(item.durationMillis)}" else "VIDEO")
     }
 }
 

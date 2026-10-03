@@ -336,7 +336,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             },
                             onNewAlbum = { sheet = AppSheet.NEW_ALBUM },
                             contentPadding = insetPadding,
-                            footer = { PrivateEntry(isPrivateUnlocked, privateContents.groups.size, onClick = openPrivate) },
+                            footer = { PrivateEntry(onClick = openPrivate) },
                         )
                         is AlbumsPlace.Folder -> albums.firstOrNull { it.id == shownPlace.albumId }?.let { album ->
                             AlbumScreen(

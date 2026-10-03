@@ -13,6 +13,7 @@ without asking.
 - Every pressable uses `Modifier.pressable`, never the ripple.
 - Durations and curves come from `vas/Motion.kt`, never inline numbers.
 - Every change to a photo (favourite, trash, move) goes through a MediaStore request in `ui/MediaActions.kt`.
+- No explanatory text in the UI: no hints, subtitles or captions describing what a control does, unless the user asks for one. Labels and state (a title, a count of selected, a time) are fine.
 - No abbreviations in identifiers (`dna/09-code-style.md`); comments say why, on one line.
 
 There is no Android SDK in the cloud sessions. CI (`.github/workflows/build.yml`) is the compiler: push,

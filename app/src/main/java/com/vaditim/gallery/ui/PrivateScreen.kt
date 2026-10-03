@@ -42,7 +42,7 @@ private const val COVER_PIXELS = 512
 
 // The entry to Private, at the foot of the albums list where Apple keeps Hidden: present, never in the way.
 @Composable
-fun PrivateEntry(isUnlocked: Boolean, groupCount: Int, onClick: () -> Unit) {
+fun PrivateEntry(onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -52,7 +52,6 @@ fun PrivateEntry(isUnlocked: Boolean, groupCount: Int, onClick: () -> Unit) {
             .padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         BasicText("Private", style = Type.cardTitle)
-        MicroLabel(if (isUnlocked) "$groupCount groups · unlocked" else "Locked · fingerprint", Modifier.padding(top = 6.dp))
     }
 }
 
@@ -86,10 +85,7 @@ fun PrivateGroupsScreen(
         modifier = Modifier.fillMaxSize(),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
-            Column(Modifier.padding(start = 4.dp, bottom = 2.dp)) {
-                BasicText("Private", style = Type.title)
-                MicroLabel("${groups.size} groups", Modifier.padding(top = 6.dp))
-            }
+            BasicText("Private", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
         if (favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
@@ -195,5 +191,5 @@ fun AddCard(label: String, onClick: () -> Unit) {
 fun PrivateItemsScreen(items: List<MediaItem>, memory: GridMemory, onOpen: (Int) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
     // While selecting, back clears the selection first (the app root handles that), so this one stands aside.
     BackHandler(enabled = !selection.isActive, onBack = onBack)
-    MediaGrid(items = items, memory = memory, onOpen = onOpen, contentPadding = contentPadding, selection = selection, emptyCaption = "Move photos here from the ••• menu.")
+    MediaGrid(items = items, memory = memory, onOpen = onOpen, contentPadding = contentPadding, selection = selection)
 }

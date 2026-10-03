@@ -150,7 +150,6 @@ fun VideoControls(state: VideoState, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             val isFine = state.isScrubbing && state.scrubSpeed < 1f
             MicroLabel(formatTime(state.positionMs, withFraction = isFine))
-            if (state.isScrubbing) MicroLabel(scrubLabel(state.scrubSpeed)) else MicroLabel("SLIDE UP WHILE HOLDING FOR FINER")
             MicroLabel(formatTime(state.durationMs, withFraction = false))
         }
     }
@@ -209,13 +208,6 @@ private fun Timeline(state: VideoState, modifier: Modifier = Modifier) {
                 drawCircle(Color.White, radius = trackHeight / 2f + 4.dp.toPx(), center = Offset(size.width * fraction, size.height / 2f))
             },
     )
-}
-
-private fun scrubLabel(speed: Float): String = when {
-    speed >= 1f -> "SCRUB · FULL"
-    speed >= 0.5f -> "SCRUB · HALF"
-    speed >= 0.25f -> "SCRUB · QUARTER"
-    else -> "SCRUB · FINE"
 }
 
 private fun formatTime(millis: Long, withFraction: Boolean): String {

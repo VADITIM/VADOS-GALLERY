@@ -23,7 +23,6 @@ object PrivateLock {
         )
         val information = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Private")
-            .setSubtitle("Unlock with your fingerprint")
             .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
             .build()
         prompt.authenticate(information)
