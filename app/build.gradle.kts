@@ -28,9 +28,12 @@ android {
     }
 
     buildTypes {
+        // The build to install. A debug build runs Compose unoptimised and debuggable, which is where most scroll jank on a large grid comes from; this one is shrunk and optimised by R8, and signed with the same committed key so it installs over either build.
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -58,6 +61,7 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    implementation(libs.haze)
 }
 
 kotlin {

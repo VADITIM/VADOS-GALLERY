@@ -1,8 +1,9 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -10,12 +11,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.background
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,9 +29,8 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.vaditim.gallery.media.MediaItem
-import com.vaditim.gallery.vas.MicroLabel
+import com.vaditim.gallery.media.Thumbnail
 import com.vaditim.gallery.vas.Palette
-import com.vaditim.gallery.vas.Panel
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
@@ -41,8 +40,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private const val COLUMNS = 4
-private val GAP = 2.dp
-private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
+private val GAP = 3.dp
+private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was.
 class GridMemory {
@@ -88,43 +87,36 @@ fun MediaGrid(
     }
 
     val tileSize = thumbnailPixels(COLUMNS, GAP)
-    val visibleMonth by remember(items) {
-        derivedStateOf {
-            items.getOrNull(state.firstVisibleItemIndex)?.let {
-                MONTH_FORMAT.format(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH)
-            } ?: ""
-        }
-    }
-
-    Box(modifier.fillMaxSize()) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(COLUMNS),
-            state = state,
-            contentPadding = contentPadding,
-            horizontalArrangement = Arrangement.spacedBy(GAP),
-            verticalArrangement = Arrangement.spacedBy(GAP),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-                Tile(item, tileSize, onClick = { onOpen(index) })
-            }
-        }
-        Panel(
-            Modifier
-                .align(Alignment.TopStart)
-                .padding(top = contentPadding.calculateTopPadding() + 8.dp, start = 12.dp),
-            shape = Shapes.chip,
-        ) {
-            MicroLabel(visibleMonth, Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(COLUMNS),
+        state = state,
+        contentPadding = contentPadding,
+        horizontalArrangement = Arrangement.spacedBy(GAP),
+        verticalArrangement = Arrangement.spacedBy(GAP),
+        modifier = modifier.fillMaxSize(),
+    ) {
+        itemsIndexed(items, key = { _, item -> item.id }, contentType = { _, _ -> "tile" }) { index, item ->
+            Tile(item, tileSize, onClick = { onOpen(index) })
         }
     }
 }
+
+// The month of the top visible row, for the chip that floats over the grid.
+@Composable
+fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<String> =
+    remember(items, memory) {
+        derivedStateOf {
+            items.getOrNull(memory.state.firstVisibleItemIndex)?.let {
+                MONTH_FORMAT.format(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault()))
+            } ?: ""
+        }
+    }
 
 @Composable
 private fun Tile(item: MediaItem, sizePixels: Int, onClick: () -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
-        ImageRequest.Builder(context).data(item.uri).size(sizePixels).build()
+        ImageRequest.Builder(context).data(Thumbnail(item.uri, sizePixels)).size(sizePixels).build()
     }
     Box(
         Modifier
@@ -133,17 +125,17 @@ private fun Tile(item: MediaItem, sizePixels: Int, onClick: () -> Unit) {
             .clip(Shapes.tile)
             .background(Palette.sunken),
     ) {
-        AsyncImage(model = request, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         if (item.isVideo) {
             BasicText(
                 formatDuration(item.durationMillis),
                 style = Type.value.copy(color = Palette.textBright),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(4.dp)
-                    .clip(Shapes.chip)
+                    .padding(5.dp)
+                    .clip(Shapes.capsule)
                     .background(Palette.panel)
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
             )
         }
     }

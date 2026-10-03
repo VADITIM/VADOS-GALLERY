@@ -1,7 +1,9 @@
 # VAS on a phone — the gallery's design adaptation
 
-VADOS Gallery is built on **VAS, base register** (`VADOS-APPLICATION-SYSTEMS/dna/`). This file records
-where a gallery on a phone departs from it, and why. Everything not mentioned here is VAS as written.
+VADOS Gallery is built on **VAS, base register** (`VADOS-APPLICATION-SYSTEMS/dna/`), taken as **a taste,
+not a copy**: the micro-labels, the accents per section, the motion grammar and the tempo stay; the
+hard terminal edges go. Softer, rounder, glassier — closer to a phone than to a console menu. This file
+records where it departs from VAS, and why. Everything not mentioned here is VAS as written.
 
 These are project overrides (the "20%" of `SKILL.md`). Any of them that holds up across a second app is
 a candidate to promote into VAS — most likely as a new `platforms/android-compose.md`.
@@ -17,7 +19,7 @@ So the identity is **re-expressed in Compose**, under `app/src/main/java/com/vad
 | VAS | Here |
 |---|---|
 | `--section-color` | `LocalAccent`, provided once at the root from the active `Section` |
-| The panel primitive | `Panel` — translucent fill, 1dp `#262626` hairline, squircle, micro-label |
+| The panel primitive | `Panel` — a borderless raised fill with the micro-label; `Modifier.glass` when it floats |
 | Squircle corners (law 4) | `SquircleShape` — a sampled superellipse (exponent 5), not a rounded rect |
 | GSAP curves | `Motion` — `back.out`, `power2.out` etc. as `CubicBezierEasing` with GSAP's numbers |
 | Press feedback | `Modifier.pressable` — scale in 80ms, back on the overshoot; no ripple anywhere |
@@ -48,11 +50,20 @@ bar-sweep is kept for later on sparse text (album titles, the details panel) onc
 
 ## Surface
 
+- **Floating things are glass, with no border.** The section bar, the month chip, the album's back
+  button, the viewer's controls and its menus all blur and darken whatever is behind them
+  (`Modifier.glass`, built on Haze). Over photographs a hairline reads as a frame around a hole; a
+  blur reads as a pane. This replaces VAS law 1 ("the border is the design") for anything that floats.
+- **The status-bar edge is a fading blur** (`Modifier.fadingGlass`): full at the top of the screen,
+  none where it meets the content, so the grid dissolves under the clock instead of being cut off.
+- **Things that do not float are flat raised fills, also without a border** (`Panel`, `#202020`).
+- **Corners are generous.** Sheets 30dp, panels 22dp and album covers 20dp as squircles; the bar,
+  chips and buttons are full capsules; grid thumbnails 8dp rounded rects with 3dp gaps. Thumbnails
+  are plain rounded rects rather than squircles because there are hundreds on screen and a rounded
+  rect clips on the GPU for free.
 - **The ground is `#181818` in the grids and pure black in the viewer.** A grey frame around a
   photograph changes how its blacks read; the viewer is the one place the photo owns the colour.
-- **Thumbnails are squircles with a small radius (4dp)** and 2dp gaps — law 4 at a size that keeps the
-  grid dense. Album covers take the panel radius (12dp) and a hairline.
-- **No shadows anywhere**, the bar included. The floating section bar is a `Panel`.
+- **No shadows anywhere.**
 
 ## Colour
 
@@ -71,8 +82,8 @@ was opened from — the BACK link and a lit FAVORITE carry it, nothing else does
 
 | Role | Face | Used for |
 |---|---|---|
-| Functional (the default) | Space Mono, declared as `Faces.mono` | Labels, dates, counts, captions, actions |
-| Techno heading | Audiowide | The section bar, album names, menu entries |
+| Functional (the default) | Space Mono, declared as `Faces.mono` | The section bar, labels, dates, counts, captions, actions |
+| Techno heading | Audiowide | The Albums title, album names, menu entries |
 | Display | — | **Not shipped yet** |
 
 Wosker and Striker (the display faces) are not in this repository. `VADOS-APPLICATION-SYSTEMS/fonts/`
@@ -91,3 +102,13 @@ display role is a VAS decision, not this app's — until it is made, the gallery
 
 Actions are one uppercase word, verb-first: SHARE, DELETE, MOVE TO ALBUM. No OK / Cancel. Captions are
 one plain sentence. No emoji.
+
+## Performance
+
+A grid of tens of thousands of photos at 120Hz is the one place the design has to give way.
+
+- **Thumbnails come from MediaProvider's thumbnail cache** (`media/Thumbnail.kt`), not from decoding
+  the original. A 50MP photo decoded for a 100px cell is the single largest cost a gallery can pay.
+- **Grid cells clip to a rounded rect, never a generic path.**
+- **The APK to install is the release build** — shrunk and optimised by R8. A debug build runs
+  Compose unoptimised and debuggable, and stutters on a large grid however good the code is.

@@ -1,5 +1,6 @@
 package com.vaditim.gallery.vas
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -50,8 +51,11 @@ class SquircleShape(private val radius: Dp) : Shape {
     private fun superellipse(value: Double): Float = (sign(value) * abs(value).pow(2.0 / EXPONENT)).toFloat()
 }
 
+// Squircles for the few large shapes on screen; plain rounded rects where there are hundreds, because a rounded rect clips on the GPU outline path for free while a generic path is clipped per cell, per frame.
 object Shapes {
-    val panel = SquircleShape(12.dp)
-    val tile = SquircleShape(4.dp)
-    val chip = SquircleShape(6.dp)
+    val sheet = SquircleShape(30.dp)
+    val panel = SquircleShape(22.dp)
+    val cover = SquircleShape(20.dp)
+    val tile = RoundedCornerShape(8.dp)
+    val capsule = RoundedCornerShape(percent = 50)
 }

@@ -3,7 +3,6 @@ package com.vaditim.gallery.vas
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -21,23 +20,17 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 
-// The panel primitive (dna/03-surface.md): translucent near-black fill, one hairline, one squircle, a micro-label in the corner. Depth is the border, never a shadow.
+// The panel, softened: a raised fill and a large squircle, with the VAS micro-label kept in its corner. A panel that floats over content uses Modifier.glass instead.
 @Composable
 fun Panel(
     modifier: Modifier = Modifier,
     label: String? = null,
     shape: Shape = Shapes.panel,
-    isSolid: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    Box(
-        modifier
-            .clip(shape)
-            .background(if (isSolid) Palette.panelSolid else Palette.panel)
-            .border(1.dp, Palette.border, shape),
-    ) {
-        Box(Modifier.padding(top = if (label != null) 26.dp else 0.dp)) { content() }
-        if (label != null) MicroLabel(label, Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 10.dp))
+    Box(modifier.clip(shape).background(Palette.surface)) {
+        Box(Modifier.padding(top = if (label != null) 30.dp else 0.dp)) { content() }
+        if (label != null) MicroLabel(label, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = 14.dp))
     }
 }
 

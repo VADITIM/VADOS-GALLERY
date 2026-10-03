@@ -9,11 +9,13 @@ the VAS design system.
 
 ## Install
 
-Every push to `master` publishes a debug APK as the **debug-latest** pre-release. Any branch's build is
-also attached to its Actions run as the `vados-gallery-debug` artifact.
+Every push to `master` publishes the APK at
+**[releases/debug-latest](https://github.com/VADITIM/VADOS-GALLERY/releases/tag/debug-latest)**.
+Install **`vados-gallery.apk`**, the optimised build. `vados-gallery-debug.apk` is the same code
+unoptimised, only for debugging with logcat.
 
 ```bash
-adb install -r app-debug.apk
+adb install -r vados-gallery.apk
 ```
 
 Builds share one committed debug key, so a new build installs over the old one.

@@ -1,6 +1,6 @@
 package com.vaditim.gallery.ui
 
-import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.access.AccessState
@@ -52,7 +53,7 @@ fun AccessScreen(access: AccessState) {
 @Composable
 private fun AccessPanel(label: String, caption: String, isGranted: Boolean, action: String, onAction: () -> Unit) {
     Panel(Modifier.fillMaxWidth(), label = label) {
-        Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 14.dp, top = 4.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(start = 18.dp, end = 18.dp, bottom = 18.dp, top = 6.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             BasicText(caption, style = Type.caption)
             if (isGranted) {
                 BasicText("GRANTED", style = Type.action.copy(color = LocalAccent.current))
@@ -60,8 +61,9 @@ private fun AccessPanel(label: String, caption: String, isGranted: Boolean, acti
                 Box(
                     Modifier
                         .pressable(onClick = onAction)
-                        .border(1.dp, Palette.borderControl, Shapes.chip)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .clip(Shapes.capsule)
+                        .background(Palette.pressedWash)
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
                 ) {
                     BasicText(action, style = Type.action.copy(color = LocalAccent.current))
                 }

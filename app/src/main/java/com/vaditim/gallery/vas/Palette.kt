@@ -7,6 +7,9 @@ import androidx.compose.ui.graphics.Color
 object Palette {
     val ground = Color(0xFF181818)
     val panel = Color(0xD9121212)
+    val surface = Color(0xFF202020)
+    val glassTint = Color(0x8C141414)
+    val pressedWash = Color(0x1FFFFFFF)
     val panelSolid = Color(0xFF121212)
     val sunkenDeep = Color(0xFF0E0E0E)
     val sunken = Color(0xFF1C1C1C)
