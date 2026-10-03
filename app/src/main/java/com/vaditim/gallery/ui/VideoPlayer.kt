@@ -133,7 +133,7 @@ fun VideoSurface(state: VideoState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun VideoControls(state: VideoState, isFavorite: Boolean, onFavorite: () -> Unit, modifier: Modifier = Modifier) {
+fun VideoControls(state: VideoState, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
@@ -169,7 +169,6 @@ fun VideoControls(state: VideoState, isFavorite: Boolean, onFavorite: () -> Unit
                     state.player.play()
                 }
             }) { PlayPauseIcon(state.isPlaying, Palette.textBright, size = 28.dp) }
-            IconButton(onClick = onFavorite) { HeartIcon(isFavorite, if (isFavorite) accent else Palette.textMuted) }
         }
     }
 }

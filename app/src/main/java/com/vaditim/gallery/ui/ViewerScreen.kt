@@ -174,15 +174,14 @@ fun ViewerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                if (video != null) VideoControls(video, current.isFavorite, onFavorite = { actions.toggleFavorite(current) }, modifier = Modifier.padding(horizontal = 16.dp))
+                if (video != null) VideoControls(video, Modifier.padding(horizontal = 16.dp))
                 Row(
                     Modifier
                         .glass(Shapes.capsule, Palette.viewerGround)
                         .padding(5.dp),
                 ) {
                     ActionButton("SHARE") { actions.share(listOf(current)) }
-                    // A video carries its own heart in the player controls above.
-                    if (video == null) IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) LocalAccent.current else Palette.textBody) }
+                    IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) LocalAccent.current else Palette.textBody) }
                     if (isPrivate) {
                         // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
                         ActionButton(if (isDeleteArmed) "FOREVER?" else "DELETE", color = Palette.danger) {
