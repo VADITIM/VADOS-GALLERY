@@ -79,13 +79,16 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
 }
 
 @Composable
-fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, onClick: () -> Unit) {
+fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, icon: (@Composable (Color) -> Unit)? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(text, style = Type.cardTitle.copy(color = color), maxLines = 1)
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            icon?.invoke(color)
+            BasicText(text, style = Type.cardTitle.copy(color = color), maxLines = 1)
+        }
         if (trailing != null) BasicText(trailing, style = Type.value)
     }
 }

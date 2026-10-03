@@ -95,7 +95,7 @@ private val HOLD_SLIDE_DISTANCE = 150.dp
 private const val DOUBLE_TAP_SCALE = 2.5f
 private val STAMP_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.ENGLISH)
 
-private enum class Overlay { NONE, MORE, MOVE, NEW_ALBUM, HIDE, NEW_GROUP, DETAILS }
+private enum class Overlay { NONE, MORE, MOVE, NEW_ALBUM, HIDE, NEW_GROUP, CONFIRM_HIDE, DETAILS }
 
 @Composable
 fun ViewerScreen(
@@ -119,6 +119,8 @@ fun ViewerScreen(
     var isChromeVisible by remember { mutableStateOf(true) }
     var overlay by remember { mutableStateOf(Overlay.NONE) }
     var isDeleteArmed by remember { mutableStateOf(false) }
+    // The group a photo is about to go into, held while the confirmation is open.
+    var pendingGroup by remember { mutableStateOf<String?>(null) }
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
     LaunchedEffect(current.id) {
@@ -186,31 +188,32 @@ fun ViewerScreen(
                         .glass(Shapes.capsule, Palette.viewerGround)
                         .padding(5.dp),
                 ) {
-                    ActionButton("SHARE") { actions.share(listOf(current)) }
+                    IconButton(onClick = { actions.share(listOf(current)) }) { ShareIcon(Palette.textBody) }
                     IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) LocalAccent.current else Palette.textBody) }
                     if (isPrivate) {
                         // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
-                        ActionButton(if (isDeleteArmed) "FOREVER?" else "DELETE", color = Palette.danger) {
-                            if (isDeleteArmed) actions.deletePrivate(listOf(current)) else isDeleteArmed = true
-                        }
+                        IconButton(
+                            onClick = { if (isDeleteArmed) actions.deletePrivate(listOf(current)) else isDeleteArmed = true },
+                            modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                        ) { TrashIcon(Palette.danger) }
                     } else {
-                        ActionButton("DELETE", color = Palette.danger) { actions.trash(listOf(current)) }
+                        IconButton(onClick = { actions.trash(listOf(current)) }) { TrashIcon(Palette.danger) }
                     }
-                    ActionButton("•••") { overlay = Overlay.MORE }
+                    IconButton(onClick = { overlay = Overlay.MORE }) { MoreIcon(Palette.textBody) }
                 }
                 }
             }
 
             OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
                 if (isPrivate) {
-                    SheetRow("Move to group") { overlay = Overlay.HIDE }
-                    SheetRow("Move out to album") { overlay = Overlay.MOVE }
+                    SheetRow("Move to group", icon = { MoveIcon(it) }) { overlay = Overlay.HIDE }
+                    SheetRow("Move out to album", icon = { LockIcon(it, isOpen = true) }) { overlay = Overlay.MOVE }
                 } else {
-                    SheetRow("Move to album") { overlay = Overlay.MOVE }
-                    SheetRow("Move to private") { overlay = Overlay.HIDE }
-                    SheetRow("Edit") { overlay = Overlay.NONE; actions.edit(current) }
+                    SheetRow("Move to album", icon = { MoveIcon(it) }) { overlay = Overlay.MOVE }
+                    SheetRow("Move to private", icon = { LockIcon(it) }) { overlay = Overlay.HIDE }
+                    SheetRow("Edit", icon = { SlidersIcon(it) }) { overlay = Overlay.NONE; actions.edit(current) }
                 }
-                SheetRow("Details") { overlay = Overlay.DETAILS }
+                SheetRow("Details", icon = { InfoIcon(it) }) { overlay = Overlay.DETAILS }
             }
 
             AlbumPickerSheet(
@@ -247,8 +250,13 @@ fun ViewerScreen(
                 excludedGroupName = if (isPrivate) current.bucketName else null,
                 ground = Palette.viewerGround,
                 onPick = { name ->
-                    overlay = Overlay.NONE
-                    if (isPrivate) actions.moveToGroup(listOf(current), name) else actions.hide(listOf(current), name)
+                    if (isPrivate) {
+                        overlay = Overlay.NONE
+                        actions.moveToGroup(listOf(current), name)
+                    } else {
+                        pendingGroup = name
+                        overlay = Overlay.CONFIRM_HIDE
+                    }
                 },
                 onNewGroup = { overlay = Overlay.NEW_GROUP },
                 onDismiss = { overlay = Overlay.NONE },
@@ -260,11 +268,28 @@ fun ViewerScreen(
                     action = "MOVE HERE",
                     ground = Palette.viewerGround,
                     onConfirm = { name ->
-                        overlay = Overlay.NONE
-                        if (isPrivate) actions.moveToGroup(listOf(current), name) else actions.hide(listOf(current), name)
+                        if (isPrivate) {
+                            overlay = Overlay.NONE
+                            actions.moveToGroup(listOf(current), name)
+                        } else {
+                            pendingGroup = name
+                            overlay = Overlay.CONFIRM_HIDE
+                        }
                     },
                     onDismiss = { overlay = Overlay.NONE },
                 )
+            }
+
+            OverlaySheet(visible = overlay == Overlay.CONFIRM_HIDE, label = "PRIVATE · ${pendingGroup?.uppercase().orEmpty()}", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
+                SheetRow("Move to Private", color = LocalAccent.current, icon = { LockIcon(it) }) {
+                    pendingGroup?.let { actions.hide(listOf(current), it) }
+                    pendingGroup = null
+                    overlay = Overlay.NONE
+                }
+                SheetRow("Cancel", color = Palette.textMuted, icon = { CloseIcon(it) }) {
+                    pendingGroup = null
+                    overlay = Overlay.NONE
+                }
             }
 
             OverlaySheet(visible = overlay == Overlay.DETAILS, label = "DETAILS", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
@@ -468,13 +493,6 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
     }
 }
 
-@Composable
-fun ActionButton(text: String, isLit: Boolean = false, color: Color? = null, onClick: () -> Unit) {
-    val ink = color ?: if (isLit) LocalAccent.current else Palette.textBody
-    Box(Modifier.pressable(onClick = onClick).clip(Shapes.capsule).padding(horizontal = 14.dp, vertical = 13.dp)) {
-        BasicText(text, style = Type.action.copy(color = ink))
-    }
-}
 
 private fun formatStamp(item: MediaItem): String =
     STAMP_FORMAT.format(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH)

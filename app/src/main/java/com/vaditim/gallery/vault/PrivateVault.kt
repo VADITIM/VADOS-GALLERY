@@ -94,6 +94,15 @@ class PrivateVault(private val context: Context) {
         group.directory.deleteRecursively()
     }
 
+    // The folder is renamed in place; favourites are keyed by folder name, so their keys follow it.
+    suspend fun renameGroup(group: PrivateGroup, newName: String): Boolean = withContext(Dispatchers.IO) {
+        val target = File(ROOT, sanitize(newName))
+        if (target.exists() || !group.directory.renameTo(target)) return@withContext false
+        val oldPrefix = "${group.directory.name}/"
+        updateFavorites { keys -> keys.map { if (it.startsWith(oldPrefix)) "${target.name}/" + it.removePrefix(oldPrefix) else it }.toSet() }
+        true
+    }
+
     suspend fun removeGroupIfEmpty(name: String) = withContext(Dispatchers.IO) {
         val directory = File(ROOT, name)
         if (directory.listFiles().isNullOrEmpty()) directory.delete()

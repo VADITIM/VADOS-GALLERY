@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -131,4 +132,128 @@ fun SettingsIcon(color: Color, size: Dp = 22.dp) {
         drawCircle(Color.Black, 3.6f * unit, Offset(16f * unit, 16f * unit))
         drawCircle(color, 3.6f * unit, Offset(16f * unit, 16f * unit), style = stroke)
     }
+}
+
+// Line glyphs: one stroke weight for all, so a bar of them reads as one set.
+@Composable
+private fun LineGlyph(color: Color, size: Dp, draw: DrawScope.(unit: Float, stroke: Stroke) -> Unit) {
+    Canvas(Modifier.size(size)) {
+        val unit = this.size.minDimension / 24f
+        draw(unit, Stroke(1.8f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+private fun path(unit: Float, build: Path.(Float) -> Unit): Path = Path().apply { build(unit) }
+
+@Composable
+fun ShareIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(12f * u, 3.5f * u); lineTo(12f * u, 14.5f * u)
+        moveTo(8f * u, 7.5f * u); lineTo(12f * u, 3.5f * u); lineTo(16f * u, 7.5f * u)
+        moveTo(8.5f * u, 10.5f * u); lineTo(5.5f * u, 10.5f * u); lineTo(5.5f * u, 20.5f * u); lineTo(18.5f * u, 20.5f * u); lineTo(18.5f * u, 10.5f * u); lineTo(15.5f * u, 10.5f * u)
+    }, color, style = stroke)
+}
+
+@Composable
+fun TrashIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(4f * u, 6.5f * u); lineTo(20f * u, 6.5f * u)
+        moveTo(9f * u, 6.5f * u); lineTo(9f * u, 4f * u); lineTo(15f * u, 4f * u); lineTo(15f * u, 6.5f * u)
+        moveTo(6.2f * u, 6.5f * u); lineTo(7.2f * u, 20.5f * u); lineTo(16.8f * u, 20.5f * u); lineTo(17.8f * u, 6.5f * u)
+        moveTo(10f * u, 10.5f * u); lineTo(10f * u, 16.5f * u)
+        moveTo(14f * u, 10.5f * u); lineTo(14f * u, 16.5f * u)
+    }, color, style = stroke)
+}
+
+@Composable
+fun LockIcon(color: Color, isOpen: Boolean = false, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawRoundRect(color, Offset(5f * unit, 10.5f * unit), Size(14f * unit, 10f * unit), CornerRadius(2.5f * unit), style = stroke)
+    drawPath(path(unit) { u ->
+        moveTo(8f * u, 10.5f * u); lineTo(8f * u, 7.5f * u)
+        arcTo(Rect(8f * u, 3.5f * u, 16f * u, 11.5f * u), 180f, if (isOpen) 150f else 180f, false)
+        if (!isOpen) lineTo(16f * u, 10.5f * u)
+    }, color, style = stroke)
+    drawCircle(color, 1.3f * unit, Offset(12f * unit, 15.5f * unit))
+}
+
+@Composable
+fun MoveIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(3.5f * u, 6.5f * u); lineTo(9.5f * u, 6.5f * u); lineTo(11.5f * u, 8.5f * u); lineTo(20.5f * u, 8.5f * u); lineTo(20.5f * u, 19f * u); lineTo(3.5f * u, 19f * u); close()
+        moveTo(8f * u, 13.75f * u); lineTo(15.5f * u, 13.75f * u)
+        moveTo(12.75f * u, 11f * u); lineTo(15.5f * u, 13.75f * u); lineTo(12.75f * u, 16.5f * u)
+    }, color, style = stroke)
+}
+
+@Composable
+fun ImageIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawRoundRect(color, Offset(3.5f * unit, 5f * unit), Size(17f * unit, 14f * unit), CornerRadius(2.5f * unit), style = stroke)
+    drawCircle(color, 1.6f * unit, Offset(9f * unit, 9.8f * unit), style = stroke)
+    drawPath(path(unit) { u ->
+        moveTo(4f * u, 17f * u); lineTo(9f * u, 12.8f * u); lineTo(12.8f * u, 16f * u); lineTo(15.6f * u, 13.6f * u); lineTo(20f * u, 17.2f * u)
+    }, color, style = stroke)
+}
+
+@Composable
+fun PenIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(5f * u, 19f * u); lineTo(6f * u, 15f * u); lineTo(15.5f * u, 5.5f * u); lineTo(18.5f * u, 8.5f * u); lineTo(9f * u, 18f * u); close()
+        moveTo(13.5f * u, 7.5f * u); lineTo(16.5f * u, 10.5f * u)
+        moveTo(12.5f * u, 20f * u); lineTo(19.5f * u, 20f * u)
+    }, color, style = stroke)
+}
+
+@Composable
+fun RestoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        arcTo(Rect(5f * u, 5f * u, 19f * u, 19f * u), 205f, 300f, true)
+        moveTo(4.6f * u, 4.8f * u); lineTo(5.6f * u, 9.1f * u); lineTo(9.8f * u, 8f * u)
+    }, color, style = stroke)
+}
+
+@Composable
+fun PlusIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u -> moveTo(12f * u, 5f * u); lineTo(12f * u, 19f * u); moveTo(5f * u, 12f * u); lineTo(19f * u, 12f * u) }, color, style = stroke)
+}
+
+@Composable
+fun CloseIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u -> moveTo(6.5f * u, 6.5f * u); lineTo(17.5f * u, 17.5f * u); moveTo(17.5f * u, 6.5f * u); lineTo(6.5f * u, 17.5f * u) }, color, style = stroke)
+}
+
+@Composable
+fun InfoIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawCircle(color, 9f * unit, Offset(12f * unit, 12f * unit), style = stroke)
+    drawPath(path(unit) { u -> moveTo(12f * u, 11f * u); lineTo(12f * u, 16.5f * u) }, color, style = stroke)
+    drawCircle(color, 1.1f * unit, Offset(12f * unit, 7.8f * unit))
+}
+
+@Composable
+fun MoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, _ ->
+    listOf(5.5f, 12f, 18.5f).forEach { x -> drawCircle(color, 1.7f * unit, Offset(x * unit, 12f * unit)) }
+}
+
+@Composable
+fun SlidersIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(4f * u, 8f * u); lineTo(20f * u, 8f * u)
+        moveTo(4f * u, 16f * u); lineTo(20f * u, 16f * u)
+    }, color, style = stroke)
+    drawCircle(Color.Black, 2.6f * unit, Offset(9f * unit, 8f * unit))
+    drawCircle(color, 2.6f * unit, Offset(9f * unit, 8f * unit), style = stroke)
+    drawCircle(Color.Black, 2.6f * unit, Offset(15f * unit, 16f * unit))
+    drawCircle(color, 2.6f * unit, Offset(15f * unit, 16f * unit), style = stroke)
+}
+
+@Composable
+fun PinIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(12f * u, 21f * u)
+        cubicTo(7f * u, 15.5f * u, 5f * u, 12.5f * u, 5f * u, 9.5f * u)
+        cubicTo(5f * u, 5.6f * u, 8.1f * u, 3f * u, 12f * u, 3f * u)
+        cubicTo(15.9f * u, 3f * u, 19f * u, 5.6f * u, 19f * u, 9.5f * u)
+        cubicTo(19f * u, 12.5f * u, 17f * u, 15.5f * u, 12f * u, 21f * u)
+        close()
+    }, color, style = stroke)
+    drawCircle(color, 2.4f * unit, Offset(12f * unit, 9.5f * unit), style = stroke)
 }

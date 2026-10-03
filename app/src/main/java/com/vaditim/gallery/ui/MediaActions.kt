@@ -78,6 +78,35 @@ class MediaActions(
         }
     }
 
+    fun restore(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, false)) { isDone ->
+            notify(if (isDone) summary(items.size, items.size, "Restored") else "Restore was not allowed")
+        }
+    }
+
+    fun deleteForever(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        startRequest(MediaStore.createDeleteRequest(context.contentResolver, items.map { it.uri })) { isDone ->
+            notify(if (isDone) summary(items.size, items.size, "Deleted") else "Delete was not allowed")
+        }
+    }
+
+    // Renaming an album is moving every photo into a sibling folder with the new name; MediaStore keeps each row, so favourites survive. The old folder goes once it is empty.
+    fun renameAlbum(album: Album, newName: String) {
+        val parent = album.relativePath.trimEnd('/').substringBeforeLast('/', "")
+        val cleanName = newName.trim().replace('/', ' ').trimStart('.').ifBlank { return }
+        val relativePath = if (parent.isEmpty()) "$cleanName/" else "$parent/$cleanName/"
+        scope.launch {
+            val moved = album.items.count { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
+            File(Environment.getExternalStorageDirectory(), album.relativePath).let { folder -> if (folder.listFiles().isNullOrEmpty()) folder.delete() }
+            notify(summary(moved, album.items.size, "Renamed to $cleanName"))
+        }
+    }
+
+    fun renameGroup(group: PrivateGroup, newName: String) =
+        runVault("Renamed to ${newName.trim()}", "Could not rename ${group.name}") { vault.renameGroup(group, newName) }
+
     fun move(items: List<MediaItem>, album: Album) = move(items, album.relativePath, album.name)
 
     // Into any folder, existing or not — a new album is just a folder that a first photo is moved into.

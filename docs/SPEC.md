@@ -208,3 +208,8 @@ review, which is not a goal.
 
 - **Settings.** A button at the top right of every view opens a sheet: blur amount and background opacity of the glass (the glass is black under the blur), default column count, month headers on/off, autoplay of videos on/off. Stored in preferences (`Settings.kt`) and applied at once.
 - **Locations.** Each photo's GPS (EXIF, or a video's location atom) is read once with the media-location permission and named by the system geocoder per ~1 km cell; both are cached in app files. Details shows the city, country and coordinates. A Locations row above Private in Albums lists cities by photo count; each opens as a grid.
+- **Trash.** A Trash row (with count) sits between Locations and Private. It lists the system trash (Android keeps items 30 days); tapping selects, and the bar restores or deletes forever (second tap).
+- **Rename.** Long-pressing an album or private group offers Rename. An album is renamed by moving its photos to a sibling folder, so MediaStore rows and favourites survive.
+- **Moving into Private** is confirmed once more after the group is chosen (selection, whole album, viewer).
+- **Icons, not words,** on every action bar and menu row: share, cover (image), move, private (lock; open lock for moving out), trash, rename (pen), restore, add, close, details, more.
+- The top row keeps a fixed-width month chip so the buttons beside it never move.

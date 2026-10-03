@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -87,6 +88,7 @@ import kotlinx.coroutines.launch
 
 private val BAR_ROOM = 84.dp
 private val HEADER_ROOM = 56.dp
+private val MONTH_CHIP_WIDTH = 148.dp
 
 // Where an open viewer gets its items from. Resolved from the live library on every frame, so a photo moved, favourited or deleted while it is open is reflected without the viewer holding a stale copy.
 sealed interface ViewerSource {
@@ -109,6 +111,7 @@ private sealed interface AlbumsPlace {
     data object PrivateFavorites : AlbumsPlace
     data object Locations : AlbumsPlace
     data class Location(val key: String) : AlbumsPlace
+    data object Trash : AlbumsPlace
 }
 
 private val AlbumsPlace.isPrivate: Boolean
@@ -118,7 +121,7 @@ private val AlbumsPlace.isPrivate: Boolean
 private enum class AppSheet {
     NONE,
     NEW_ALBUM,
-    SETTINGS, SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
+    SETTINGS, ALBUM_RENAME, GROUP_RENAME, CONFIRM_PRIVATE, SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
     ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP,
     GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
     PRIVATE_NEW_GROUP,
@@ -157,6 +160,7 @@ private fun Library(viewModel: GalleryViewModel) {
     val isPrivateUnlocked by viewModel.isPrivateUnlocked.collectAsStateWithLifecycle()
     val places by viewModel.places.collectAsStateWithLifecycle()
     val locations by viewModel.locations.collectAsStateWithLifecycle()
+    val trash by viewModel.trash.collectAsStateWithLifecycle()
     // GPS in photos is stripped by the system unless this is granted; it is asked once, the first time the library shows.
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refreshLocationPermission() }
     LaunchedEffect(Unit) { locationPermission.launch(Manifest.permission.ACCESS_MEDIA_LOCATION) }
@@ -189,6 +193,9 @@ private fun Library(viewModel: GalleryViewModel) {
     val recentMemory = remember { GridMemory() }
     val favoritesMemory = remember { GridMemory() }
     val privateFavoritesMemory = remember { GridMemory() }
+    val trashMemory = remember { GridMemory() }
+    // Photos about to go into Private, held while the confirmation is open.
+    var pendingPrivate by remember { mutableStateOf<PendingPrivate?>(null) }
     val albumMemories = remember { mutableMapOf<Long, GridMemory>() }
     val locationMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateMemories = remember { mutableMapOf<String, GridMemory>() }
@@ -218,12 +225,13 @@ private fun Library(viewModel: GalleryViewModel) {
         openAlbum != null -> openAlbum.items
         openPrivateGroup != null -> openPrivateGroup.items
         openLocation != null -> openLocation.items
+        place is AlbumsPlace.Trash -> trash
         place is AlbumsPlace.PrivateFavorites -> privateContents.favorites
         else -> emptyList()
     }
     val selectedItems = gridItems.filter { it.id in selectedIds }
     val isSelecting = selectedItems.isNotEmpty()
-    val selection = Selection(selectedIds) { item ->
+    val selection = Selection(selectedIds, isAlwaysActive = place is AlbumsPlace.Trash) { item ->
         selectedIds = if (item.id in selectedIds) selectedIds - item.id else selectedIds + item.id
         isDeleteArmed = false
     }
@@ -275,6 +283,7 @@ private fun Library(viewModel: GalleryViewModel) {
         openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory() }
         openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory() }
         openLocation != null -> locationMemories.getOrPut(openLocation.key) { GridMemory() }
+        place is AlbumsPlace.Trash -> trashMemory
         place is AlbumsPlace.PrivateFavorites -> privateFavoritesMemory
         section == Section.RECENT -> recentMemory
         section == Section.FAVORITES -> favoritesMemory
@@ -356,7 +365,8 @@ private fun Library(viewModel: GalleryViewModel) {
                             contentPadding = insetPadding,
                             footer = {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    LocationsEntry(onClick = { albumsPlace = AlbumsPlace.Locations })
+                                    FolderEntry("Locations", icon = { PinIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Locations })
+                                    FolderEntry("Trash", icon = { TrashIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Trash }, count = trash.size)
                                     PrivateEntry(onClick = openPrivate)
                                 }
                             },
@@ -371,6 +381,13 @@ private fun Library(viewModel: GalleryViewModel) {
                                 selection = selection,
                             )
                         }
+                        AlbumsPlace.Trash -> TrashScreen(
+                            items = trash,
+                            memory = trashMemory,
+                            onBack = { albumsPlace = AlbumsPlace.Folders },
+                            contentPadding = insetPadding,
+                            selection = selection,
+                        )
                         AlbumsPlace.Locations -> LocationsScreen(
                             groups = locations,
                             onOpen = { albumsPlace = AlbumsPlace.Location(it.key) },
@@ -443,6 +460,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     openPrivateGroup != null -> "Private · ${openPrivateGroup.name}"
                     place is AlbumsPlace.PrivateFavorites -> "Private · Favorites"
                     openLocation != null -> openLocation.city
+                    place is AlbumsPlace.Trash -> "Trash"
                     else -> null
                 },
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
@@ -456,6 +474,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     albumsPlace = when (place) {
                         is AlbumsPlace.Folder -> AlbumsPlace.Folders
                         is AlbumsPlace.Location -> AlbumsPlace.Locations
+                        is AlbumsPlace.Trash -> AlbumsPlace.Folders
                         else -> AlbumsPlace.PrivateGroups
                     }
                 },
@@ -466,35 +485,57 @@ private fun Library(viewModel: GalleryViewModel) {
             val barModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp)
             if (isSelecting) {
                 Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
-                    ActionButton("SHARE") { actions.share(selectedItems) }
+                  if (place is AlbumsPlace.Trash) {
+                    IconButton(onClick = {
+                        actions.restore(selectedItems)
+                        clearSelection()
+                    }) { RestoreIcon(accent) }
+                    // Out of the trash there is no coming back, so it takes a second tap.
+                    IconButton(
+                        onClick = {
+                            if (isDeleteArmed) {
+                                actions.deleteForever(selectedItems)
+                                clearSelection()
+                            } else {
+                                isDeleteArmed = true
+                            }
+                        },
+                        modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                    ) { TrashIcon(Palette.danger) }
+                  } else {
+                    IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
                     if (selectedItems.size == 1 && (openAlbum != null || openPrivateGroup != null)) {
-                        ActionButton("COVER") {
+                        IconButton(onClick = {
                             when {
                                 openAlbum != null -> viewModel.setAlbumCover(openAlbum.id, selectedItems.first())
                                 openPrivateGroup != null -> viewModel.setGroupCover(openPrivateGroup.name, selectedItems.first())
                             }
                             clearSelection()
-                        }
+                        }) { ImageIcon(Palette.textBody) }
                     }
                     if (isInPrivate) {
-                        ActionButton("GROUP") { sheet = AppSheet.SELECTION_GROUP }
-                        ActionButton("OUT") { sheet = AppSheet.SELECTION_MOVE }
-                        ActionButton(if (isDeleteArmed) "FOREVER?" else "DELETE", color = Palette.danger) {
-                            if (isDeleteArmed) {
-                                actions.deletePrivate(selectedItems)
-                                clearSelection()
-                            } else {
-                                isDeleteArmed = true
-                            }
-                        }
+                        IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { MoveIcon(Palette.textBody) }
+                        IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { LockIcon(Palette.textBody, isOpen = true) }
+                        IconButton(
+                            onClick = {
+                                if (isDeleteArmed) {
+                                    actions.deletePrivate(selectedItems)
+                                    clearSelection()
+                                } else {
+                                    isDeleteArmed = true
+                                }
+                            },
+                            modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                        ) { TrashIcon(Palette.danger) }
                     } else {
-                        ActionButton("MOVE") { sheet = AppSheet.SELECTION_MOVE }
-                        ActionButton("PRIVATE") { sheet = AppSheet.SELECTION_GROUP }
-                        ActionButton("DELETE", color = Palette.danger) {
+                        IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
+                        IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { LockIcon(Palette.textBody) }
+                        IconButton(onClick = {
                             actions.trash(selectedItems)
                             clearSelection()
-                        }
+                        }) { TrashIcon(Palette.danger) }
                     }
+                  }
                 }
             } else {
                 SectionBar(
@@ -528,8 +569,13 @@ private fun Library(viewModel: GalleryViewModel) {
                 groups = privateContents.groups,
                 excludedGroupName = openPrivateGroup?.name,
                 onPick = { name ->
-                    if (isInPrivate) actions.moveToGroup(selectedItems, name) else actions.hide(selectedItems, name)
-                    clearSelection()
+                    if (isInPrivate) {
+                        actions.moveToGroup(selectedItems, name)
+                        clearSelection()
+                    } else {
+                        pendingPrivate = PendingPrivate(selectedItems, name, isSelection = true)
+                        sheet = AppSheet.CONFIRM_PRIVATE
+                    }
                 },
                 onNewGroup = { sheet = AppSheet.SELECTION_NEW_GROUP },
                 onDismiss = { sheet = AppSheet.NONE },
@@ -537,14 +583,16 @@ private fun Library(viewModel: GalleryViewModel) {
 
             // A long-pressed album: one entry, because moving the whole folder into Private is the thing it is for.
             OverlaySheet(visible = sheet == AppSheet.ALBUM_MENU, label = sheetAlbum?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
-                SheetRow("Add photos") {
+                SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.ALBUM_RENAME }
+                SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
                     sheet = AppSheet.NONE
                 }
-                SheetRow("Move album to private", trailing = sheetAlbum?.items?.size?.toString()) { sheet = AppSheet.ALBUM_GROUP }
+                SheetRow("Move album to private", trailing = sheetAlbum?.items?.size?.toString(), icon = { LockIcon(it) }) { sheet = AppSheet.ALBUM_GROUP }
                 SheetRow(
                     if (isMenuDeleteArmed) "Tap again: ${sheetAlbum?.items?.size ?: 0} photos to the trash" else "Delete album",
                     color = Palette.danger,
+                    icon = { TrashIcon(it) },
                 ) {
                     if (isMenuDeleteArmed) {
                         sheetAlbum?.let { actions.trash(it.items) }
@@ -565,14 +613,16 @@ private fun Library(viewModel: GalleryViewModel) {
 
             // A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
             OverlaySheet(visible = sheet == AppSheet.GROUP_MENU, label = sheetGroup?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
-                SheetRow("Add photos") {
+                SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.GROUP_RENAME }
+                SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheetGroup?.let { picker = PickerTarget.IntoGroup(it.name) }
                     sheet = AppSheet.NONE
                 }
-                SheetRow("Move group out to album", trailing = sheetGroup?.items?.size?.toString()) { sheet = AppSheet.GROUP_MOVE_OUT }
+                SheetRow("Move group out to album", trailing = sheetGroup?.items?.size?.toString(), icon = { MoveIcon(it) }) { sheet = AppSheet.GROUP_MOVE_OUT }
                 SheetRow(
                     if (isMenuDeleteArmed) "Tap again: delete ${sheetGroup?.items?.size ?: 0} photos forever" else "Delete group",
                     color = Palette.danger,
+                    icon = { TrashIcon(it) },
                 ) {
                     if (isMenuDeleteArmed) {
                         sheetGroup?.let { actions.deleteGroup(it) }
@@ -600,14 +650,55 @@ private fun Library(viewModel: GalleryViewModel) {
                 groups = privateContents.groups,
                 excludedGroupName = null,
                 onPick = { name ->
-                    sheetAlbum?.let { actions.hide(it.items, name) }
-                    sheet = AppSheet.NONE
+                    sheetAlbum?.let { pendingPrivate = PendingPrivate(it.items, name, isSelection = false) }
+                    sheet = AppSheet.CONFIRM_PRIVATE
                 },
                 onNewGroup = { sheet = AppSheet.ALBUM_NEW_GROUP },
                 onDismiss = { sheet = AppSheet.NONE },
             )
 
+            // Going into Private moves files out of every other app's reach, so it is confirmed once more.
+            OverlaySheet(
+                visible = sheet == AppSheet.CONFIRM_PRIVATE,
+                label = "PRIVATE · ${pendingPrivate?.groupName?.uppercase().orEmpty()}",
+                onDismiss = { sheet = AppSheet.NONE },
+            ) {
+                val count = pendingPrivate?.items?.size ?: 0
+                SheetRow(if (count == 1) "Move 1 photo to Private" else "Move $count photos to Private", color = accent, icon = { LockIcon(it) }) {
+                    pendingPrivate?.let { pending ->
+                        actions.hide(pending.items, pending.groupName)
+                        if (pending.isSelection) clearSelection()
+                    }
+                    pendingPrivate = null
+                    sheet = AppSheet.NONE
+                }
+                SheetRow("Cancel", color = Palette.textMuted, icon = { CloseIcon(it) }) {
+                    pendingPrivate = null
+                    sheet = AppSheet.NONE
+                }
+            }
+
             when (sheet) {
+                AppSheet.ALBUM_RENAME -> NameSheet(
+                    label = "RENAME ALBUM",
+                    action = "RENAME",
+                    initialName = sheetAlbum?.name.orEmpty(),
+                    onConfirm = { name ->
+                        sheetAlbum?.let { if (name != it.name) actions.renameAlbum(it, name) }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.GROUP_RENAME -> NameSheet(
+                    label = "RENAME GROUP",
+                    action = "RENAME",
+                    initialName = sheetGroup?.name.orEmpty(),
+                    onConfirm = { name ->
+                        sheetGroup?.let { if (name != it.name) actions.renameGroup(it, name) }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
                 AppSheet.NEW_ALBUM -> NameSheet(
                     label = "NEW ALBUM",
                     action = "CHOOSE PHOTOS",
@@ -640,8 +731,13 @@ private fun Library(viewModel: GalleryViewModel) {
                     label = "NEW PRIVATE GROUP",
                     action = "MOVE HERE",
                     onConfirm = { name ->
-                        if (isInPrivate) actions.moveToGroup(selectedItems, name) else actions.hide(selectedItems, name)
-                        clearSelection()
+                        if (isInPrivate) {
+                            actions.moveToGroup(selectedItems, name)
+                            clearSelection()
+                        } else {
+                            pendingPrivate = PendingPrivate(selectedItems, name, isSelection = true)
+                            sheet = AppSheet.CONFIRM_PRIVATE
+                        }
                     },
                     onDismiss = { sheet = AppSheet.NONE },
                 )
@@ -650,8 +746,8 @@ private fun Library(viewModel: GalleryViewModel) {
                     action = "MOVE HERE",
                     initialName = sheetAlbum?.name.orEmpty(),
                     onConfirm = { name ->
-                        sheetAlbum?.let { actions.hide(it.items, name) }
-                        sheet = AppSheet.NONE
+                        sheetAlbum?.let { pendingPrivate = PendingPrivate(it.items, name, isSelection = false) }
+                        sheet = AppSheet.CONFIRM_PRIVATE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
                 )
@@ -758,18 +854,22 @@ private fun Library(viewModel: GalleryViewModel) {
     }
 }
 
+private data class PendingPrivate(val items: List<MediaItem>, val groupName: String, val isSelection: Boolean)
+
 private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites
 
 // The top layer: the month you are looking at, the way back out of a folder, or — while selecting — the count and the way out of the selection.
+// Everything right of the back button has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
 private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (selectedCount > 0) {
-            Box(Modifier.pressable(onClick = onCancelSelection).glass(Shapes.capsule).padding(horizontal = 16.dp, vertical = 11.dp)) {
-                BasicText("Cancel", style = Type.cardTitle.copy(color = LocalAccent.current))
+            Box(Modifier.pressable(onClick = onCancelSelection).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                CloseIcon(LocalAccent.current)
             }
             Box(Modifier.weight(1f))
             Chip("$selectedCount selected")
@@ -778,16 +878,15 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd:
                 Box(Modifier.weight(1f, fill = false).pressable(onClick = onBack).glass(Shapes.capsule).padding(horizontal = 16.dp, vertical = 11.dp)) {
                     BasicText("‹  $backLabel", style = Type.cardTitle.copy(color = LocalAccent.current), maxLines = 1)
                 }
-                Box(Modifier.weight(0.01f))
             }
-            if (month.isNotEmpty()) Chip(month)
+            Box(Modifier.weight(if (backLabel != null) 0.001f else 1f))
+            if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
             if (onAdd != null) {
-                Box(Modifier.padding(start = 8.dp).pressable(onClick = onAdd).glass(Shapes.capsule).padding(horizontal = 16.dp, vertical = 11.dp)) {
-                    BasicText("+ Add", style = Type.cardTitle.copy(color = LocalAccent.current))
+                Box(Modifier.pressable(onClick = onAdd).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    PlusIcon(LocalAccent.current)
                 }
             }
-            Box(Modifier.weight(1f))
-            Box(Modifier.pressable(onClick = onSettings).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 11.dp)) {
+            Box(Modifier.pressable(onClick = onSettings).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 SettingsIcon(Palette.textBright)
             }
         }
@@ -795,8 +894,8 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd:
 }
 
 @Composable
-private fun Chip(text: String) {
-    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+private fun Chip(text: String, modifier: Modifier = Modifier) {
+    Box(modifier.glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         MicroLabel(text)
     }
 }

@@ -238,12 +238,16 @@ private fun Modifier.dragSelect(
         val chosen = selection()
         if (!isHeld || chosen == null) return@awaitEachGesture
 
-        fun itemAt(position: Offset): MediaItem? = state.layoutInfo.visibleItemsInfo
-            .firstOrNull { info ->
-                position.x >= info.offset.x && position.x < info.offset.x + info.size.width &&
-                    position.y >= info.offset.y && position.y < info.offset.y + info.size.height
-            }
-            ?.let { info -> (info.key as? Long)?.let { photosById[it] } }
+        // Item offsets are measured from the end of the top content padding, so the finger is moved into that frame first.
+        fun itemAt(position: Offset): MediaItem? {
+            val y = position.y + state.layoutInfo.viewportStartOffset
+            return state.layoutInfo.visibleItemsInfo
+                .firstOrNull { info ->
+                    position.x >= info.offset.x && position.x < info.offset.x + info.size.width &&
+                        y >= info.offset.y && y < info.offset.y + info.size.height
+                }
+                ?.let { info -> (info.key as? Long)?.let { photosById[it] } }
+        }
 
         val first = itemAt(down.position) ?: return@awaitEachGesture
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)

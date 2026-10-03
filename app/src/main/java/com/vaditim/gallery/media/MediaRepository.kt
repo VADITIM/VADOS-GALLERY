@@ -7,6 +7,7 @@ import android.content.ContentValues
 import android.database.ContentObserver
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -28,7 +29,12 @@ class MediaRepository(private val context: Context) {
     private val resolver: ContentResolver = context.contentResolver
 
     // Re-queried whole on every change. A library of tens of thousands of rows is a few megabytes of metadata and a query well under a second, which is cheaper than keeping a diff correct; revisit only if a real library says otherwise.
-    fun observeLibrary(): Flow<List<MediaItem>> =
+    fun observeLibrary(): Flow<List<MediaItem>> = observe(isTrashed = false)
+
+    // What is in the system trash: Android keeps trashed photos for 30 days, hidden from every normal query.
+    fun observeTrash(): Flow<List<MediaItem>> = observe(isTrashed = true)
+
+    private fun observe(isTrashed: Boolean): Flow<List<MediaItem>> =
         callbackFlow {
             val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) {
@@ -40,7 +46,7 @@ class MediaRepository(private val context: Context) {
             awaitClose { resolver.unregisterContentObserver(observer) }
         }
             .conflate()
-            .map { queryLibrary() }
+            .map { query(isTrashed) }
             .flowOn(Dispatchers.IO)
 
     // Moving is a change of RELATIVE_PATH; MediaProvider moves the file on disk itself. The caller must already hold write access to the item (All files access, or a granted write request).
@@ -57,7 +63,7 @@ class MediaRepository(private val context: Context) {
         true
     }
 
-    private fun queryLibrary(): List<MediaItem> {
+    private fun query(isTrashed: Boolean): List<MediaItem> {
         val projection = arrayOf(
             BaseColumns._ID,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
@@ -83,7 +89,12 @@ class MediaRepository(private val context: Context) {
             "%/${PrivateVault.ROOT.name}/%",
         )
         val items = ArrayList<MediaItem>()
-        resolver.query(FILES, projection, selection, arguments, null)?.use { cursor ->
+        val queryArguments = Bundle().apply {
+            putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arguments)
+            putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, if (isTrashed) MediaStore.MATCH_ONLY else MediaStore.MATCH_EXCLUDE)
+        }
+        resolver.query(FILES, projection, queryArguments, null)?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(BaseColumns._ID)
             val typeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
             val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)

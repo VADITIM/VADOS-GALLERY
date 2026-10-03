@@ -3,7 +3,7 @@ package com.vaditim.gallery.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +15,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.media.LocationGroup
@@ -25,19 +27,30 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 
-// The row above Private in Albums.
+// A row at the foot of Albums (Locations, Trash), shaped like the Private row below them.
 @Composable
-fun LocationsEntry(onClick: () -> Unit) {
-    Column(
+fun FolderEntry(title: String, icon: @Composable (Color) -> Unit, onClick: () -> Unit, count: Int? = null) {
+    Row(
         Modifier
             .fillMaxWidth()
             .pressable(onClick = onClick, pressedScale = 0.97f)
             .clip(Shapes.panel)
             .background(Palette.surface)
             .padding(horizontal = 20.dp, vertical = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText("Locations", style = Type.cardTitle)
+        icon(Palette.textMuted)
+        BasicText(title, style = Type.cardTitle, modifier = Modifier.weight(1f))
+        if (count != null && count > 0) BasicText(count.toString(), style = Type.value)
     }
+}
+
+// Trashed photos, kept by Android for 30 days. Everything here is picked rather than opened, so a tap selects.
+@Composable
+fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
+    BackHandler(enabled = selection.selectedIds.isEmpty(), onBack = onBack)
+    MediaGrid(items = items, memory = memory, onOpen = {}, contentPadding = contentPadding, selection = selection, emptyCaption = "Trash is empty.")
 }
 
 // One card per city, the cities with the most photos first.

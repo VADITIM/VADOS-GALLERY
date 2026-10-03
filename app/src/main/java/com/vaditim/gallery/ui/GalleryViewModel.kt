@@ -48,6 +48,14 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .flatMapLatest { hasFileAccess -> if (hasFileAccess) repository.observeLibrary() else flowOf(emptyList()) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val trash: StateFlow<List<MediaItem>> =
+        mutableAccess
+            .map { it.hasFileAccess }
+            .distinctUntilChanged()
+            .flatMapLatest { hasFileAccess -> if (hasFileAccess) repository.observeTrash() else flowOf(emptyList()) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     private val coverStore = CoverStore(application)
     private val coverIds = MutableStateFlow(coverStore.read())
 
