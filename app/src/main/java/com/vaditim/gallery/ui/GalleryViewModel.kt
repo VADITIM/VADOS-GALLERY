@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
-    val repository = MediaRepository(application.contentResolver)
+    val repository = MediaRepository(application)
 
     private val mutableAccess = MutableStateFlow(StorageAccess.read(application))
     val access: StateFlow<AccessState> = mutableAccess

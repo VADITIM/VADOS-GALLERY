@@ -60,6 +60,7 @@ fun PrivateGroupsScreen(
     groups: List<PrivateGroup>,
     favorites: List<MediaItem>,
     onOpen: (PrivateGroup) -> Unit,
+    onLongPress: (PrivateGroup) -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenSelection: (Int) -> Unit,
     onNewGroup: () -> Unit,
@@ -95,9 +96,9 @@ fun PrivateGroupsScreen(
             item(contentType = "group") { CoverCard("Private Favorites", favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites) }
         }
         items(groups, key = { it.directory.absolutePath }, contentType = { "group" }) { group ->
-            CoverCard(group.name, group.cover, group.items.size, onClick = { onOpen(group) })
+            CoverCard(group.name, group.cover, group.items.size, onClick = { onOpen(group) }, onLongClick = { onLongPress(group) })
         }
-        item(contentType = "new-group") { NewGroupCard(onClick = onNewGroup) }
+        item(contentType = "new-group") { AddCard("New group", onClick = onNewGroup) }
     }
 }
 
@@ -133,10 +134,10 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit) {
+private fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     val context = LocalContext.current
     val request = remember(cover?.uri) { cover?.let { ImageRequest.Builder(context).data(it.uri).size(COVER_PIXELS).build() } }
-    Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
+    Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.sunken)) {
             if (request != null) {
                 AsyncImage(model = request, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -147,8 +148,9 @@ private fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -
     }
 }
 
+// The "make a new one" card at the end of a grid of covers: albums and private groups both end with one.
 @Composable
-private fun NewGroupCard(onClick: () -> Unit) {
+fun AddCard(label: String, onClick: () -> Unit) {
     Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.surface),
@@ -156,7 +158,7 @@ private fun NewGroupCard(onClick: () -> Unit) {
         ) {
             BasicText("+", style = Type.title.copy(color = LocalAccent.current))
         }
-        BasicText("New group", style = Type.cardTitle.copy(color = Palette.textMuted), modifier = Modifier.padding(start = 4.dp, top = 10.dp))
+        BasicText(label, style = Type.cardTitle.copy(color = Palette.textMuted), modifier = Modifier.padding(start = 4.dp, top = 10.dp))
     }
 }
 

@@ -130,8 +130,8 @@ fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<Stri
     }
 
 // What a grid needs to know about multi-select: which tiles are in it, and how to toggle one. A long press toggles (and so starts a selection); once one is active, a tap toggles too.
-class Selection(val selectedIds: Set<Long>, val onToggle: (MediaItem) -> Unit) {
-    val isActive: Boolean get() = selectedIds.isNotEmpty()
+class Selection(val selectedIds: Set<Long>, private val isAlwaysActive: Boolean = false, val onToggle: (MediaItem) -> Unit) {
+    val isActive: Boolean get() = isAlwaysActive || selectedIds.isNotEmpty()
 }
 
 @Composable

@@ -1,10 +1,13 @@
 package com.vaditim.gallery.media
 
 import android.content.ContentResolver
+import android.content.Context
 import android.content.ContentUris
 import android.content.ContentValues
 import android.database.ContentObserver
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.BaseColumns
@@ -18,8 +21,11 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.io.File
 
-class MediaRepository(private val resolver: ContentResolver) {
+class MediaRepository(private val context: Context) {
+
+    private val resolver: ContentResolver = context.contentResolver
 
     // Re-queried whole on every change. A library of tens of thousands of rows is a few megabytes of metadata and a query well under a second, which is cheaper than keeping a diff correct; revisit only if a real library says otherwise.
     fun observeLibrary(): Flow<List<MediaItem>> =
@@ -38,9 +44,17 @@ class MediaRepository(private val resolver: ContentResolver) {
             .flowOn(Dispatchers.IO)
 
     // Moving is a change of RELATIVE_PATH; MediaProvider moves the file on disk itself. The caller must already hold write access to the item (All files access, or a granted write request).
+    // If MediaProvider refuses (some folder pairs it will not move between), the file is renamed directly — this app has All files access — and both paths are rescanned so the library follows.
     suspend fun moveTo(item: MediaItem, relativePath: String): Boolean = withContext(Dispatchers.IO) {
         val values = ContentValues().apply { put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath) }
-        resolver.update(item.uri, values, null, null) > 0
+        val isUpdated = runCatching { resolver.update(item.uri, values, null, null) > 0 }.getOrDefault(false)
+        if (isUpdated) return@withContext true
+        val source = File(item.absolutePath)
+        val directory = File(Environment.getExternalStorageDirectory(), relativePath).apply { mkdirs() }
+        val target = File(directory, source.name)
+        if (target.exists() || !source.renameTo(target)) return@withContext false
+        MediaScannerConnection.scanFile(context, arrayOf(source.absolutePath, target.absolutePath), null, null)
+        true
     }
 
     private fun queryLibrary(): List<MediaItem> {

@@ -38,6 +38,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.media.newAlbumPath
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.MicroLabel
@@ -57,7 +58,7 @@ import java.util.Locale
 
 private val STAMP_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.ENGLISH)
 
-private enum class Overlay { NONE, MORE, MOVE, HIDE, NEW_GROUP, DETAILS }
+private enum class Overlay { NONE, MORE, MOVE, NEW_ALBUM, HIDE, NEW_GROUP, DETAILS }
 
 @Composable
 fun ViewerScreen(
@@ -163,8 +164,22 @@ fun ViewerScreen(
                     overlay = Overlay.NONE
                     if (isPrivate) actions.unhide(listOf(current), album) else actions.move(listOf(current), album)
                 },
+                onNewAlbum = { overlay = Overlay.NEW_ALBUM },
                 onDismiss = { overlay = Overlay.NONE },
             )
+
+            if (overlay == Overlay.NEW_ALBUM) {
+                NameSheet(
+                    label = "NEW ALBUM",
+                    action = "MOVE HERE",
+                    ground = Palette.viewerGround,
+                    onConfirm = { name ->
+                        overlay = Overlay.NONE
+                        if (isPrivate) actions.unhide(listOf(current), newAlbumPath(name), name) else actions.move(listOf(current), newAlbumPath(name), name)
+                    },
+                    onDismiss = { overlay = Overlay.NONE },
+                )
+            }
 
             GroupPickerSheet(
                 visible = overlay == Overlay.HIDE,

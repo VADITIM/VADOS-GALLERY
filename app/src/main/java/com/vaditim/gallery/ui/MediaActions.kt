@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,6 +21,7 @@ import androidx.core.content.FileProvider
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
+import com.vaditim.gallery.vault.PrivateGroup
 import com.vaditim.gallery.vault.PrivateVault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -71,17 +73,28 @@ class MediaActions(
 
     fun trash(items: List<MediaItem>) {
         if (items.isEmpty()) return
-        startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, true)) { }
+        startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, true)) { isDone ->
+            notify(if (isDone) summary(items.size, items.size, "Moved to trash") else "Delete was not allowed")
+        }
     }
 
-    fun move(items: List<MediaItem>, album: Album) {
+    fun move(items: List<MediaItem>, album: Album) = move(items, album.relativePath, album.name)
+
+    // Into any folder, existing or not — a new album is just a folder that a first photo is moved into.
+    fun move(items: List<MediaItem>, relativePath: String, albumName: String) {
         if (items.isEmpty()) return
-        startRequest(MediaStore.createWriteRequest(context.contentResolver, items.map { it.uri })) { isGranted ->
-            if (isGranted) {
-                scope.launch {
-                    val moved = items.count { runCatching { repository.moveTo(it, album.relativePath) }.getOrDefault(false) }
-                    notify(summary(moved, items.size, "Moved to ${album.name}"))
-                }
+        val moveAll = {
+            scope.launch {
+                val moved = items.count { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
+                notify(summary(moved, items.size, "Moved to $albumName"))
+            }
+        }
+        // With All files access the move needs nobody's permission, so it skips the request — and the popup a request can bring with it.
+        if (Environment.isExternalStorageManager()) {
+            moveAll()
+        } else {
+            startRequest(MediaStore.createWriteRequest(context.contentResolver, items.map { it.uri })) { isGranted ->
+                if (isGranted) moveAll() else notify("Move was not allowed")
             }
         }
     }
@@ -93,15 +106,22 @@ class MediaActions(
         runVaultBatch(items, "Moved to $groupName") { vault.moveToGroup(it, groupName) }
 
     // Back out to an album; anything that was a private favourite becomes an ordinary favourite again once MediaStore has indexed it.
-    fun unhide(items: List<MediaItem>, album: Album) {
+    fun unhide(items: List<MediaItem>, album: Album, afterwards: suspend () -> Unit = {}) = unhide(items, album.relativePath, album.name, afterwards)
+
+    fun unhide(items: List<MediaItem>, relativePath: String, albumName: String, afterwards: suspend () -> Unit = {}) {
+        if (items.isEmpty()) return
         scope.launch {
-            val restored = items.map { item -> item to runCatching { vault.unhide(item, album.relativePath) }.getOrNull() }
+            val restored = items.map { item -> item to runCatching { vault.unhide(item, relativePath) }.getOrNull() }
+            afterwards()
             onPrivateChanged()
-            notify(summary(restored.count { it.second != null }, items.size, "Moved to ${album.name}"))
+            notify(summary(restored.count { it.second != null }, items.size, "Moved to $albumName"))
             val favoriteUris = restored.filter { (item, uri) -> item.isFavorite && uri != null }.mapNotNull { it.second }
             if (favoriteUris.isNotEmpty()) startRequest(MediaStore.createFavoriteRequest(context.contentResolver, favoriteUris, true)) { }
         }
     }
+
+    fun deleteGroup(group: PrivateGroup) =
+        runVault("Deleted ${group.name}", "Could not delete ${group.name}") { vault.deleteGroup(group) }
 
     fun deletePrivate(items: List<MediaItem>) =
         runVaultBatch(items, "Deleted") { vault.delete(it) }

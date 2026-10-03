@@ -36,7 +36,7 @@ private const val COVER_PIXELS = 512
 
 // Folders only. No "Recent" and no "Favorites" album: both are sections already, and an album that repeats a section is the Samsung habit this app exists to drop.
 @Composable
-fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> Unit, onLongPress: (Album) -> Unit, contentPadding: PaddingValues, footer: @Composable () -> Unit) {
+fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> Unit, onLongPress: (Album) -> Unit, onNewAlbum: () -> Unit, contentPadding: PaddingValues, footer: @Composable () -> Unit) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         state = state,
@@ -57,6 +57,7 @@ fun AlbumsScreen(albums: List<Album>, state: LazyGridState, onOpen: (Album) -> U
             }
         }
         items(albums, key = { it.id }, contentType = { "album" }) { album -> AlbumCard(album, onClick = { onOpen(album) }, onLongClick = { onLongPress(album) }) }
+        item(contentType = "new-album") { AddCard("New album", onClick = onNewAlbum) }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { footer() }
     }
 }

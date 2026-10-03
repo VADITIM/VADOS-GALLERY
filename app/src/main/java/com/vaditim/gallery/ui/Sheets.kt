@@ -91,12 +91,22 @@ fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.text
 }
 
 @Composable
-fun AlbumPickerSheet(visible: Boolean, label: String, albums: List<Album>, excludedAlbumId: Long?, onPick: (Album) -> Unit, onDismiss: () -> Unit, ground: Color = Palette.ground) {
+fun AlbumPickerSheet(
+    visible: Boolean,
+    label: String,
+    albums: List<Album>,
+    excludedAlbumId: Long?,
+    onPick: (Album) -> Unit,
+    onNewAlbum: () -> Unit,
+    onDismiss: () -> Unit,
+    ground: Color = Palette.ground,
+) {
     OverlaySheet(visible = visible, label = label, onDismiss = onDismiss, ground = ground) {
         LazyColumn(Modifier.heightIn(max = 380.dp)) {
             items(albums.filter { it.id != excludedAlbumId }, key = { it.id }) { album ->
                 SheetRow(album.name, trailing = album.items.size.toString()) { onPick(album) }
             }
+            item { SheetRow("+ New album", color = Palette.textMuted, onClick = onNewAlbum) }
         }
     }
 }

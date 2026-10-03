@@ -46,7 +46,7 @@ class PrivateVault(private val context: Context) {
     suspend fun hide(item: MediaItem, groupName: String): Boolean = withContext(Dispatchers.IO) {
         val source = File(item.absolutePath)
         val target = uniqueFile(createGroup(groupName), source.name)
-        val isMoved = source.renameTo(target)
+        val isMoved = moveFile(source, target)
         if (isMoved) {
             scan(source)
             if (item.isFavorite) updateFavorites { it + keyOf(target) }
@@ -57,7 +57,7 @@ class PrivateVault(private val context: Context) {
     suspend fun moveToGroup(item: MediaItem, groupName: String): Boolean = withContext(Dispatchers.IO) {
         val source = File(item.absolutePath)
         val target = uniqueFile(createGroup(groupName), source.name)
-        val isMoved = source.renameTo(target)
+        val isMoved = moveFile(source, target)
         if (isMoved && item.isFavorite) updateFavorites { it - keyOf(source) + keyOf(target) }
         isMoved
     }
@@ -67,7 +67,7 @@ class PrivateVault(private val context: Context) {
         val source = File(item.absolutePath)
         val directory = File(Environment.getExternalStorageDirectory(), relativePath).apply { mkdirs() }
         val target = uniqueFile(directory, source.name)
-        if (!source.renameTo(target)) return@withContext null
+        if (!moveFile(source, target)) return@withContext null
         updateFavorites { it - keyOf(source) }
         scanForUri(target)
     }
@@ -80,6 +80,37 @@ class PrivateVault(private val context: Context) {
     suspend fun delete(item: MediaItem): Boolean = withContext(Dispatchers.IO) {
         val file = File(item.absolutePath)
         file.delete().also { if (it) updateFavorites { keys -> keys - keyOf(file) } }
+    }
+
+    // Deletes a group and everything in it. Final: private photos are outside the system trash.
+    suspend fun deleteGroup(group: PrivateGroup): Boolean = withContext(Dispatchers.IO) {
+        updateFavorites { keys -> keys.filterNot { it.startsWith("${group.directory.name}/") }.toSet() }
+        group.directory.deleteRecursively()
+    }
+
+    suspend fun removeGroupIfEmpty(name: String) = withContext(Dispatchers.IO) {
+        val directory = File(ROOT, name)
+        if (directory.listFiles().isNullOrEmpty()) directory.delete()
+    }
+
+    // A rename where the system allows one — instant, same disk. Some moves between top-level folders are refused by the storage layer, so the fallback is copy, check, then delete the original; the original is only removed once the copy is complete.
+    private fun moveFile(source: File, target: File): Boolean {
+        if (!source.exists()) return false
+        target.parentFile?.mkdirs()
+        if (source.renameTo(target)) return true
+        return try {
+            source.copyTo(target, overwrite = false)
+            target.setLastModified(source.lastModified())
+            if (target.length() == source.length() && source.delete()) {
+                true
+            } else {
+                target.delete()
+                false
+            }
+        } catch (exception: Exception) {
+            target.delete()
+            false
+        }
     }
 
     private fun readItems(directory: File, favoriteKeys: Set<String>): List<MediaItem> =

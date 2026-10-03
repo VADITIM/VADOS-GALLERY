@@ -50,6 +50,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.media.newAlbumPath
+import com.vaditim.gallery.vault.PrivateGroup
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.MicroLabel
@@ -92,7 +94,21 @@ private val AlbumsPlace.isPrivate: Boolean
     get() = this is AlbumsPlace.PrivateGroups || this is AlbumsPlace.PrivateFolder || this is AlbumsPlace.PrivateFavorites
 
 // The sheets the app itself opens — for a selection or for a long-pressed album. The viewer has its own.
-private enum class AppSheet { NONE, SELECTION_MOVE, SELECTION_GROUP, SELECTION_NEW_GROUP, ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP, PRIVATE_NEW_GROUP }
+private enum class AppSheet {
+    NONE,
+    NEW_ALBUM,
+    SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
+    ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP,
+    GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
+    PRIVATE_NEW_GROUP,
+}
+
+// Where the photo picker puts what is picked: an album folder (new or existing), or a private group.
+private sealed interface PickerTarget {
+    val title: String
+    data class IntoAlbum(val relativePath: String, val name: String) : PickerTarget { override val title get() = "Add to $name" }
+    data class IntoGroup(val name: String) : PickerTarget { override val title get() = "Add to Private · $name" }
+}
 
 @Composable
 fun GalleryApp(viewModel: GalleryViewModel = viewModel()) {
@@ -130,6 +146,10 @@ private fun Library(viewModel: GalleryViewModel) {
     var isDeleteArmed by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
+    var sheetGroup by remember { mutableStateOf<PrivateGroup?>(null) }
+    var isMenuDeleteArmed by remember { mutableStateOf(false) }
+    var picker by remember { mutableStateOf<PickerTarget?>(null) }
+    LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU) isMenuDeleteArmed = false }
 
     val recentMemory = remember { GridMemory() }
     val favoritesMemory = remember { GridMemory() }
@@ -241,6 +261,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 sheetAlbum = album
                                 sheet = AppSheet.ALBUM_MENU
                             },
+                            onNewAlbum = { sheet = AppSheet.NEW_ALBUM },
                             contentPadding = insetPadding,
                             footer = { PrivateEntry(isPrivateUnlocked, privateContents.groups.size, onClick = openPrivate) },
                         )
@@ -258,6 +279,10 @@ private fun Library(viewModel: GalleryViewModel) {
                             groups = privateContents.groups,
                             favorites = privateContents.favorites,
                             onOpen = { albumsPlace = AlbumsPlace.PrivateFolder(it.name) },
+                            onLongPress = { group ->
+                                sheetGroup = group
+                                sheet = AppSheet.GROUP_MENU
+                            },
                             onOpenFavorites = { albumsPlace = AlbumsPlace.PrivateFavorites },
                             onOpenSelection = { viewer = ViewerRequest(ViewerSource.PrivateFavorites, it) },
                             onNewGroup = { sheet = AppSheet.PRIVATE_NEW_GROUP },
@@ -315,6 +340,11 @@ private fun Library(viewModel: GalleryViewModel) {
                 },
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
                 selectedCount = selectedItems.size,
+                onAdd = when {
+                    openAlbum != null -> { { picker = PickerTarget.IntoAlbum(openAlbum.relativePath, openAlbum.name) } }
+                    openPrivateGroup != null -> { { picker = PickerTarget.IntoGroup(openPrivateGroup.name) } }
+                    else -> null
+                },
                 onBack = {
                     albumsPlace = if (place is AlbumsPlace.Folder) AlbumsPlace.Folders else AlbumsPlace.PrivateGroups
                 },
@@ -368,6 +398,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     if (isInPrivate) actions.unhide(selectedItems, album) else actions.move(selectedItems, album)
                     clearSelection()
                 },
+                onNewAlbum = { sheet = AppSheet.SELECTION_NEW_ALBUM },
                 onDismiss = { sheet = AppSheet.NONE },
             )
             GroupPickerSheet(
@@ -385,8 +416,55 @@ private fun Library(viewModel: GalleryViewModel) {
 
             // A long-pressed album: one entry, because moving the whole folder into Private is the thing it is for.
             OverlaySheet(visible = sheet == AppSheet.ALBUM_MENU, label = sheetAlbum?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
+                SheetRow("Add photos") {
+                    sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Move album to private", trailing = sheetAlbum?.items?.size?.toString()) { sheet = AppSheet.ALBUM_GROUP }
+                SheetRow(
+                    if (isMenuDeleteArmed) "Tap again: ${sheetAlbum?.items?.size ?: 0} photos to the trash" else "Delete album",
+                    color = Palette.danger,
+                ) {
+                    if (isMenuDeleteArmed) {
+                        sheetAlbum?.let { actions.trash(it.items) }
+                        sheet = AppSheet.NONE
+                    } else {
+                        isMenuDeleteArmed = true
+                    }
+                }
             }
+
+            // A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
+            OverlaySheet(visible = sheet == AppSheet.GROUP_MENU, label = sheetGroup?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
+                SheetRow("Add photos") {
+                    sheetGroup?.let { picker = PickerTarget.IntoGroup(it.name) }
+                    sheet = AppSheet.NONE
+                }
+                SheetRow("Move group out to album", trailing = sheetGroup?.items?.size?.toString()) { sheet = AppSheet.GROUP_MOVE_OUT }
+                SheetRow(
+                    if (isMenuDeleteArmed) "Tap again: delete ${sheetGroup?.items?.size ?: 0} photos forever" else "Delete group",
+                    color = Palette.danger,
+                ) {
+                    if (isMenuDeleteArmed) {
+                        sheetGroup?.let { actions.deleteGroup(it) }
+                        sheet = AppSheet.NONE
+                    } else {
+                        isMenuDeleteArmed = true
+                    }
+                }
+            }
+            AlbumPickerSheet(
+                visible = sheet == AppSheet.GROUP_MOVE_OUT,
+                label = "MOVE ${sheetGroup?.name?.uppercase().orEmpty()} OUT TO",
+                albums = albums,
+                excludedAlbumId = null,
+                onPick = { album ->
+                    sheetGroup?.let { group -> actions.unhide(group.items, album) { viewModel.vault.removeGroupIfEmpty(group.name) } }
+                    sheet = AppSheet.NONE
+                },
+                onNewAlbum = { sheet = AppSheet.GROUP_MOVE_OUT_NEW_ALBUM },
+                onDismiss = { sheet = AppSheet.NONE },
+            )
             GroupPickerSheet(
                 visible = sheet == AppSheet.ALBUM_GROUP,
                 label = "MOVE ${sheetAlbum?.name?.uppercase().orEmpty()} TO",
@@ -401,6 +479,34 @@ private fun Library(viewModel: GalleryViewModel) {
             )
 
             when (sheet) {
+                AppSheet.NEW_ALBUM -> NameSheet(
+                    label = "NEW ALBUM",
+                    action = "CHOOSE PHOTOS",
+                    onConfirm = { name ->
+                        sheet = AppSheet.NONE
+                        picker = PickerTarget.IntoAlbum(newAlbumPath(name), name)
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.SELECTION_NEW_ALBUM -> NameSheet(
+                    label = "NEW ALBUM",
+                    action = "MOVE HERE",
+                    onConfirm = { name ->
+                        if (isInPrivate) actions.unhide(selectedItems, newAlbumPath(name), name) else actions.move(selectedItems, newAlbumPath(name), name)
+                        clearSelection()
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.GROUP_MOVE_OUT_NEW_ALBUM -> NameSheet(
+                    label = "NEW ALBUM",
+                    action = "MOVE HERE",
+                    initialName = sheetGroup?.name.orEmpty(),
+                    onConfirm = { name ->
+                        sheetGroup?.let { group -> actions.unhide(group.items, newAlbumPath(name), name) { viewModel.vault.removeGroupIfEmpty(group.name) } }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
                 AppSheet.SELECTION_NEW_GROUP -> NameSheet(
                     label = "NEW PRIVATE GROUP",
                     action = "MOVE HERE",
@@ -433,6 +539,23 @@ private fun Library(viewModel: GalleryViewModel) {
                     onDismiss = { sheet = AppSheet.NONE },
                 )
                 else -> Unit
+            }
+
+            picker?.let { target ->
+                val alreadyThere = (target as? PickerTarget.IntoAlbum)?.let { into -> albums.firstOrNull { it.relativePath == into.relativePath }?.items?.map { it.id }?.toSet() }.orEmpty()
+                PickerScreen(
+                    title = target.title,
+                    items = library.filter { it.id !in alreadyThere },
+                    action = "Add",
+                    onDone = { picked ->
+                        when (target) {
+                            is PickerTarget.IntoAlbum -> actions.move(picked, target.relativePath, target.name)
+                            is PickerTarget.IntoGroup -> actions.hide(picked, target.name)
+                        }
+                        picker = null
+                    },
+                    onCancel = { picker = null },
+                )
             }
 
             // TODO(vaditim): replace with the shared-element zoom (the thumbnail grows into the photo and shrinks back into its cell) — docs/SPEC.md § Viewer.
@@ -473,7 +596,7 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 
 // The top layer: the month you are looking at, the way back out of a folder, or — while selecting — the count and the way out of the selection.
 @Composable
-private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onBack: () -> Unit, onCancelSelection: () -> Unit) {
+private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -492,6 +615,11 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onBack
                 Box(Modifier.weight(0.01f))
             }
             if (month.isNotEmpty()) Chip(month)
+            if (onAdd != null) {
+                Box(Modifier.padding(start = 8.dp).pressable(onClick = onAdd).glass(Shapes.capsule).padding(horizontal = 16.dp, vertical = 11.dp)) {
+                    BasicText("+ Add", style = Type.cardTitle.copy(color = LocalAccent.current))
+                }
+            }
         }
     }
 }

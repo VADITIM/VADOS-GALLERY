@@ -53,8 +53,14 @@ the Apple order. The thumb is at the bottom of the screen and so is the photo ju
 - A 2-column grid of album cards: a cover (the newest item), the name, the count.
 - **Camera first**, then everything else by its most recent photo.
 - Opening an album shows the same grid as RECENT, filtered — newest at the bottom.
-- *Planned:* create an album (asked for when moving), a *Recently deleted* row at the very end of the
-  list as the one way into the trash.
+- **Creating albums, anywhere:** a *New album* card at the end of the albums grid (name it, then pick
+  its photos), and *+ New album* at the end of every "move to" list — from the viewer, a selection, or
+  a private group being moved out. A new album is a folder under `Pictures/`.
+- **+ Add** at the top of every open album and private group opens the photo picker (the whole
+  library, every tap picks) and moves the picked photos in.
+- **Long-press an album:** *Add photos*, *Move album to private*, *Delete album* (second tap confirms;
+  the photos go to the system trash).
+- *Planned:* a *Recently deleted* row at the very end of the list as the one way into the trash.
 
 ### PRIVATE (inside ALBUMS)
 
@@ -68,6 +74,9 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
   same newest-at-bottom grid as everywhere else.
 - **Getting in:** the viewer's ••• → *Move to private* → pick a group or *+ New group*. Hiding does
   not need the fingerprint; looking does.
+- **Long-press a group:** *Add photos*, *Move group out to album* (an existing album or a new one, named
+  after the group by default; the emptied group is removed), *Delete group* (second tap confirms — final).
+- **+ Add** at the top of an open group picks photos from the library straight into it.
 - **Inside a private photo:** SHARE, DELETE (a second tap to confirm — private photos are outside the
   system trash, so this one is final), and ••• → *Move to group*, *Move out to album*, *Details*.
 - **Private favourites.** A favourite that goes into Private stays a favourite — but only as a
@@ -83,7 +92,9 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
   (A copy uploaded to a cloud backup *before* it was hidden is outside this app's reach.)
 - **Storage:** plain files in `/storage/emulated/0/.vados-private/<group>/`, with a `.nomedia` marker
   so no gallery (Samsung's included) indexes them. Moving in or out is a rename on the same disk —
-  instant, no copy. They live outside the app's own storage so **uninstalling the app does not delete
+  instant, no copy. Where the storage layer refuses a rename between two folders, the move falls back
+  to copy, verify the size, then delete the original — the original is never removed before the copy
+  is complete. They live outside the app's own storage so **uninstalling the app does not delete
   them**. They are **not encrypted**: a file manager can open the folder. Encryption is possible, but
   it ties the photos to a key that an uninstall destroys.
 

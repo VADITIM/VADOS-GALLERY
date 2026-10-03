@@ -35,3 +35,6 @@ fun groupIntoAlbums(library: List<MediaItem>): List<Album> =
         .groupBy { it.bucketId }
         .map { (bucketId, items) -> Album(bucketId, items.first().bucketName, items.first().relativePath, items) }
         .sortedWith(compareByDescending<Album> { it.relativePath.startsWith("DCIM/Camera") }.thenByDescending { it.cover.timestampMillis })
+
+// Where a new album lives: a folder under Pictures, which MediaStore accepts both photos and videos into.
+fun newAlbumPath(name: String): String = "Pictures/${name.trim().replace('/', ' ').trimStart('.').ifBlank { "Album" }}/"
