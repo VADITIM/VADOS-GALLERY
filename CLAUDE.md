@@ -17,3 +17,6 @@ without asking.
 
 There is no Android SDK in the cloud sessions. CI (`.github/workflows/build.yml`) is the compiler: push,
 then read the run. A change is verified only on the phone.
+
+Work directly on `master`: commit and push there, no feature branches. Every push to `master` publishes
+the APK as the `debug-latest` release.
