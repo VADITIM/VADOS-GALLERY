@@ -116,7 +116,9 @@ fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<Stri
 private fun Tile(item: MediaItem, sizePixels: Int, onClick: () -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
-        ImageRequest.Builder(context).data(Thumbnail(item.uri, sizePixels)).size(sizePixels).build()
+        // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
+        val data: Any = if (item.uri.scheme == "content") Thumbnail(item.uri, sizePixels) else item.uri
+        ImageRequest.Builder(context).data(data).size(sizePixels).build()
     }
     Box(
         Modifier
@@ -128,7 +130,7 @@ private fun Tile(item: MediaItem, sizePixels: Int, onClick: () -> Unit) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         if (item.isVideo) {
             BasicText(
-                formatDuration(item.durationMillis),
+                if (item.durationMillis > 0) formatDuration(item.durationMillis) else "VIDEO",
                 style = Type.value.copy(color = Palette.textBright),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

@@ -17,6 +17,7 @@ data class MediaItem(
     val width: Int,
     val height: Int,
     val sizeBytes: Long,
+    val absolutePath: String,
 )
 
 // An album is a folder, the way MediaStore buckets them. Items run oldest to newest, like every list in this app.

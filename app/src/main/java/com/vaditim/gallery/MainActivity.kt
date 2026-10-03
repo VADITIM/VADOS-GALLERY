@@ -3,17 +3,18 @@ package com.vaditim.gallery
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.fragment.app.FragmentActivity
 import com.vaditim.gallery.ui.ExternalViewer
 import com.vaditim.gallery.ui.GalleryApp
 
-class MainActivity : ComponentActivity() {
+// A FragmentActivity only because BiometricPrompt needs one to unlock Private.
+class MainActivity : FragmentActivity() {
 
     // A photo handed in by another app (the camera's thumbnail, a file manager, a chat) opens on its own, without the library around it.
     private var externalUri by mutableStateOf<Uri?>(null)

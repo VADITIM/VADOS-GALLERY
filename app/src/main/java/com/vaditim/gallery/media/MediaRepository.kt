@@ -58,6 +58,7 @@ class MediaRepository(private val resolver: ContentResolver) {
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATA,
         )
         val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
         val arguments = arrayOf(
@@ -80,6 +81,8 @@ class MediaRepository(private val resolver: ContentResolver) {
             val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
             val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
             val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+            // DATA is deprecated for apps without file access; this app has All files access, and hiding a photo into Private is a plain file move that needs the real path.
+            val pathOnDiskColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val isVideo = cursor.getInt(typeColumn) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
@@ -100,6 +103,7 @@ class MediaRepository(private val resolver: ContentResolver) {
                     width = cursor.getInt(widthColumn),
                     height = cursor.getInt(heightColumn),
                     sizeBytes = cursor.getLong(sizeColumn),
+                    absolutePath = cursor.getString(pathOnDiskColumn) ?: "",
                 )
             }
         }

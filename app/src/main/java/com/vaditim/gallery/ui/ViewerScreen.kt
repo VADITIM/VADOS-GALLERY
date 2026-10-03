@@ -46,6 +46,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.vault.PrivateGroup
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Motion
@@ -64,13 +65,15 @@ import java.util.Locale
 
 private val STAMP_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Locale.ENGLISH)
 
-private enum class Overlay { NONE, MORE, MOVE, DETAILS }
+private enum class Overlay { NONE, MORE, MOVE, HIDE, NEW_GROUP, DETAILS }
 
 @Composable
 fun ViewerScreen(
     items: List<MediaItem>,
     startIndex: Int,
     albums: List<Album>,
+    privateGroups: List<PrivateGroup>,
+    isPrivate: Boolean,
     actions: MediaActions,
     onClose: () -> Unit,
 ) {
@@ -81,7 +84,9 @@ fun ViewerScreen(
     val pagerState = rememberPagerState(initialPage = startIndex.coerceIn(0, items.lastIndex)) { items.size }
     var isChromeVisible by remember { mutableStateOf(true) }
     var overlay by remember { mutableStateOf(Overlay.NONE) }
+    var isDeleteArmed by remember { mutableStateOf(false) }
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
+    LaunchedEffect(current.id) { isDeleteArmed = false }
 
     BackHandler { if (overlay != Overlay.NONE) overlay = Overlay.NONE else onClose() }
 
@@ -131,15 +136,28 @@ fun ViewerScreen(
                         .padding(5.dp),
                 ) {
                     ActionButton("SHARE") { actions.share(current) }
-                    ActionButton(if (current.isFavorite) "FAVORITED" else "FAVORITE", isLit = current.isFavorite) { actions.toggleFavorite(current) }
-                    ActionButton("DELETE", color = Palette.danger) { actions.trash(current) }
+                    if (isPrivate) {
+                        // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
+                        ActionButton(if (isDeleteArmed) "DELETE FOREVER" else "DELETE", color = Palette.danger) {
+                            if (isDeleteArmed) actions.deletePrivate(current) else isDeleteArmed = true
+                        }
+                    } else {
+                        ActionButton(if (current.isFavorite) "FAVORITED" else "FAVORITE", isLit = current.isFavorite) { actions.toggleFavorite(current) }
+                        ActionButton("DELETE", color = Palette.danger) { actions.trash(current) }
+                    }
                     ActionButton("•••") { overlay = Overlay.MORE }
                 }
             }
 
             OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", onDismiss = { overlay = Overlay.NONE }) {
-                SheetRow("Move to album") { overlay = Overlay.MOVE }
-                SheetRow("Edit") { overlay = Overlay.NONE; actions.edit(current) }
+                if (isPrivate) {
+                    SheetRow("Move to group") { overlay = Overlay.HIDE }
+                    SheetRow("Move out to album") { overlay = Overlay.MOVE }
+                } else {
+                    SheetRow("Move to album") { overlay = Overlay.MOVE }
+                    SheetRow("Move to private") { overlay = Overlay.HIDE }
+                    SheetRow("Edit") { overlay = Overlay.NONE; actions.edit(current) }
+                }
                 SheetRow("Details") { overlay = Overlay.DETAILS }
             }
 
@@ -148,19 +166,44 @@ fun ViewerScreen(
                     items(albums.filter { it.id != current.bucketId }, key = { it.id }) { album ->
                         SheetRow(album.name, trailing = album.items.size.toString()) {
                             overlay = Overlay.NONE
-                            actions.move(current, album)
+                            if (isPrivate) actions.unhide(current, album) else actions.move(current, album)
                         }
                     }
                 }
+            }
+
+            OverlaySheet(visible = overlay == Overlay.HIDE, label = if (isPrivate) "MOVE TO GROUP" else "MOVE TO PRIVATE", onDismiss = { overlay = Overlay.NONE }) {
+                LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    items(privateGroups.filter { it.name != current.bucketName || !isPrivate }, key = { it.directory.absolutePath }) { group ->
+                        SheetRow(group.name, trailing = group.items.size.toString()) {
+                            overlay = Overlay.NONE
+                            if (isPrivate) actions.moveToGroup(current, group.name) else actions.hide(current, group.name)
+                        }
+                    }
+                    item { SheetRow("+ New group") { overlay = Overlay.NEW_GROUP } }
+                }
+            }
+
+            if (overlay == Overlay.NEW_GROUP) {
+                NameSheet(
+                    label = "NEW PRIVATE GROUP",
+                    action = "MOVE HERE",
+                    ground = Palette.viewerGround,
+                    onConfirm = { name ->
+                        overlay = Overlay.NONE
+                        if (isPrivate) actions.moveToGroup(current, name) else actions.hide(current, name)
+                    },
+                    onDismiss = { overlay = Overlay.NONE },
+                )
             }
 
             OverlaySheet(visible = overlay == Overlay.DETAILS, label = "DETAILS", onDismiss = { overlay = Overlay.NONE }) {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicText(current.name, style = Type.caption.copy(color = Palette.textBright))
                     BasicText(formatStamp(current), style = Type.value)
-                    BasicText("${current.width} × ${current.height}", style = Type.value)
+                    if (current.width > 0) BasicText("${current.width} × ${current.height}", style = Type.value)
                     BasicText(formatSize(current.sizeBytes), style = Type.value)
-                    BasicText(current.relativePath, style = Type.value)
+                    BasicText(if (isPrivate) "Private · ${current.bucketName}" else current.relativePath, style = Type.value)
                 }
             }
         }

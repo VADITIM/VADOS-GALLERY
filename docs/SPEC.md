@@ -56,6 +56,27 @@ the Apple order. The thumb is at the bottom of the screen and so is the photo ju
 - *Planned:* create an album (asked for when moving), a *Recently deleted* row at the very end of the
   list as the one way into the trash.
 
+### PRIVATE (inside ALBUMS)
+
+Samsung Gallery has one private album. This one has **groups**: as many private folders as wanted.
+
+- **Where:** a *Private* card at the very end of the albums list — present, never in the way. It
+  is not a section of its own.
+- **Unlock:** the fingerprint, with the phone's PIN as the system fallback. It stays unlocked while
+  the app is in front and **locks again the moment the app is left**, dropping back to the albums list.
+- **Inside:** a grid of groups (cover, name, count) and a *New group* card; each group opens as the
+  same newest-at-bottom grid as everywhere else.
+- **Getting in:** the viewer's ••• → *Move to private* → pick a group or *+ New group*. Hiding does
+  not need the fingerprint; looking does.
+- **Inside a private photo:** SHARE, DELETE (a second tap to confirm — private photos are outside the
+  system trash, so this one is final), and ••• → *Move to group*, *Move out to album*, *Details*.
+- **Screenshots and the recent-apps preview are blocked** while anything private is on screen.
+- **Storage:** plain files in `/storage/emulated/0/.vados-private/<group>/`, with a `.nomedia` marker
+  so no gallery (Samsung's included) indexes them. Moving in or out is a rename on the same disk —
+  instant, no copy. They live outside the app's own storage so **uninstalling the app does not delete
+  them**. They are **not encrypted**: a file manager can open the folder. Encryption is possible, but
+  it ties the photos to a key that an uninstall destroys.
+
 ### FAVORITES
 
 - The same grid as RECENT, holding only favourites.
@@ -87,11 +108,12 @@ Four actions, always visible while the chrome is shown:
 
 ### The ••• menu
 
-Three entries. That is the whole menu.
+Four entries. That is the whole menu.
 
 | Entry | What it does |
 |---|---|
 | **MOVE TO ALBUM** | Picks an album and moves the item there — the file actually moves on disk |
+| **MOVE TO PRIVATE** | Picks a private group (or makes one) and hides the item there |
 | **EDIT** | Hands the photo to an installed editor (Samsung's photo editor, or any other) |
 | **DETAILS** | Name, date, resolution, size, folder |
 
@@ -147,3 +169,4 @@ review, which is not a goal.
 4. **Moving, properly** — create an album from the move picker, recently-used albums first.
 5. **Grid polish** — pinch to change columns, the date scrubber, the trash row.
 6. **Default app** — verify the camera hand-off, open an external photo inside its album.
+7. **Private** *(done)* — fingerprint-locked groups at the end of Albums.

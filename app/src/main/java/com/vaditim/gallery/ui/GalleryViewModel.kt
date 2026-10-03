@@ -9,6 +9,8 @@ import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
 import com.vaditim.gallery.media.groupIntoAlbums
+import com.vaditim.gallery.vault.PrivateGroup
+import com.vaditim.gallery.vault.PrivateVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class GalleryViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,8 +51,32 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val vault = PrivateVault(application)
+
+    private val mutablePrivateGroups = MutableStateFlow<List<PrivateGroup>>(emptyList())
+    val privateGroups: StateFlow<List<PrivateGroup>> = mutablePrivateGroups
+
+    private val mutableIsPrivateUnlocked = MutableStateFlow(false)
+    val isPrivateUnlocked: StateFlow<Boolean> = mutableIsPrivateUnlocked
+
+    // Read from disk rather than observed: nothing but this app writes into the private folder, so a re-read after each of its own changes is the whole story.
+    fun refreshPrivate() {
+        if (!mutableAccess.value.hasFileAccess) return
+        viewModelScope.launch { mutablePrivateGroups.value = vault.readGroups() }
+    }
+
+    fun unlockPrivate() {
+        mutableIsPrivateUnlocked.value = true
+        refreshPrivate()
+    }
+
+    fun lockPrivate() {
+        mutableIsPrivateUnlocked.value = false
+    }
+
     // Both permissions are granted on a settings page outside the app, so they are re-read every time the app comes back to the front.
     fun refreshAccess() {
         mutableAccess.value = StorageAccess.read(getApplication())
+        refreshPrivate()
     }
 }
