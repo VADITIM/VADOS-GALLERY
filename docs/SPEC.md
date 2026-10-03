@@ -117,7 +117,7 @@ Tapping a thumbnail opens it full screen, on black.
   - **Shared-element zoom** (done): the photo's own frame (no black around it) is cropped to the tile's square and moved onto the tile of whichever photo you ended on, scrolling the grid to it first when needed; a quiet fade when no tile applies.
   - Pinch and double-tap to zoom (done); photos sit in a rounded frame with a gap between pages when swiping.
   - Swipe down to dismiss back into the grid.
-  - Inline video playback with a scrubber.
+  - Inline video playback (done): plays on open, a PLAY/PAUSE button and a timeline above the action bar. Hold the timeline and slide up for finer scrubbing: half, quarter, then a tenth of finger speed, with hundredths of a second shown.
 
 ### The action bar
 

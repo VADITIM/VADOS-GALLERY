@@ -103,6 +103,7 @@ fun ViewerScreen(
     var overlay by remember { mutableStateOf(Overlay.NONE) }
     var isDeleteArmed by remember { mutableStateOf(false) }
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
+    val video = rememberVideoState(current)
     LaunchedEffect(current.id) {
         isDeleteArmed = false
         onCurrentChanged(current.id)
@@ -120,7 +121,12 @@ fun ViewerScreen(
                 pageSpacing = PAGE_GAP,
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { page ->
-                ViewerPage(items[page], onTap = { isChromeVisible = !isChromeVisible }, onRatio = { onPhotoRatio(items[page].id, it) })
+                ViewerPage(
+                    items[page],
+                    video = if (page == pagerState.currentPage) video else null,
+                    onTap = { isChromeVisible = !isChromeVisible },
+                    onRatio = { onPhotoRatio(items[page].id, it) },
+                )
             }
 
             AnimatedVisibility(
@@ -149,10 +155,14 @@ fun ViewerScreen(
                 exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
+                Column(
+                    Modifier.navigationBarsPadding().padding(bottom = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                if (video != null) VideoControls(video, Modifier.padding(horizontal = 16.dp))
                 Row(
                     Modifier
-                        .navigationBarsPadding()
-                        .padding(bottom = 14.dp)
                         .glass(Shapes.capsule, Palette.viewerGround)
                         .padding(5.dp),
                 ) {
@@ -167,6 +177,7 @@ fun ViewerScreen(
                         ActionButton("DELETE", color = Palette.danger) { actions.trash(listOf(current)) }
                     }
                     ActionButton("•••") { overlay = Overlay.MORE }
+                }
                 }
             }
 
@@ -251,7 +262,7 @@ fun ViewerScreen(
 
 // Pinch or double-tap zooms a photo. While it is zoomed the page keeps every drag for panning, so the pager only swipes at normal size.
 @Composable
-private fun ViewerPage(item: MediaItem, onTap: () -> Unit, onRatio: (Float) -> Unit) {
+private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onRatio: (Float) -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
@@ -318,7 +329,7 @@ private fun ViewerPage(item: MediaItem, onTap: () -> Unit, onRatio: (Float) -> U
     ) {
         Box(
             Modifier
-                .then(ratio?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
+                .then((video?.ratio ?: ratio)?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
                 // One layer does the zoom and the rounding, so the clip scales with the photo instead of living in a layer of its own.
                 .graphicsLayer {
                     scaleX = scale
@@ -336,8 +347,10 @@ private fun ViewerPage(item: MediaItem, onTap: () -> Unit, onRatio: (Float) -> U
                 onSuccess = { success -> ratio = success.result.image.width.toFloat() / success.result.image.height },
                 modifier = Modifier.fillMaxSize(),
             )
+            // The still frame shows until the video has its first picture, then the video draws over it.
+            if (video != null) VideoSurface(video, Modifier.fillMaxSize())
         }
-        if (item.isVideo) MicroLabel(if (item.durationMillis > 0) "VIDEO · ${formatDuration(item.durationMillis)}" else "VIDEO")
+        if (item.isVideo && video == null) MicroLabel(if (item.durationMillis > 0) "VIDEO · ${formatDuration(item.durationMillis)}" else "VIDEO")
     }
 }
 
