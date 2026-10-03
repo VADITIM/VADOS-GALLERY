@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.video.VideoFrameDecoder
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.Thumbnail
 import com.vaditim.gallery.vas.LocalAccent
@@ -328,7 +329,8 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick:
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
         val data: Any = if (item.uri.scheme == "content") Thumbnail(item.uri, sizePixels) else item.uri
-        ImageRequest.Builder(context).data(data).size(sizePixels).build()
+        // A file without an extension gives the loader no type, so a video says so itself.
+        ImageRequest.Builder(context).data(data).size(sizePixels).apply { if (item.isVideo && item.uri.scheme != "content") decoderFactory(VideoFrameDecoder.Factory()) }.build()
     }
     val selectedScale by animateFloatAsState(if (isSelected) 0.86f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
     DisposableEffect(item.id) { onDispose { TileBounds.forget(item.id) } }

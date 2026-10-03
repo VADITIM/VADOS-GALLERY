@@ -10,6 +10,7 @@ import com.vaditim.gallery.media.CoverStore
 import com.vaditim.gallery.media.LocationGroup
 import com.vaditim.gallery.media.LocationIndex
 import com.vaditim.gallery.media.Place
+import com.vaditim.gallery.media.SamsungTrash
 import com.vaditim.gallery.media.groupByCity
 import android.Manifest
 import android.content.pm.PackageManager
@@ -48,16 +49,22 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .flatMapLatest { hasFileAccess -> if (hasFileAccess) repository.observeLibrary() else flowOf(emptyList()) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val samsungTrash = SamsungTrash(application)
+
+    // Samsung's trash folder sends no change notice, so it is re-read on every MediaStore change, every return to the app and after this app's own restores.
+    private val samsungTrashVersion = MutableStateFlow(0)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val trash: StateFlow<List<MediaItem>> =
         mutableAccess
             .map { it.hasFileAccess }
             .distinctUntilChanged()
-            .flatMapLatest { hasFileAccess -> if (hasFileAccess) repository.observeTrash() else flowOf(emptyList()) }
+            .flatMapLatest { hasFileAccess -> if (hasFileAccess) combine(repository.observeTrash(), samsungTrashVersion) { items, _ -> items } else flowOf(emptyList()) }
             .map { items ->
                 repository.deleteExpired(items)
                 val now = System.currentTimeMillis()
-                items.filter { it.expiresMillis == 0L || it.expiresMillis > now }
+                val samsungItems = runCatching { samsungTrash.read() }.getOrDefault(emptyList())
+                (items.filter { it.expiresMillis == 0L || it.expiresMillis > now } + samsungItems).sortedBy { it.timestampMillis }
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -137,8 +144,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // Both permissions are granted on a settings page outside the app, so they are re-read every time the app comes back to the front.
+    fun refreshTrash() {
+        samsungTrashVersion.value++
+    }
+
     fun refreshAccess() {
         mutableAccess.value = StorageAccess.read(getApplication())
+        refreshTrash()
         refreshLocationPermission()
         refreshPrivate()
     }

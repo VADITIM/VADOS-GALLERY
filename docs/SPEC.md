@@ -193,7 +193,8 @@ review, which is not a goal.
 - **Moving videos into a `Pictures/` folder** may be refused by MediaProvider on some versions. Needs a
   device test; the fallback is a direct file move under All files access.
 - **Samsung's own trash** (inside Samsung Gallery) is separate from the MediaStore trash this app uses.
-  Items already in Samsung's trash will not appear here.
+  Its files (under `Android/.Trash`) are listed in this app's Trash too; their original folder is in Samsung's private
+  database, so restoring one puts it in `Pictures/Restored`. What this app deletes cannot be added to Samsung's trash.
 
 ## Milestones
 

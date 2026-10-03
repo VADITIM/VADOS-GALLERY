@@ -21,6 +21,7 @@ import androidx.core.content.FileProvider
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
+import com.vaditim.gallery.media.SamsungTrash
 import com.vaditim.gallery.vault.PrivateGroup
 import com.vaditim.gallery.vault.PrivateVault
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +34,8 @@ class MediaActions(
     private val repository: MediaRepository,
     private val vault: PrivateVault,
     private val onPrivateChanged: () -> Unit,
+    private val samsungTrash: SamsungTrash,
+    private val onTrashChanged: () -> Unit,
     private val scope: CoroutineScope,
     private val startRequest: (PendingIntent, (Boolean) -> Unit) -> Unit,
 ) {
@@ -78,17 +81,35 @@ class MediaActions(
         }
     }
 
+    // The trash holds Android's trashed rows and Samsung Gallery's trashed files side by side; the files are plain file moves, the rows go through MediaStore.
     fun restore(items: List<MediaItem>) {
         if (items.isEmpty()) return
-        startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, false)) { isDone ->
-            notify(if (isDone) summary(items.size, items.size, "Restored") else "Restore was not allowed")
+        val (samsungItems, systemItems) = items.partition { isSamsungTrash(it) }
+        runSamsungTrash(samsungItems, "Moved to Restored") { samsungTrash.restore(it) }
+        if (systemItems.isEmpty()) return
+        startRequest(MediaStore.createTrashRequest(context.contentResolver, systemItems.map { it.uri }, false)) { isDone ->
+            notify(if (isDone) summary(systemItems.size, systemItems.size, "Restored") else "Restore was not allowed")
         }
     }
 
     fun deleteForever(items: List<MediaItem>) {
         if (items.isEmpty()) return
-        startRequest(MediaStore.createDeleteRequest(context.contentResolver, items.map { it.uri })) { isDone ->
-            notify(if (isDone) summary(items.size, items.size, "Deleted") else "Delete was not allowed")
+        val (samsungItems, systemItems) = items.partition { isSamsungTrash(it) }
+        runSamsungTrash(samsungItems, "Deleted") { samsungTrash.delete(it) }
+        if (systemItems.isEmpty()) return
+        startRequest(MediaStore.createDeleteRequest(context.contentResolver, systemItems.map { it.uri })) { isDone ->
+            notify(if (isDone) summary(systemItems.size, systemItems.size, "Deleted") else "Delete was not allowed")
+        }
+    }
+
+    private fun isSamsungTrash(item: MediaItem): Boolean = item.absolutePath.startsWith(SamsungTrash.ROOT.absolutePath + "/")
+
+    private fun runSamsungTrash(items: List<MediaItem>, success: String, operation: suspend (MediaItem) -> Boolean) {
+        if (items.isEmpty()) return
+        scope.launch {
+            val done = items.count { runCatching { operation(it) }.getOrDefault(false) }
+            onTrashChanged()
+            notify(summary(done, items.size, success))
         }
     }
 
@@ -189,7 +210,7 @@ class MediaActions(
 }
 
 @Composable
-fun rememberMediaActions(repository: MediaRepository, vault: PrivateVault, onPrivateChanged: () -> Unit): MediaActions {
+fun rememberMediaActions(repository: MediaRepository, vault: PrivateVault, onPrivateChanged: () -> Unit, samsungTrash: SamsungTrash, onTrashChanged: () -> Unit): MediaActions {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pending = remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
@@ -198,7 +219,7 @@ fun rememberMediaActions(repository: MediaRepository, vault: PrivateVault, onPri
         pending.value = null
     }
     return remember(repository, vault, launcher) {
-        MediaActions(context, repository, vault, onPrivateChanged, scope) { pendingIntent, onResult ->
+        MediaActions(context, repository, vault, onPrivateChanged, samsungTrash, onTrashChanged, scope) { pendingIntent, onResult ->
             pending.value = onResult
             launcher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
         }

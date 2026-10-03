@@ -170,7 +170,7 @@ private fun Library(viewModel: GalleryViewModel) {
     // GPS in photos is stripped by the system unless this is granted; it is asked once, the first time the library shows.
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refreshLocationPermission() }
     LaunchedEffect(Unit) { locationPermission.launch(Manifest.permission.ACCESS_MEDIA_LOCATION) }
-    val actions = rememberMediaActions(viewModel.repository, viewModel.vault, onPrivateChanged = { viewModel.refreshPrivate() })
+    val actions = rememberMediaActions(viewModel.repository, viewModel.vault, onPrivateChanged = { viewModel.refreshPrivate() }, samsungTrash = viewModel.samsungTrash, onTrashChanged = { viewModel.refreshTrash() })
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
