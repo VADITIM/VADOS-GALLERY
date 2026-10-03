@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.vaditim.gallery.Settings
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -198,6 +200,7 @@ private fun Library(viewModel: GalleryViewModel) {
     // Photos about to go into Private, held while the confirmation is open.
     var pendingPrivate by remember { mutableStateOf<PendingPrivate?>(null) }
     var isRearranging by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     // Albums in the order the user dragged them into; ones never arranged keep the default order after them.
     val arrangedAlbums = remember(albums, Settings.albumOrder) {
         val order = Settings.albumOrder
@@ -501,7 +504,7 @@ private fun Library(viewModel: GalleryViewModel) {
 
             val barModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp)
             if (isRearranging) {
-                Box(barModifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
+                Box(barModifier.pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.Confirm); isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
                     CheckIcon(accent)
                 }
             } else if (isSelecting) {
@@ -887,13 +890,15 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 // Everything right of the back button has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
 private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val click = { haptic.performHapticFeedback(HapticFeedbackType.ContextClick) }
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (selectedCount > 0) {
-            Box(Modifier.pressable(onClick = onCancelSelection).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Box(Modifier.pressable(onClick = { click(); onCancelSelection() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 CloseIcon(LocalAccent.current)
             }
             Box(Modifier.weight(1f))
@@ -907,11 +912,11 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd:
             Box(Modifier.weight(if (backLabel != null) 0.001f else 1f))
             if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
             if (onAdd != null) {
-                Box(Modifier.pressable(onClick = onAdd).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Box(Modifier.pressable(onClick = { click(); onAdd() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
                     PlusIcon(LocalAccent.current)
                 }
             }
-            Box(Modifier.pressable(onClick = onSettings).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Box(Modifier.pressable(onClick = { click(); onSettings() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 SettingsIcon(Palette.textBright)
             }
         }

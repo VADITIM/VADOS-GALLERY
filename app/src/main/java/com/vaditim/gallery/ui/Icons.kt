@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.pressable
@@ -25,7 +27,9 @@ import com.vaditim.gallery.vas.pressable
 
 @Composable
 fun IconButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Box(modifier.pressable(onClick = onClick).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
+    // Every icon button is an action (share, move, delete, favourite…), so each one answers with a short click.
+    val haptic = LocalHapticFeedback.current
+    Box(modifier.pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
 }
 
 @Composable

@@ -156,7 +156,7 @@ fun MediaGrid(
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = modifier.fillMaxSize().pinchColumns(memory).dragSelect(state, photosById, { currentSelection }, scope, haptic),
+        modifier = modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, haptic),
     ) {
         items(
             entries,
@@ -195,7 +195,7 @@ private fun MonthHeader(label: String) {
 }
 
 // Two fingers change the column count and nothing else; one finger is left alone so the grid still scrolls. Watching on the initial pass lets the pinch claim its events before the list can start scrolling.
-private fun Modifier.pinchColumns(memory: GridMemory): Modifier = pointerInput(memory) {
+private fun Modifier.pinchColumns(memory: GridMemory, haptic: HapticFeedback): Modifier = pointerInput(memory) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         var zoom = 1f
@@ -203,6 +203,7 @@ private fun Modifier.pinchColumns(memory: GridMemory): Modifier = pointerInput(m
             val event = awaitPointerEvent(PointerEventPass.Initial)
             if (event.changes.count { it.pressed } >= 2) {
                 zoom *= event.calculateZoom()
+                val before = memory.columns
                 if (zoom > PINCH_STEP) {
                     memory.columns = (memory.columns - 1).coerceAtLeast(MIN_COLUMNS)
                     zoom = 1f
@@ -210,6 +211,7 @@ private fun Modifier.pinchColumns(memory: GridMemory): Modifier = pointerInput(m
                     memory.columns = (memory.columns + 1).coerceAtMost(MAX_COLUMNS)
                     zoom = 1f
                 }
+                if (memory.columns != before) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 event.changes.forEach { it.consume() }
             }
         } while (event.changes.any { it.pressed })
@@ -255,7 +257,10 @@ private fun Modifier.dragSelect(
         val visited = HashSet<Long>()
         fun reach(position: Offset) {
             val item = itemAt(position) ?: return
-            if (visited.add(item.id) && (item.id in (selection() ?: return).selectedIds) != isSelecting) selection()?.onToggle(item)
+            if (visited.add(item.id) && (item.id in (selection() ?: return).selectedIds) != isSelecting) {
+                selection()?.onToggle(item)
+                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            }
         }
         reach(down.position)
         down.consume()

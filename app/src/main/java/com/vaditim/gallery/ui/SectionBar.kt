@@ -18,12 +18,15 @@ import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.vaditim.gallery.vas.glass
 import com.vaditim.gallery.vas.pressable
 
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
 fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier) {
+    val haptic = LocalHapticFeedback.current
     Row(
         modifier.glass(Shapes.capsule).padding(5.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -34,7 +37,7 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
             val wash by animateColorAsState(if (isActive) Palette.pressedWash else Color.Transparent, tween(Motion.STATE_MS), label = "section-wash")
             Box(
                 Modifier
-                    .pressable(onClick = { onSelect(section) })
+                    .pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick); onSelect(section) })
                     .clip(Shapes.capsule)
                     .background(wash)
                     .padding(horizontal = 18.dp, vertical = 13.dp),

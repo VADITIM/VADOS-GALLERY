@@ -32,6 +32,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
 import com.vaditim.gallery.Settings
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -63,6 +66,7 @@ fun AlbumsScreen(
     isRearranging: Boolean = false,
     onMove: (from: Int, to: Int) -> Unit = { _, _ -> },
 ) {
+    val haptic = LocalHapticFeedback.current
     val currentAlbums by rememberUpdatedState(albums)
     val currentOnMove by rememberUpdatedState(onMove)
     var draggedId by remember { mutableStateOf<Long?>(null) }
@@ -85,6 +89,7 @@ fun AlbumsScreen(
         val to = currentAlbums.indexOfFirst { it.id == target.key }
         if (from < 0 || to < 0) return
         currentOnMove(from, to)
+        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
         // The card takes the target's slot, so the offset is rebased onto that slot to stay under the finger.
         dragOffset += Offset((dragged.offset.x - target.offset.x).toFloat(), (dragged.offset.y - target.offset.y).toFloat())
         awaitedOffset = target.offset
@@ -101,7 +106,7 @@ fun AlbumsScreen(
         ),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
-        modifier = Modifier.fillMaxSize().pinchAlbumColumns(),
+        modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
     ) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Albums", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
@@ -126,6 +131,7 @@ fun AlbumsScreen(
                     .pointerInput(album.id) {
                         detectDragGestures(
                             onDragStart = {
+                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
                                 draggedId = album.id
                                 dragOffset = Offset.Zero
                                 awaitedOffset = null
@@ -175,7 +181,7 @@ private fun AlbumCard(album: Album, onClick: () -> Unit, onLongClick: () -> Unit
 }
 
 // Two fingers change how many albums sit in a row; one finger still scrolls.
-private fun Modifier.pinchAlbumColumns(): Modifier = pointerInput(Unit) {
+private fun Modifier.pinchAlbumColumns(haptic: HapticFeedback): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         var zoom = 1f
@@ -183,6 +189,7 @@ private fun Modifier.pinchAlbumColumns(): Modifier = pointerInput(Unit) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             if (event.changes.count { it.pressed } >= 2) {
                 zoom *= event.calculateZoom()
+                val before = Settings.albumColumns
                 if (zoom > PINCH_STEP) {
                     Settings.updateAlbumColumns(Settings.albumColumns - 1)
                     zoom = 1f
@@ -190,6 +197,7 @@ private fun Modifier.pinchAlbumColumns(): Modifier = pointerInput(Unit) {
                     Settings.updateAlbumColumns(Settings.albumColumns + 1)
                     zoom = 1f
                 }
+                if (Settings.albumColumns != before) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 event.changes.forEach { it.consume() }
             }
         } while (event.changes.any { it.pressed })

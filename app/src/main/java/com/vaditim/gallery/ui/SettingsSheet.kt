@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Palette
@@ -47,6 +49,12 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
 
 @Composable
 private fun SettingsSlider(label: String, fraction: Float, value: String, onChange: (Float) -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    // A tick every twentieth of the track, so dragging it feels stepped.
+    val tick: (Float) -> Unit = { next ->
+        if ((next * 20).toInt() != (fraction * 20).toInt()) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        onChange(next)
+    }
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             BasicText(label, style = Type.cardTitle)
@@ -60,12 +68,12 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        onChange((down.position.x / size.width).coerceIn(0f, 1f))
+                        tick((down.position.x / size.width).coerceIn(0f, 1f))
                         down.consume()
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Main)
                             val change = event.changes.firstOrNull() ?: break
-                            onChange((change.position.x / size.width).coerceIn(0f, 1f))
+                            tick((change.position.x / size.width).coerceIn(0f, 1f))
                             change.consume()
                         } while (event.changes.any { it.pressed })
                     }
@@ -80,8 +88,12 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
 
 @Composable
 private fun SettingsToggle(label: String, isOn: Boolean, onChange: (Boolean) -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Row(
-        Modifier.fillMaxWidth().pressable(onClick = { onChange(!isOn) }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
+        Modifier.fillMaxWidth().pressable(onClick = {
+            haptic.performHapticFeedback(if (isOn) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+            onChange(!isOn)
+        }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
