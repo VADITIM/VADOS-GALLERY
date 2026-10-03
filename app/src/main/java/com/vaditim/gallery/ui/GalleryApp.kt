@@ -4,6 +4,10 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithContent
@@ -155,6 +159,8 @@ private fun Library(viewModel: GalleryViewModel) {
     var shownViewer by remember { mutableStateOf<ViewerRequest?>(null) }
     var viewerCurrentId by remember { mutableStateOf<Long?>(null) }
     var viewerRect by remember { mutableStateOf<Rect?>(null) }
+    var viewerRatio by remember { mutableFloatStateOf(1f) }
+    val photoRatios = remember { HashMap<Long, Float>() }
     val viewerProgress = remember { Animatable(0f) }
     var scrollToNewestRequest by remember { mutableIntStateOf(0) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
@@ -259,12 +265,17 @@ private fun Library(viewModel: GalleryViewModel) {
         else -> null
     }
 
+    // A photo's proportions as the viewer last decoded them (the stored width and height ignore rotation), else as stored, else square.
+    fun ratioOf(item: MediaItem?): Float =
+        item?.let { photoRatios[it.id] ?: if (it.width > 0 && it.height > 0) it.width.toFloat() / it.height else null } ?: 1f
+
     LaunchedEffect(viewer) {
         val request = viewer
         if (request != null) {
             val openedId = itemsFor(request.source).getOrNull(request.startIndex)?.id
             viewerCurrentId = openedId
             viewerRect = TileBounds.of(openedId)
+            viewerRatio = ratioOf(itemsFor(request.source).getOrNull(request.startIndex))
             shownViewer = request
             viewerProgress.snapTo(0f)
             viewerProgress.animateTo(1f, tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerTwoOut))
@@ -276,6 +287,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 withFrameNanos { }
             }
             viewerRect = TileBounds.of(currentId)
+            viewerRatio = ratioOf(shownViewer?.let { shown -> itemsFor(shown.source).firstOrNull { it.id == currentId } })
             viewerProgress.animateTo(0f, tween(Motion.VIEWER_CLOSE_MS, easing = Motion.powerThreeInOut))
             shownViewer = null
         }
@@ -631,52 +643,63 @@ private fun Library(viewModel: GalleryViewModel) {
 
             // The viewer grows out of the tile it was opened from and shrinks back into the tile of the photo it ends on; when that tile is not on screen it falls back to a quiet fade.
             shownViewer?.let { request ->
+                // Frame by frame the photo's own box (fitted to the screen, no black around it) is cropped down to the tile's square and moved onto it, so the animation shows what the grid shows. The chrome around the photo returns in the last stretch.
                 Box(
                     Modifier
                         .fillMaxSize()
                         // Progress is read inside the draw lambdas, so the animation never recomposes the library.
-                        .graphicsLayer {
-                            val p = viewerProgress.value
-                            val rect = viewerRect
-                            if (rect == null) {
-                                alpha = p
-                                scaleX = 0.94f + 0.06f * p
-                                scaleY = scaleX
-                            } else {
-                                val startScale = rect.width / size.width
-                                scaleX = startScale + (1f - startScale) * p
-                                scaleY = scaleX
-                                translationX = (rect.center.x - size.width / 2f) * (1f - p)
-                                translationY = (rect.center.y - size.height / 2f) * (1f - p)
-                                alpha = (p * 4f).coerceAtMost(1f)
-                            }
-                        }
                         .drawWithContent {
                             val p = viewerProgress.value
-                            val rect = viewerRect
-                            if (rect == null) {
+                            val tile = viewerRect
+                            if (tile == null || p >= 1f) {
                                 drawContent()
                             } else {
-                                val startScale = rect.width / size.width
-                                val clipHeight = rect.height / startScale + (size.height - rect.height / startScale) * p
-                                val radius = 8.dp.toPx() / startScale * (1f - p)
-                                val clip = Path().apply {
-                                    addRoundRect(RoundRect(0f, (size.height - clipHeight) / 2f, size.width, (size.height + clipHeight) / 2f, CornerRadius(radius)))
-                                }
+                                val photo = fitInside(viewerRatio, size.width, size.height)
+                                val frame = lerp(tile, photo, p)
+                                val full = Rect(0f, 0f, size.width, size.height)
+                                val expand = ((p - 0.7f) / 0.3f).coerceIn(0f, 1f)
+                                val radius = (lerp(8.dp.toPx(), 24.dp.toPx(), p)) * (1f - expand)
+                                val clip = Path().apply { addRoundRect(RoundRect(lerp(frame, full, expand), CornerRadius(radius))) }
                                 clipPath(clip) { this@drawWithContent.drawContent() }
                             }
                         },
                 ) {
-                    ViewerScreen(
-                        items = itemsFor(request.source),
-                        startIndex = request.startIndex,
-                        albums = albums,
-                        privateGroups = privateContents.groups,
-                        isPrivate = request.source.isPrivateSource(),
-                        actions = actions,
-                        onClose = { viewer = null },
-                        onCurrentChanged = { viewerCurrentId = it },
-                    )
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val p = viewerProgress.value
+                                val tile = viewerRect
+                                if (tile == null) {
+                                    alpha = p
+                                    scaleX = 0.94f + 0.06f * p
+                                    scaleY = scaleX
+                                } else if (p < 1f) {
+                                    val photo = fitInside(viewerRatio, size.width, size.height)
+                                    val frame = lerp(tile, photo, p)
+                                    val coverScale = maxOf(tile.width / photo.width, tile.height / photo.height)
+                                    val scale = coverScale + (1f - coverScale) * p
+                                    val centre = Offset(size.width / 2f, size.height / 2f)
+                                    scaleX = scale
+                                    scaleY = scale
+                                    // Moves the photo's centre onto the frame's centre; at p = 1 the frame is the photo and this is zero.
+                                    translationX = frame.center.x - centre.x - (photo.center.x - centre.x) * scale
+                                    translationY = frame.center.y - centre.y - (photo.center.y - centre.y) * scale
+                                }
+                            },
+                    ) {
+                        ViewerScreen(
+                            items = itemsFor(request.source),
+                            startIndex = request.startIndex,
+                            albums = albums,
+                            privateGroups = privateContents.groups,
+                            isPrivate = request.source.isPrivateSource(),
+                            actions = actions,
+                            onClose = { viewer = null },
+                            onCurrentChanged = { viewerCurrentId = it },
+                            onPhotoRatio = { id, ratio -> photoRatios[id] = ratio },
+                        )
+                    }
                 }
             }
         }

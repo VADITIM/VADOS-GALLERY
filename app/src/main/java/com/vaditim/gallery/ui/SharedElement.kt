@@ -21,3 +21,14 @@ object TileBounds {
         return if (placed.isAttached) placed.boundsInWindow() else null
     }
 }
+
+// The box a photo occupies when shown "fit" inside a screen, which is where the viewer draws it.
+fun fitInside(ratio: Float, width: Float, height: Float): Rect {
+    var fittedWidth = width
+    var fittedHeight = width / ratio
+    if (fittedHeight > height) {
+        fittedHeight = height
+        fittedWidth = height * ratio
+    }
+    return Rect((width - fittedWidth) / 2f, (height - fittedHeight) / 2f, (width + fittedWidth) / 2f, (height + fittedHeight) / 2f)
+}

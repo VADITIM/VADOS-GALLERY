@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -90,6 +91,7 @@ fun ViewerScreen(
     actions: MediaActions,
     onClose: () -> Unit,
     onCurrentChanged: (Long) -> Unit = {},
+    onPhotoRatio: (Long, Float) -> Unit = { _, _ -> },
 ) {
     if (items.isEmpty()) {
         LaunchedEffect(Unit) { onClose() }
@@ -117,7 +119,7 @@ fun ViewerScreen(
                 pageSpacing = PAGE_GAP,
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { page ->
-                ViewerPage(items[page], onTap = { isChromeVisible = !isChromeVisible })
+                ViewerPage(items[page], onTap = { isChromeVisible = !isChromeVisible }, onRatio = { onPhotoRatio(items[page].id, it) })
             }
 
             AnimatedVisibility(
@@ -248,7 +250,7 @@ fun ViewerScreen(
 
 // Pinch or double-tap zooms a photo. While it is zoomed the page keeps every drag for panning, so the pager only swipes at normal size.
 @Composable
-private fun ViewerPage(item: MediaItem, onTap: () -> Unit) {
+private fun ViewerPage(item: MediaItem, onTap: () -> Unit, onRatio: (Float) -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
@@ -257,6 +259,8 @@ private fun ViewerPage(item: MediaItem, onTap: () -> Unit) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     // The picture's own proportions, so the rounded frame hugs the photo rather than the screen; read off the decoded image because the stored width and height ignore rotation.
     var ratio by remember(item.id) { mutableStateOf(if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else null) }
+
+    LaunchedEffect(ratio) { ratio?.let(onRatio) }
 
     fun clamp(candidate: Offset, forScale: Float): Offset {
         val limitX = size.width * (forScale - 1f) / 2f
@@ -298,8 +302,11 @@ private fun ViewerPage(item: MediaItem, onTap: () -> Unit) {
                             val zoom = if (isPinching) event.calculateZoom() else 1f
                             val nextScale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
                             val pan = event.calculatePan()
-                            val focus = event.calculateCentroid(useCurrent = false) - Offset(size.width / 2f, size.height / 2f)
-                            offset = if (nextScale <= 1.01f) Offset.Zero else clamp(focus - (focus - offset) * (nextScale / scale) + pan, nextScale)
+                            val centroid = event.calculateCentroid(useCurrent = false)
+                            val focus = if (centroid.isSpecified) centroid - Offset(size.width / 2f, size.height / 2f) else Offset.Zero
+                            val moved = if (nextScale <= 1.01f) Offset.Zero else clamp(focus - (focus - offset) * (nextScale / scale) + pan, nextScale)
+                            // A non-finite offset would blank the photo, so a bad frame is dropped rather than applied.
+                            offset = if (moved.isFinite) moved else offset
                             scale = nextScale
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
@@ -311,13 +318,15 @@ private fun ViewerPage(item: MediaItem, onTap: () -> Unit) {
         Box(
             Modifier
                 .then(ratio?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
+                // One layer does the zoom and the rounding, so the clip scales with the photo instead of living in a layer of its own.
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
                     translationX = offset.x
                     translationY = offset.y
-                }
-                .clip(Shapes.viewerPhoto),
+                    shape = Shapes.viewerPhoto
+                    clip = true
+                },
         ) {
             AsyncImage(
                 model = request,
