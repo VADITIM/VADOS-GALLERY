@@ -125,6 +125,8 @@ fun ViewerScreen(
                     items[page],
                     video = if (page == pagerState.currentPage) video else null,
                     onTap = { isChromeVisible = !isChromeVisible },
+                    onSwipeDown = onClose,
+                    onSwipeUp = { overlay = Overlay.DETAILS },
                     onRatio = { onPhotoRatio(items[page].id, it) },
                 )
             }
@@ -262,13 +264,14 @@ fun ViewerScreen(
 
 // Pinch or double-tap zooms a photo. While it is zoomed the page keeps every drag for panning, so the pager only swipes at normal size.
 @Composable
-private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onRatio: (Float) -> Unit) {
+private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onSwipeDown: () -> Unit, onSwipeUp: () -> Unit, onRatio: (Float) -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
+    var swipeOffset by remember { mutableFloatStateOf(0f) }
     // The picture's own proportions, so the rounded frame hugs the photo rather than the screen; read off the decoded image because the stored width and height ignore rotation.
     var ratio by remember(item.id) { mutableStateOf(if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else null) }
 
@@ -307,10 +310,26 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
+                    // At normal size a mostly-vertical drag is a swipe: down closes, up shows the details. It is only claimed once it is clearly vertical, so horizontal swipes still reach the pager.
+                    var total = Offset.Zero
+                    var isVerticalSwipe = false
+                    var isDirectionDecided = false
                     do {
                         val event = awaitPointerEvent()
                         val isPinching = event.changes.count { it.pressed } >= 2
-                        if (isPinching || scale > 1.01f) {
+                        if (isPinching) isDirectionDecided = true
+                        if (!isPinching && scale <= 1.01f && !isDirectionDecided || isVerticalSwipe) {
+                            val change = event.changes.first()
+                            total += change.positionChange()
+                            if (!isDirectionDecided && total.getDistance() > viewConfiguration.touchSlop) {
+                                isDirectionDecided = true
+                                isVerticalSwipe = kotlin.math.abs(total.y) > kotlin.math.abs(total.x) * 1.5f
+                            }
+                            if (isVerticalSwipe) {
+                                swipeOffset += change.positionChange().y
+                                change.consume()
+                            }
+                        } else if (isPinching || scale > 1.01f) {
                             val zoom = if (isPinching) event.calculateZoom() else 1f
                             val nextScale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
                             val pan = event.calculatePan()
@@ -323,6 +342,12 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
+                    if (isVerticalSwipe) {
+                        val distance = 100.dp.toPx()
+                        val released = swipeOffset
+                        if (released > distance) onSwipeDown() else if (released < -distance) onSwipeUp()
+                        scope.launch { animate(released, 0f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { value, _ -> swipeOffset = value } }
+                    }
                 }
             },
         contentAlignment = Alignment.Center,
@@ -332,10 +357,12 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                 .then((video?.ratio ?: ratio)?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
                 // One layer does the zoom and the rounding, so the clip scales with the photo instead of living in a layer of its own.
                 .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+                    // Pulling down also shrinks the photo a little, the way it will when it closes.
+                    val pull = 1f - (swipeOffset.coerceAtLeast(0f) / (size.height * 3f)).coerceAtMost(0.15f)
+                    scaleX = scale * pull
+                    scaleY = scale * pull
                     translationX = offset.x
-                    translationY = offset.y
+                    translationY = offset.y + swipeOffset
                     shape = Shapes.viewerPhoto
                     clip = true
                 },

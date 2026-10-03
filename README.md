@@ -14,7 +14,7 @@ Every push to `master` publishes the APK at
 Install **`vados-gallery-v<version>.apk`**, the optimised build. Only the release build is published.
 
 ```bash
-adb install -r vados-gallery-v0.8.apk
+adb install -r vados-gallery-v0.10.apk
 ```
 
 Builds share one committed debug key, so a new build installs over the old one.
