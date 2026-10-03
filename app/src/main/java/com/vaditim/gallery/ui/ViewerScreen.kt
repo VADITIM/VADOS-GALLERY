@@ -83,6 +83,8 @@ import java.util.Locale
 
 private val PAGE_GAP = 18.dp
 private const val MAX_ZOOM = 5f
+// A pull of this share of the screen height has shrunk the viewer all the way down to its tile.
+private const val PULL_RANGE = 0.4f
 private const val HOLD_SPEED = 1.5f
 private const val REVERSE_STEP_MS = 90L
 private const val MIN_HOLD_SPEED = 0.25f
@@ -105,6 +107,7 @@ fun ViewerScreen(
     onClose: () -> Unit,
     onCurrentChanged: (Long) -> Unit = {},
     onPhotoRatio: (Long, Float) -> Unit = { _, _ -> },
+    onPull: (Float) -> Unit = {},
 ) {
     if (items.isEmpty()) {
         LaunchedEffect(Unit) { onClose() }
@@ -139,6 +142,7 @@ fun ViewerScreen(
                     onTap = { isChromeVisible = !isChromeVisible },
                     onSwipeDown = onClose,
                     onSwipeUp = { overlay = Overlay.DETAILS },
+                    onPull = onPull,
                     onRatio = { onPhotoRatio(items[page].id, it) },
                 )
             }
@@ -276,7 +280,7 @@ fun ViewerScreen(
 
 // Pinch or double-tap zooms a photo. While it is zoomed the page keeps every drag for panning, so the pager only swipes at normal size.
 @Composable
-private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onSwipeDown: () -> Unit, onSwipeUp: () -> Unit, onRatio: (Float) -> Unit) {
+private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onSwipeDown: () -> Unit, onSwipeUp: () -> Unit, onPull: (Float) -> Unit, onRatio: (Float) -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
@@ -393,6 +397,8 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                             }
                             if (isVerticalSwipe) {
                                 swipeOffset += change.position.y - change.previousPosition.y
+                                // Only a downward pull moves anything: it is reported up so the whole viewer can shrink towards its tile as the finger goes. Swiping up changes nothing on screen until the details open.
+                                onPull((swipeOffset.coerceAtLeast(0f) / (size.height * PULL_RANGE)).coerceIn(0f, 1f))
                                 change.consume()
                             }
                         } else if (isPinching || scale > 1.01f) {
@@ -411,8 +417,17 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     if (isVerticalSwipe) {
                         val distance = 100.dp.toPx()
                         val released = swipeOffset
-                        if (released > distance) onSwipeDown() else if (released < -distance) onSwipeUp()
-                        scope.launch { animate(released, 0f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { value, _ -> swipeOffset = value } }
+                        if (released > distance) {
+                            onSwipeDown()
+                        } else {
+                            if (released < -distance) onSwipeUp()
+                            scope.launch {
+                                animate(released, 0f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { value, _ ->
+                                    swipeOffset = value
+                                    onPull((value.coerceAtLeast(0f) / (size.height * PULL_RANGE)).coerceIn(0f, 1f))
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -423,12 +438,10 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                 .then((video?.ratio ?: ratio)?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
                 // One layer does the zoom and the rounding, so the clip scales with the photo instead of living in a layer of its own.
                 .graphicsLayer {
-                    // Pulling down also shrinks the photo a little, the way it will when it closes.
-                    val pull = 1f - (swipeOffset.coerceAtLeast(0f) / (size.height * 3f)).coerceAtMost(0.15f)
-                    scaleX = scale * pull
-                    scaleY = scale * pull
+                    scaleX = scale
+                    scaleY = scale
                     translationX = offset.x
-                    translationY = offset.y + swipeOffset
+                    translationY = offset.y
                     shape = Shapes.viewerPhoto
                     clip = true
                 },

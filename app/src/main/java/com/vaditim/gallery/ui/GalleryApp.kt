@@ -160,6 +160,8 @@ private fun Library(viewModel: GalleryViewModel) {
     var viewerCurrentId by remember { mutableStateOf<Long?>(null) }
     var viewerRect by remember { mutableStateOf<Rect?>(null) }
     var viewerRatio by remember { mutableFloatStateOf(1f) }
+    // How far a swipe down has already pulled the viewer towards its tile (0 to 1); the draw lambdas fold it into the animation's progress.
+    var viewerPull by remember { mutableFloatStateOf(0f) }
     val photoRatios = remember { HashMap<Long, Float>() }
     val viewerProgress = remember { Animatable(0f) }
     var scrollToNewestRequest by remember { mutableIntStateOf(0) }
@@ -276,6 +278,7 @@ private fun Library(viewModel: GalleryViewModel) {
             viewerCurrentId = openedId
             viewerRect = TileBounds.of(openedId)
             viewerRatio = ratioOf(itemsFor(request.source).getOrNull(request.startIndex))
+            viewerPull = 0f
             shownViewer = request
             viewerProgress.snapTo(0f)
             viewerProgress.animateTo(1f, tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerTwoOut))
@@ -290,6 +293,7 @@ private fun Library(viewModel: GalleryViewModel) {
             viewerRatio = ratioOf(shownViewer?.let { shown -> itemsFor(shown.source).firstOrNull { it.id == currentId } })
             viewerProgress.animateTo(0f, tween(Motion.VIEWER_CLOSE_MS, easing = Motion.powerThreeInOut))
             shownViewer = null
+            viewerPull = 0f
         }
     }
 
@@ -649,7 +653,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         .fillMaxSize()
                         // Progress is read inside the draw lambdas, so the animation never recomposes the library.
                         .drawWithContent {
-                            val p = viewerProgress.value
+                            val p = viewerProgress.value * (1f - viewerPull)
                             val tile = viewerRect
                             if (tile == null || p >= 1f) {
                                 drawContent()
@@ -668,7 +672,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                val p = viewerProgress.value
+                                val p = viewerProgress.value * (1f - viewerPull)
                                 val tile = viewerRect
                                 if (tile == null) {
                                     alpha = p
@@ -698,6 +702,11 @@ private fun Library(viewModel: GalleryViewModel) {
                             onClose = { viewer = null },
                             onCurrentChanged = { viewerCurrentId = it },
                             onPhotoRatio = { id, ratio -> photoRatios[id] = ratio },
+                            onPull = { fraction ->
+                                viewerRect = TileBounds.of(viewerCurrentId)
+                                viewerRatio = photoRatios[viewerCurrentId] ?: viewerRatio
+                                viewerPull = fraction
+                            },
                         )
                     }
                 }
