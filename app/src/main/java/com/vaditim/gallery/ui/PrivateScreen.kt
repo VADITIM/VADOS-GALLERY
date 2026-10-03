@@ -118,7 +118,7 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         Column(
             Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.TopStart)
                 .padding(12.dp)
                 // A solid pane, not glass: this card scrolls inside the blurred content itself, and an effect inside its own source would blur itself.
                 .clip(Shapes.panel)
@@ -127,6 +127,8 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
         ) {
             MicroLabel("Today's selection")
             BasicText("for you 😏", style = Type.cardTitle, modifier = Modifier.padding(top = 4.dp))
+            // A third of the title's size, as asked.
+            BasicText("Enjoy jerking off on your wife", style = Type.cardTitle.copy(fontSize = Type.cardTitle.fontSize / 3, color = Palette.textMuted), modifier = Modifier.padding(top = 2.dp))
         }
     }
 }
