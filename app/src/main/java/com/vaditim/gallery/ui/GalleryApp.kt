@@ -192,7 +192,10 @@ private fun Library(viewModel: GalleryViewModel) {
     val albumMemories = remember { mutableMapOf<Long, GridMemory>() }
     val locationMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateMemories = remember { mutableMapOf<String, GridMemory>() }
+    // Lists you go back to keep their scroll position: the state lives here, above the screens that come and go.
     val albumsListState = rememberLazyGridState()
+    val privateGroupsListState = rememberLazyGridState()
+    val locationsListState = rememberLazyGridState()
     val hazeState = rememberHazeState()
 
     val accent by animateColorAsState(section.accent, tween(Motion.STATE_MS), label = "accent")
@@ -373,6 +376,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             onOpen = { albumsPlace = AlbumsPlace.Location(it.key) },
                             onBack = { albumsPlace = AlbumsPlace.Folders },
                             contentPadding = insetPadding,
+                            state = locationsListState,
                         )
                         is AlbumsPlace.Location -> locations.firstOrNull { it.key == shownPlace.key }?.let { group ->
                             LocationScreen(
@@ -397,6 +401,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             onNewGroup = { sheet = AppSheet.PRIVATE_NEW_GROUP },
                             onBack = { albumsPlace = AlbumsPlace.Folders },
                             contentPadding = insetPadding,
+                            state = privateGroupsListState,
                         )
                         is AlbumsPlace.PrivateFolder -> privateContents.groups.firstOrNull { it.name == shownPlace.name }?.let { group ->
                             PrivateItemsScreen(

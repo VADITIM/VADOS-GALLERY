@@ -20,6 +20,9 @@ val LocalHazeState = staticCompositionLocalOf<HazeState?> { null }
 
 object Glass {
     // Black under the blur, with the amount of blur and of black both set in Settings.
+    // The status-bar edge keeps the original look whatever the settings say: it is part of the frame, not a pane.
+    val edgeStyle: HazeStyle = HazeStyle(backgroundColor = Palette.ground, tint = HazeTint(Palette.glassTint), blurRadius = 26.dp, noiseFactor = 0.03f)
+
     fun style(): HazeStyle =
         HazeStyle(backgroundColor = Color.Black, tint = HazeTint(Color.Black.copy(alpha = Settings.glassOpacity)), blurRadius = Settings.blurDp.dp, noiseFactor = 0.03f)
 }
@@ -35,7 +38,7 @@ fun Modifier.glass(shape: Shape, ground: Color = Palette.ground): Modifier {
 @Composable
 fun Modifier.fadingGlass(): Modifier {
     val state = LocalHazeState.current ?: return this
-    return this.hazeEffect(state, Glass.style()) {
+    return this.hazeEffect(state, Glass.edgeStyle) {
         progressive = HazeProgressive.verticalGradient(startIntensity = 1f, endIntensity = 0f)
     }
 }

@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -66,9 +66,9 @@ fun PrivateGroupsScreen(
     onNewGroup: () -> Unit,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
+    state: LazyGridState,
 ) {
     BackHandler(onBack = onBack)
-    val state = rememberLazyGridState()
     // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
     val selectionSeed = remember { Random.nextInt(Int.MAX_VALUE) }
     LazyVerticalGrid(

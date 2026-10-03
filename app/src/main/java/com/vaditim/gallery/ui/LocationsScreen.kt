@@ -12,7 +12,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -42,11 +42,11 @@ fun LocationsEntry(onClick: () -> Unit) {
 
 // One card per city, the cities with the most photos first.
 @Composable
-fun LocationsScreen(groups: List<LocationGroup>, onOpen: (LocationGroup) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues) {
+fun LocationsScreen(groups: List<LocationGroup>, onOpen: (LocationGroup) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, state: LazyGridState) {
     BackHandler(onBack = onBack)
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
-        state = rememberLazyGridState(),
+        state = state,
         contentPadding = PaddingValues(
             start = 16.dp,
             end = 16.dp,
