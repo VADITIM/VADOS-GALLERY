@@ -30,15 +30,15 @@ import com.vaditim.gallery.vas.pressable
 @Composable
 fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
     OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss) {
-        SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.setBlur(it * Settings.MAX_BLUR_DP) }
-        SettingsSlider("Background", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.setGlassOpacity(it) }
+        SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
+        SettingsSlider("Background", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
         SheetRow("Columns", trailing = Settings.defaultColumns.toString()) {
             val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
-            Settings.setDefaultColumns(next)
+            Settings.updateDefaultColumns(next)
             onColumnsChanged(next)
         }
-        SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.setShowMonthHeaders(it) }
-        SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.setAutoplayVideos(it) }
+        SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
+        SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
     }
 }
 

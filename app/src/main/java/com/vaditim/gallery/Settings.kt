@@ -40,27 +40,27 @@ object Settings {
         autoplayVideos = preferences.getBoolean("autoplay", true)
     }
 
-    fun setBlur(value: Float) {
+    fun updateBlur(value: Float) {
         blurDp = value.coerceIn(0f, MAX_BLUR_DP)
         preferences.edit().putFloat("blur", blurDp).apply()
     }
 
-    fun setGlassOpacity(value: Float) {
+    fun updateGlassOpacity(value: Float) {
         glassOpacity = value.coerceIn(0f, 1f)
         preferences.edit().putFloat("opacity", glassOpacity).apply()
     }
 
-    fun setDefaultColumns(value: Int) {
+    fun updateDefaultColumns(value: Int) {
         defaultColumns = value.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         preferences.edit().putInt("columns", defaultColumns).apply()
     }
 
-    fun setShowMonthHeaders(value: Boolean) {
+    fun updateShowMonthHeaders(value: Boolean) {
         showMonthHeaders = value
         preferences.edit().putBoolean("monthHeaders", value).apply()
     }
 
-    fun setAutoplayVideos(value: Boolean) {
+    fun updateAutoplayVideos(value: Boolean) {
         autoplayVideos = value
         preferences.edit().putBoolean("autoplay", value).apply()
     }
