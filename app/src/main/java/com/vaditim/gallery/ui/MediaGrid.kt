@@ -1,0 +1,162 @@
+package com.vaditim.gallery.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.vas.MicroLabel
+import com.vaditim.gallery.vas.Palette
+import com.vaditim.gallery.vas.Panel
+import com.vaditim.gallery.vas.Shapes
+import com.vaditim.gallery.vas.Type
+import com.vaditim.gallery.vas.pressable
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private const val COLUMNS = 4
+private val GAP = 2.dp
+private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)
+
+// The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was.
+class GridMemory {
+    val state = LazyGridState()
+    var isPositioned = false
+    var knownCount = 0
+}
+
+// Oldest at the top, newest at the bottom right, opened at the bottom — the Apple order. Items arrive already sorted ascending.
+@Composable
+fun MediaGrid(
+    items: List<MediaItem>,
+    memory: GridMemory,
+    onOpen: (Int) -> Unit,
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier,
+    scrollToNewestRequest: Int = 0,
+    emptyCaption: String = "Nothing here yet.",
+) {
+    val state = memory.state
+
+    LaunchedEffect(items.size) {
+        if (items.isEmpty()) return@LaunchedEffect
+        val lastVisible = state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val wasAtNewest = lastVisible >= memory.knownCount - COLUMNS
+        if (!memory.isPositioned || (items.size > memory.knownCount && wasAtNewest)) {
+            state.scrollToItem(items.lastIndex)
+            memory.isPositioned = true
+        }
+        memory.knownCount = items.size
+    }
+
+    // Tapping the section the bar already shows takes you home, which here is the newest end.
+    LaunchedEffect(scrollToNewestRequest) {
+        if (scrollToNewestRequest > 0 && items.isNotEmpty()) state.animateScrollToItem(items.lastIndex)
+    }
+
+    if (items.isEmpty()) {
+        Box(modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
+            BasicText(emptyCaption, style = Type.caption.copy(color = Palette.textFaint))
+        }
+        return
+    }
+
+    val tileSize = thumbnailPixels(COLUMNS, GAP)
+    val visibleMonth by remember(items) {
+        derivedStateOf {
+            items.getOrNull(state.firstVisibleItemIndex)?.let {
+                MONTH_FORMAT.format(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH)
+            } ?: ""
+        }
+    }
+
+    Box(modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(COLUMNS),
+            state = state,
+            contentPadding = contentPadding,
+            horizontalArrangement = Arrangement.spacedBy(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
+                Tile(item, tileSize, onClick = { onOpen(index) })
+            }
+        }
+        Panel(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(top = contentPadding.calculateTopPadding() + 8.dp, start = 12.dp),
+            shape = Shapes.chip,
+        ) {
+            MicroLabel(visibleMonth, Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+        }
+    }
+}
+
+@Composable
+private fun Tile(item: MediaItem, sizePixels: Int, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val request = remember(item.uri, sizePixels) {
+        ImageRequest.Builder(context).data(item.uri).size(sizePixels).build()
+    }
+    Box(
+        Modifier
+            .aspectRatio(1f)
+            .pressable(onClick = onClick, pressedScale = 0.94f)
+            .clip(Shapes.tile)
+            .background(Palette.sunken),
+    ) {
+        AsyncImage(model = request, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (item.isVideo) {
+            BasicText(
+                formatDuration(item.durationMillis),
+                style = Type.value.copy(color = Palette.textBright),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(4.dp)
+                    .clip(Shapes.chip)
+                    .background(Palette.panel)
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun thumbnailPixels(columns: Int, gap: Dp): Int {
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    return with(density) { ((configuration.screenWidthDp.dp - gap * (columns - 1)) / columns).roundToPx() }
+}
+
+fun formatDuration(millis: Long): String {
+    val totalSeconds = millis / 1000
+    return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+}
