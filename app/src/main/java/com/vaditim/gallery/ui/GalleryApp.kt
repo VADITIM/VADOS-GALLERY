@@ -110,7 +110,6 @@ private val AlbumsPlace.isPrivate: Boolean
 private enum class AppSheet {
     NONE,
     NEW_ALBUM,
-    ITEM_MENU,
     SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
     ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP,
     GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
@@ -170,7 +169,6 @@ private fun Library(viewModel: GalleryViewModel) {
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
     var sheetGroup by remember { mutableStateOf<PrivateGroup?>(null) }
-    var sheetItem by remember { mutableStateOf<MediaItem?>(null) }
     var isMenuDeleteArmed by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerTarget?>(null) }
     LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU) isMenuDeleteArmed = false }
@@ -206,12 +204,7 @@ private fun Library(viewModel: GalleryViewModel) {
     }
     val selectedItems = gridItems.filter { it.id in selectedIds }
     val isSelecting = selectedItems.isNotEmpty()
-    // Inside an album or private group a long press opens the item menu (Select / Set as Cover) rather than starting a selection straight away.
-    val onStartSelection: ((MediaItem) -> Unit)? = if (openAlbum != null || openPrivateGroup != null) { item ->
-        sheetItem = item
-        sheet = AppSheet.ITEM_MENU
-    } else null
-    val selection = Selection(selectedIds, onStart = onStartSelection) { item ->
+    val selection = Selection(selectedIds) { item ->
         selectedIds = if (item.id in selectedIds) selectedIds - item.id else selectedIds + item.id
         isDeleteArmed = false
     }
@@ -424,6 +417,15 @@ private fun Library(viewModel: GalleryViewModel) {
             if (isSelecting) {
                 Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
                     ActionButton("SHARE") { actions.share(selectedItems) }
+                    if (selectedItems.size == 1 && (openAlbum != null || openPrivateGroup != null)) {
+                        ActionButton("COVER") {
+                            when {
+                                openAlbum != null -> viewModel.setAlbumCover(openAlbum.id, selectedItems.first())
+                                openPrivateGroup != null -> viewModel.setGroupCover(openPrivateGroup.name, selectedItems.first())
+                            }
+                            clearSelection()
+                        }
+                    }
                     if (isInPrivate) {
                         ActionButton("GROUP") { sheet = AppSheet.SELECTION_GROUP }
                         ActionButton("OUT") { sheet = AppSheet.SELECTION_MOVE }
@@ -500,24 +502,6 @@ private fun Library(viewModel: GalleryViewModel) {
                     } else {
                         isMenuDeleteArmed = true
                     }
-                }
-            }
-
-            // A long-pressed photo inside an album or private group: start selecting, or below the divider make it the cover.
-            OverlaySheet(visible = sheet == AppSheet.ITEM_MENU, label = "PHOTO", onDismiss = { sheet = AppSheet.NONE }) {
-                SheetRow("Select") {
-                    sheetItem?.let { selection.onToggle(it) }
-                    sheet = AppSheet.NONE
-                }
-                Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp).height(1.dp).background(Palette.borderStrong))
-                SheetRow("Set as Cover") {
-                    sheetItem?.let { item ->
-                        when {
-                            openAlbum != null -> viewModel.setAlbumCover(openAlbum.id, item)
-                            openPrivateGroup != null -> viewModel.setGroupCover(openPrivateGroup.name, item)
-                        }
-                    }
-                    sheet = AppSheet.NONE
                 }
             }
 

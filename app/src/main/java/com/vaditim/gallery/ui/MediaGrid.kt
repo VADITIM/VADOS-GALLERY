@@ -28,6 +28,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +73,7 @@ private const val MAX_COLUMNS = 5
 
 // How far a pinch has to travel before the grid steps one column: spreading past this shows fewer, larger photos.
 private const val PINCH_STEP = 1.28f
+private const val AUTO_SCROLL_STEP = 22f
 private val GAP = 3.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
@@ -134,13 +145,17 @@ fun MediaGrid(
     }
 
     val tileSize = thumbnailPixels(columns, GAP)
+    val photosById = remember(entries) { entries.filterIsInstance<GridEntry.Photo>().associate { it.item.id to it.item } }
+    val currentSelection by rememberUpdatedState(selection)
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         state = state,
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = modifier.fillMaxSize().pinchColumns(memory),
+        modifier = modifier.fillMaxSize().pinchColumns(memory).dragSelect(state, photosById, { currentSelection }, scope, haptic),
     ) {
         items(
             entries,
@@ -159,7 +174,6 @@ fun MediaGrid(
                         onClick = {
                             if (selection != null && selection.isActive) selection.onToggle(item) else onOpen(entry.index)
                         },
-                        onLongClick = selection?.let { chosen -> { chosen.onLongPress(item) } },
                     )
                 }
             }
@@ -201,6 +215,77 @@ private fun Modifier.pinchColumns(memory: GridMemory): Modifier = pointerInput(m
     }
 }
 
+// Hold a tile to start selecting, then slide across the others to select (or, if the first was already selected, deselect) them. It watches on the initial pass so the held finger never scrolls the list or taps a tile; near the top or bottom edge the grid scrolls on its own.
+private fun Modifier.dragSelect(
+    state: LazyGridState,
+    photosById: Map<Long, MediaItem>,
+    selection: () -> Selection?,
+    scope: CoroutineScope,
+    haptic: HapticFeedback,
+): Modifier = pointerInput(state, photosById) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val isHeld = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull() ?: break
+                val isSingleFinger = event.changes.count { it.pressed } == 1
+                if (!isSingleFinger || !change.pressed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+            }
+            true
+        } == null
+        val chosen = selection()
+        if (!isHeld || chosen == null) return@awaitEachGesture
+
+        fun itemAt(position: Offset): MediaItem? = state.layoutInfo.visibleItemsInfo
+            .firstOrNull { info ->
+                position.x >= info.offset.x && position.x < info.offset.x + info.size.width &&
+                    position.y >= info.offset.y && position.y < info.offset.y + info.size.height
+            }
+            ?.let { info -> (info.key as? Long)?.let { photosById[it] } }
+
+        val first = itemAt(down.position) ?: return@awaitEachGesture
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        val isSelecting = first.id !in chosen.selectedIds
+        val visited = HashSet<Long>()
+        fun reach(position: Offset) {
+            val item = itemAt(position) ?: return
+            if (visited.add(item.id) && (item.id in (selection() ?: return).selectedIds) != isSelecting) selection()?.onToggle(item)
+        }
+        reach(down.position)
+        down.consume()
+
+        var lastPosition = down.position
+        val edge = 90.dp.toPx()
+        val autoScroll = scope.launch {
+            while (true) {
+                val direction = when {
+                    lastPosition.y < edge -> -1f
+                    lastPosition.y > size.height - edge -> 1f
+                    else -> 0f
+                }
+                if (direction != 0f) {
+                    state.scrollBy(direction * AUTO_SCROLL_STEP)
+                    reach(lastPosition)
+                }
+                delay(16)
+            }
+        }
+        try {
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                event.changes.firstOrNull()?.let { change ->
+                    lastPosition = change.position
+                    reach(change.position)
+                }
+                event.changes.forEach { it.consume() }
+            } while (event.changes.any { it.pressed })
+        } finally {
+            autoScroll.cancel()
+        }
+    }
+}
+
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<String> {
@@ -216,23 +301,17 @@ fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<Stri
     }
 }
 
-// What a grid needs to know about multi-select: which tiles are in it, and how to toggle one. A long press toggles (and so starts a selection); once one is active, a tap toggles too.
-// `onStart`, when given, handles the long press that would begin a selection (an album opens a menu instead); once a selection is active, long press toggles like a tap.
+// What a grid needs to know about multi-select: which tiles are in it, and how to toggle one. A long press (see `dragSelect`) starts a selection; once one is active, a tap toggles too.
 class Selection(
     val selectedIds: Set<Long>,
     private val isAlwaysActive: Boolean = false,
-    private val onStart: ((MediaItem) -> Unit)? = null,
     val onToggle: (MediaItem) -> Unit,
 ) {
     val isActive: Boolean get() = isAlwaysActive || selectedIds.isNotEmpty()
-
-    fun onLongPress(item: MediaItem) {
-        if (!isActive && onStart != null) onStart(item) else onToggle(item)
-    }
 }
 
 @Composable
-private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)?) {
+private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
@@ -245,7 +324,7 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick:
         Modifier
             .aspectRatio(1f)
             .onGloballyPositioned { TileBounds.register(item.id, it) }
-            .pressable(onClick = onClick, pressedScale = 0.94f, onLongClick = onLongClick)
+            .pressable(onClick = onClick, pressedScale = 0.94f)
             .graphicsLayer { scaleX = selectedScale; scaleY = selectedScale }
             .clip(Shapes.tile)
             .background(Palette.sunken),

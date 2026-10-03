@@ -86,7 +86,7 @@ private const val MAX_ZOOM = 5f
 // A pull of this share of the screen height has shrunk the viewer all the way down to its tile.
 private const val PULL_RANGE = 0.4f
 private const val HOLD_SPEED = 1.5f
-private const val REVERSE_STEP_MS = 90L
+private const val REVERSE_STEP_MS = 120L
 private const val MIN_HOLD_SPEED = 0.25f
 private const val MAX_HOLD_SPEED = 4f
 // Sliding this far while holding changes the speed by 1x.
@@ -339,16 +339,19 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                         video.isHoldReverse = isReverse
                         var reverseJob: Job? = null
                         if (isReverse) {
-                            // ExoPlayer cannot play backwards, so rewinding is a run of small seeks to the nearest keyframe, which is what keeps it smooth.
+                            // ExoPlayer cannot play backwards, so rewinding is a run of seeks to the keyframe at or before a position this loop keeps itself — reading the player's own position back would snap to the keyframe it landed on and stutter.
                             video.player.pause()
-                            video.player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                            video.player.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
                             reverseJob = scope.launch {
-                                while (true) {
+                                var position = video.player.currentPosition
+                                var lastTick = System.nanoTime()
+                                while (position > 0L) {
                                     delay(REVERSE_STEP_MS)
-                                    val position = (video.player.currentPosition - (REVERSE_STEP_MS * (video.holdSpeed ?: HOLD_SPEED)).toLong()).coerceAtLeast(0L)
+                                    val now = System.nanoTime()
+                                    position = (position - ((now - lastTick) / 1_000_000L * (video.holdSpeed ?: HOLD_SPEED)).toLong()).coerceAtLeast(0L)
+                                    lastTick = now
                                     video.player.seekTo(position)
                                     video.positionMs = position
-                                    if (position == 0L) break
                                 }
                             }
                         } else {

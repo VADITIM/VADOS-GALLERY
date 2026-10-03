@@ -85,7 +85,7 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
   *private* favourite, kept in the private folder itself (`.favorites`), never in MediaStore, so it can
   never appear in the normal FAVORITES. Moving it back out to an album makes it an ordinary favourite
   again. Private ends with a **Favorites** folder, a wide row at the very bottom, below the groups.
-- **Album covers.** Long-pressing a photo inside an album or private group opens a small menu: Select, then below a divider Set as Cover. The cover is remembered per album (per group, inside the group's folder); until one is set, the newest photo is the cover.
+- **Album covers.** Long-pressing a photo anywhere selects it, as in Recent; sliding the held finger across more tiles selects (or deselects) them along the row and scrolls at the edges. With exactly one photo selected inside an album or private group, COVER makes it the cover. The cover is remembered per album (per group, inside the group's folder); until one is set, the newest photo is the cover.
 - **"Today's selection for you 😏"** — a large card at the top of Private showing one random private
   favourite; a new pick every time Private is entered, kept while scrolling.
 - **Screenshots and the recent-apps preview are blocked** while anything private is on screen.
