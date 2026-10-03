@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -165,6 +167,13 @@ fun MediaGrid(
     }
 }
 
+// Brings a photo's tile on screen, so the viewer has somewhere to shrink back to when it was paged away from where it opened.
+suspend fun GridMemory.revealItem(items: List<MediaItem>, mediaId: Long) {
+    val index = buildEntries(items).indexOfFirst { it is GridEntry.Photo && it.item.id == mediaId }
+    if (index < 0 || state.layoutInfo.visibleItemsInfo.any { it.index == index }) return
+    state.scrollToItem((index - columns * 2).coerceAtLeast(0))
+}
+
 @Composable
 private fun MonthHeader(label: String) {
     BasicText(label, style = Type.cardTitle, modifier = Modifier.padding(start = 4.dp, top = 18.dp, bottom = 8.dp))
@@ -231,9 +240,11 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick:
         ImageRequest.Builder(context).data(data).size(sizePixels).build()
     }
     val selectedScale by animateFloatAsState(if (isSelected) 0.86f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
+    DisposableEffect(item.id) { onDispose { TileBounds.forget(item.id) } }
     Box(
         Modifier
             .aspectRatio(1f)
+            .onGloballyPositioned { TileBounds.register(item.id, it) }
             .pressable(onClick = onClick, pressedScale = 0.94f, onLongClick = onLongClick)
             .graphicsLayer { scaleX = selectedScale; scaleY = selectedScale }
             .clip(Shapes.tile)

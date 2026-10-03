@@ -114,7 +114,7 @@ Tapping a thumbnail opens it full screen, on black.
 - Tap toggles the chrome.
 - Back, or the system back gesture, closes it.
 - *Planned:*
-  - **Shared-element zoom**: the thumbnail grows into the photo and shrinks back into its cell.
+  - **Shared-element zoom** (done): the photo grows out of its tile and shrinks back into the tile of whichever photo you ended on, scrolling the grid to it first when needed; a quiet fade when no tile applies.
   - Pinch and double-tap to zoom (done); photos sit in a rounded frame with a gap between pages when swiping.
   - Swipe down to dismiss back into the grid.
   - Inline video playback with a scrubber.

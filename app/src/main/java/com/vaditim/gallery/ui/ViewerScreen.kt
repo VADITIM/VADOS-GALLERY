@@ -89,6 +89,7 @@ fun ViewerScreen(
     isPrivate: Boolean,
     actions: MediaActions,
     onClose: () -> Unit,
+    onCurrentChanged: (Long) -> Unit = {},
 ) {
     if (items.isEmpty()) {
         LaunchedEffect(Unit) { onClose() }
@@ -99,7 +100,10 @@ fun ViewerScreen(
     var overlay by remember { mutableStateOf(Overlay.NONE) }
     var isDeleteArmed by remember { mutableStateOf(false) }
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
-    LaunchedEffect(current.id) { isDeleteArmed = false }
+    LaunchedEffect(current.id) {
+        isDeleteArmed = false
+        onCurrentChanged(current.id)
+    }
 
     BackHandler { if (overlay != Overlay.NONE) overlay = Overlay.NONE else onClose() }
 

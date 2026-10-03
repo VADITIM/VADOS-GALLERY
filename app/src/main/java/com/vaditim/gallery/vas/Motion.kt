@@ -17,6 +17,7 @@ object Motion {
 
     const val VIEWER_ENTER_MS = 280
     const val VIEWER_LEAVE_MS = 160
+    const val VIEWER_CLOSE_MS = 260
 
     const val OVERLAY_ENTER_MS = 240
     const val OVERLAY_LEAVE_MS = 140

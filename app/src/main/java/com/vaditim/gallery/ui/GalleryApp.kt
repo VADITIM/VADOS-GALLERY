@@ -4,6 +4,15 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -142,6 +151,11 @@ private fun Library(viewModel: GalleryViewModel) {
     var section by remember { mutableStateOf(Section.RECENT) }
     var albumsPlace by remember { mutableStateOf<AlbumsPlace>(AlbumsPlace.Folders) }
     var viewer by remember { mutableStateOf<ViewerRequest?>(null) }
+    // `viewer` is what is wanted open; `shownViewer` stays composed through the closing animation.
+    var shownViewer by remember { mutableStateOf<ViewerRequest?>(null) }
+    var viewerCurrentId by remember { mutableStateOf<Long?>(null) }
+    var viewerRect by remember { mutableStateOf<Rect?>(null) }
+    val viewerProgress = remember { Animatable(0f) }
     var scrollToNewestRequest by remember { mutableIntStateOf(0) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     var isDeleteArmed by remember { mutableStateOf(false) }
@@ -234,6 +248,37 @@ private fun Library(viewModel: GalleryViewModel) {
         is ViewerSource.InAlbum -> albums.firstOrNull { it.id == source.albumId }?.items.orEmpty()
         is ViewerSource.InPrivateGroup -> if (isPrivateUnlocked) privateContents.groups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
         ViewerSource.PrivateFavorites -> if (isPrivateUnlocked) privateContents.favorites else emptyList()
+    }
+
+    val folderMemory = when {
+        openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory() }
+        openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory() }
+        place is AlbumsPlace.PrivateFavorites -> privateFavoritesMemory
+        section == Section.RECENT -> recentMemory
+        section == Section.FAVORITES -> favoritesMemory
+        else -> null
+    }
+
+    LaunchedEffect(viewer) {
+        val request = viewer
+        if (request != null) {
+            val openedId = itemsFor(request.source).getOrNull(request.startIndex)?.id
+            viewerCurrentId = openedId
+            viewerRect = TileBounds.of(openedId)
+            shownViewer = request
+            viewerProgress.snapTo(0f)
+            viewerProgress.animateTo(1f, tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerTwoOut))
+        } else if (shownViewer != null) {
+            val currentId = viewerCurrentId
+            if (currentId != null && TileBounds.of(currentId) == null) {
+                folderMemory?.revealItem(gridItems, currentId)
+                withFrameNanos { }
+                withFrameNanos { }
+            }
+            viewerRect = TileBounds.of(currentId)
+            viewerProgress.animateTo(0f, tween(Motion.VIEWER_CLOSE_MS, easing = Motion.powerThreeInOut))
+            shownViewer = null
+        }
     }
 
     CompositionLocalProvider(LocalAccent provides accent, LocalHazeState provides hazeState) {
@@ -339,14 +384,6 @@ private fun Library(viewModel: GalleryViewModel) {
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
             Box(Modifier.fillMaxWidth().height(statusBarHeight + HEADER_ROOM + 24.dp).fadingGlass())
 
-            val folderMemory = when {
-                openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory() }
-                openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory() }
-                place is AlbumsPlace.PrivateFavorites -> privateFavoritesMemory
-                section == Section.RECENT -> recentMemory
-                section == Section.FAVORITES -> favoritesMemory
-                else -> null
-            }
             TopRow(
                 backLabel = when {
                     openAlbum != null -> openAlbum.name
@@ -592,25 +629,45 @@ private fun Library(viewModel: GalleryViewModel) {
                 )
             }
 
-            // TODO(vaditim): replace with the shared-element zoom (the thumbnail grows into the photo and shrinks back into its cell) — docs/SPEC.md § Viewer.
-            AnimatedContent(
-                targetState = viewer,
-                transitionSpec = {
-                    if (targetState != null) {
-                        (fadeIn(tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerTwoOut)) +
-                            scaleIn(tween(Motion.VIEWER_ENTER_MS, easing = Motion.backOut), initialScale = 0.9f))
-                            .togetherWith(fadeOut(tween(Motion.VIEWER_LEAVE_MS)))
-                    } else {
-                        EnterTransition.None.togetherWith(
-                            fadeOut(tween(Motion.VIEWER_LEAVE_MS, easing = Motion.powerTwoIn)) +
-                                scaleOut(tween(Motion.VIEWER_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.94f),
-                        )
-                    }
-                },
-                label = "viewer",
-                modifier = Modifier.fillMaxSize(),
-            ) { request ->
-                if (request != null) {
+            // The viewer grows out of the tile it was opened from and shrinks back into the tile of the photo it ends on; when that tile is not on screen it falls back to a quiet fade.
+            if (shownViewer != null) {
+                val request = shownViewer
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        // Progress is read inside the draw lambdas, so the animation never recomposes the library.
+                        .graphicsLayer {
+                            val p = viewerProgress.value
+                            val rect = viewerRect
+                            if (rect == null) {
+                                alpha = p
+                                scaleX = 0.94f + 0.06f * p
+                                scaleY = scaleX
+                            } else {
+                                val startScale = rect.width / size.width
+                                scaleX = startScale + (1f - startScale) * p
+                                scaleY = scaleX
+                                translationX = (rect.center.x - size.width / 2f) * (1f - p)
+                                translationY = (rect.center.y - size.height / 2f) * (1f - p)
+                                alpha = (p * 4f).coerceAtMost(1f)
+                            }
+                        }
+                        .drawWithContent {
+                            val p = viewerProgress.value
+                            val rect = viewerRect
+                            if (rect == null) {
+                                drawContent()
+                            } else {
+                                val startScale = rect.width / size.width
+                                val clipHeight = rect.height / startScale + (size.height - rect.height / startScale) * p
+                                val radius = 8.dp.toPx() / startScale * (1f - p)
+                                val clip = Path().apply {
+                                    addRoundRect(RoundRect(0f, (size.height - clipHeight) / 2f, size.width, (size.height + clipHeight) / 2f, CornerRadius(radius)))
+                                }
+                                clipPath(clip) { this@drawWithContent.drawContent() }
+                            }
+                        },
+                ) {
                     ViewerScreen(
                         items = itemsFor(request.source),
                         startIndex = request.startIndex,
@@ -619,6 +676,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         isPrivate = request.source.isPrivateSource(),
                         actions = actions,
                         onClose = { viewer = null },
+                        onCurrentChanged = { viewerCurrentId = it },
                     )
                 }
             }
