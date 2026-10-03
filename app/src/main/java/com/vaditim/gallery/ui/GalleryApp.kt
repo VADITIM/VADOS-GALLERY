@@ -252,7 +252,16 @@ private fun Library(viewModel: GalleryViewModel) {
                         scrollToNewestRequest = scrollToNewestRequest,
                         emptyCaption = "No photos yet.",
                     )
-                    Section.ALBUMS -> when (val shownPlace = albumsPlace) {
+                    // Opening a folder (an album, Private, a private group) eases in from slightly small; closing it is the same, quieter.
+                    Section.ALBUMS -> AnimatedContent(
+                        targetState = albumsPlace,
+                        transitionSpec = {
+                            (fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut)) +
+                                scaleIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut), initialScale = 0.96f))
+                                .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
+                        },
+                        label = "place",
+                    ) { shownPlace -> when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
                             albums = albums,
                             state = albumsListState,
@@ -307,7 +316,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             contentPadding = insetPadding,
                             selection = selection,
                         )
-                    }
+                    } }
                     Section.FAVORITES -> MediaGrid(
                         items = favorites,
                         memory = favoritesMemory,
