@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
 import android.view.TextureView
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.requiredSize
@@ -78,6 +80,7 @@ fun PrivateGroupsScreen(
     onBack: () -> Unit,
     contentPadding: PaddingValues,
     state: LazyGridState,
+    isViewerOpen: Boolean = false,
 ) {
     BackHandler(onBack = onBack)
     // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
@@ -101,7 +104,7 @@ fun PrivateGroupsScreen(
         if (favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
                 val todaysIndex = selectionSeed % favorites.size
-                TodaysSelection(favorites[todaysIndex], onClick = { onOpenSelection(todaysIndex) })
+                TodaysSelection(favorites[todaysIndex], isCovered = isViewerOpen, onClick = { onOpenSelection(todaysIndex) })
             }
         }
         items(groups, key = { it.directory.absolutePath }, contentType = { "group" }) { group ->
@@ -115,7 +118,7 @@ fun PrivateGroupsScreen(
 }
 
 @Composable
-private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
+private fun TodaysSelection(item: MediaItem, isCovered: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).size(1080).build() }
     Box(
@@ -127,7 +130,7 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
             .background(Palette.sunken),
     ) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        if (item.isVideo) LoopingPreview(item)
+        if (item.isVideo) LoopingPreview(item, isCovered)
         Column(
             Modifier
                 .align(Alignment.TopStart)
@@ -143,9 +146,9 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
     }
 }
 
-// A picked video plays on its own, silent and looping, cropped to fill the card like the still behind it (which shows until the first frame arrives).
+// A picked video plays on its own, silent and looping, cropped to fill the card like the still behind it (which shows until the first frame arrives). The surface is attached from the start: without one the player never reports the video's size. It pauses while the viewer is over it.
 @Composable
-private fun LoopingPreview(item: MediaItem) {
+private fun LoopingPreview(item: MediaItem, isCovered: Boolean) {
     val context = LocalContext.current
     var ratio by remember(item.id) { mutableFloatStateOf(0f) }
     val player = remember(item.id) {
@@ -169,16 +172,18 @@ private fun LoopingPreview(item: MediaItem) {
             player.release()
         }
     }
-    if (ratio <= 0f) return
+    LaunchedEffect(player, isCovered) { player.playWhenReady = !isCovered }
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        val isWider = ratio > maxWidth / maxHeight
-        val width = if (isWider) maxHeight * ratio else maxWidth
-        val height = if (isWider) maxHeight else maxWidth / ratio
+        val shown = if (ratio > 0f) ratio else maxWidth / maxHeight
+        val isWider = shown > maxWidth / maxHeight
+        val width = if (isWider) maxHeight * shown else maxWidth
+        val height = if (isWider) maxHeight else maxWidth / shown
         AndroidView(
             factory = { TextureView(it) },
             update = { player.setVideoTextureView(it) },
             onRelease = { player.clearVideoTextureView(it) },
-            modifier = Modifier.requiredSize(width, height),
+            // Invisible until the size is known, so the first frames are never shown stretched.
+            modifier = Modifier.requiredSize(width, height).graphicsLayer { alpha = if (ratio > 0f) 1f else 0f },
         )
     }
 }

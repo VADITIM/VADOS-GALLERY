@@ -12,6 +12,7 @@ class GalleryApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         Settings.init(this)
+        CrashLog.install(this)
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =

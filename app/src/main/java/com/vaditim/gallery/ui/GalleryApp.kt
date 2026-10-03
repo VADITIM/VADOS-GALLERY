@@ -1,5 +1,8 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.CrashLog
+import androidx.compose.ui.unit.sp
+import android.content.Intent
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.vaditim.gallery.Settings
@@ -200,6 +203,8 @@ private fun Library(viewModel: GalleryViewModel) {
     // Photos about to go into Private, held while the confirmation is open.
     var pendingPrivate by remember { mutableStateOf<PendingPrivate?>(null) }
     var isRearranging by remember { mutableStateOf(false) }
+    // The previous run's crash, if it had one; shown once so it can be sent on.
+    var lastCrash by remember { mutableStateOf(CrashLog.read(context)) }
     val haptic = LocalHapticFeedback.current
     // Albums in the order the user dragged them into; ones never arranged keep the default order after them.
     val arrangedAlbums = remember(albums, Settings.albumOrder) {
@@ -439,6 +444,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             onBack = { albumsPlace = AlbumsPlace.Folders },
                             contentPadding = insetPadding,
                             state = privateGroupsListState,
+                            isViewerOpen = shownViewer != null,
                         )
                         is AlbumsPlace.PrivateFolder -> privateContents.groups.firstOrNull { it.name == shownPlace.name }?.let { group ->
                             PrivateItemsScreen(
@@ -684,6 +690,27 @@ private fun Library(viewModel: GalleryViewModel) {
                 onNewGroup = { sheet = AppSheet.ALBUM_NEW_GROUP },
                 onDismiss = { sheet = AppSheet.NONE },
             )
+
+            OverlaySheet(visible = lastCrash != null, label = "LAST CRASH", onDismiss = {
+                CrashLog.clear(context)
+                lastCrash = null
+            }) {
+                BasicText(
+                    lastCrash.orEmpty().lines().take(14).joinToString("\n"),
+                    style = Type.value.copy(fontSize = 10.sp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                )
+                SheetRow("Share", icon = { ShareIcon(it) }) {
+                    val text = lastCrash.orEmpty()
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
+                    CrashLog.clear(context)
+                    lastCrash = null
+                }
+                SheetRow("Close", color = Palette.textMuted, icon = { CloseIcon(it) }) {
+                    CrashLog.clear(context)
+                    lastCrash = null
+                }
+            }
 
             // Going into Private moves files out of every other app's reach, so it is confirmed once more.
             OverlaySheet(
