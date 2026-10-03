@@ -91,9 +91,6 @@ fun PrivateGroupsScreen(
                 MicroLabel("${groups.size} groups", Modifier.padding(top = 6.dp))
             }
         }
-        item(span = { GridItemSpan(maxLineSpan) }, contentType = "favorites") {
-            FavoritesFolder(favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites)
-        }
         if (favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
                 val todaysIndex = selectionSeed % favorites.size
@@ -104,6 +101,9 @@ fun PrivateGroupsScreen(
             CoverCard(group.name, group.cover, group.items.size, onClick = { onOpen(group) }, onLongClick = { onLongPress(group) })
         }
         item(contentType = "new-group") { AddCard("New group", onClick = onNewGroup) }
+        item(span = { GridItemSpan(maxLineSpan) }, contentType = "favorites") {
+            FavoritesFolder(favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites)
+        }
     }
 }
 

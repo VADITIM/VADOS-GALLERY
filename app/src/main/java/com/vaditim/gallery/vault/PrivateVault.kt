@@ -14,8 +14,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.resume
 
-data class PrivateGroup(val name: String, val directory: File, val items: List<MediaItem>) {
-    val cover: MediaItem? get() = items.lastOrNull()
+data class PrivateGroup(val name: String, val directory: File, val items: List<MediaItem>, val coverFileName: String? = null) {
+    val cover: MediaItem? get() = items.firstOrNull { File(it.absolutePath).name == coverFileName } ?: items.lastOrNull()
 }
 
 data class PrivateContents(val groups: List<PrivateGroup>, val favorites: List<MediaItem>)
@@ -32,9 +32,15 @@ class PrivateVault(private val context: Context) {
         val favoriteKeys = readFavoriteKeys()
         val groups = ROOT.listFiles { file -> file.isDirectory }
             .orEmpty()
-            .map { directory -> PrivateGroup(directory.name, directory, readItems(directory, favoriteKeys)) }
+            .map { directory -> PrivateGroup(directory.name, directory, readItems(directory, favoriteKeys), File(directory, COVER_FILE).takeIf { it.isFile }?.readText()?.trim()) }
             .sortedBy { it.name.lowercase() }
         PrivateContents(groups, groups.flatMap { group -> group.items.filter { it.isFavorite } }.sortedBy { it.timestampMillis })
+    }
+
+    // The chosen cover is a one-line dot file inside the group, so it travels with the group and is never listed as a photo.
+    suspend fun setCover(groupName: String, item: MediaItem) = withContext(Dispatchers.IO) {
+        File(ROOT, groupName).takeIf { it.isDirectory }?.let { File(it, COVER_FILE).writeText(File(item.absolutePath).name) }
+        Unit
     }
 
     suspend fun createGroup(name: String): File = withContext(Dispatchers.IO) {
@@ -178,6 +184,7 @@ class PrivateVault(private val context: Context) {
     private fun stableId(file: File): Long = (file.absolutePath.hashCode().toLong() shl 32) or (file.absolutePath.length.toLong() and 0xFFFFFFFFL)
 
     companion object {
+        private const val COVER_FILE = ".cover"
         val ROOT = File(Environment.getExternalStorageDirectory(), ".vados-private")
     }
 }

@@ -112,7 +112,7 @@ fun MediaGrid(
                 onClick = {
                     if (selection != null && selection.isActive) selection.onToggle(item) else onOpen(index)
                 },
-                onLongClick = selection?.let { { it.onToggle(item) } },
+                onLongClick = selection?.let { chosen -> { chosen.onLongPress(item) } },
             )
         }
     }
@@ -130,8 +130,18 @@ fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<Stri
     }
 
 // What a grid needs to know about multi-select: which tiles are in it, and how to toggle one. A long press toggles (and so starts a selection); once one is active, a tap toggles too.
-class Selection(val selectedIds: Set<Long>, private val isAlwaysActive: Boolean = false, val onToggle: (MediaItem) -> Unit) {
+// `onStart`, when given, handles the long press that would begin a selection (an album opens a menu instead); once a selection is active, long press toggles like a tap.
+class Selection(
+    val selectedIds: Set<Long>,
+    private val isAlwaysActive: Boolean = false,
+    private val onStart: ((MediaItem) -> Unit)? = null,
+    val onToggle: (MediaItem) -> Unit,
+) {
     val isActive: Boolean get() = isAlwaysActive || selectedIds.isNotEmpty()
+
+    fun onLongPress(item: MediaItem) {
+        if (!isActive && onStart != null) onStart(item) else onToggle(item)
+    }
 }
 
 @Composable

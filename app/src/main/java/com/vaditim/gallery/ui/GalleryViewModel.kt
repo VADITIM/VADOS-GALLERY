@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.vaditim.gallery.access.AccessState
 import com.vaditim.gallery.access.StorageAccess
 import com.vaditim.gallery.media.Album
+import com.vaditim.gallery.media.CoverStore
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
 import com.vaditim.gallery.media.groupIntoAlbums
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -39,9 +41,11 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .flatMapLatest { hasFileAccess -> if (hasFileAccess) repository.observeLibrary() else flowOf(emptyList()) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val coverStore = CoverStore(application)
+    private val coverIds = MutableStateFlow(coverStore.read())
+
     val albums: StateFlow<List<Album>> =
-        library
-            .map { groupIntoAlbums(it) }
+        combine(library, coverIds) { items, covers -> groupIntoAlbums(items, covers) }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -63,6 +67,18 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
     fun refreshPrivate() {
         if (!mutableAccess.value.hasFileAccess) return
         viewModelScope.launch { mutablePrivate.value = vault.read() }
+    }
+
+    fun setAlbumCover(albumId: Long, item: MediaItem) {
+        coverStore.set(albumId, item.id)
+        coverIds.value = coverStore.read()
+    }
+
+    fun setGroupCover(groupName: String, item: MediaItem) {
+        viewModelScope.launch {
+            vault.setCover(groupName, item)
+            mutablePrivate.value = vault.read()
+        }
     }
 
     fun unlockPrivate() {
