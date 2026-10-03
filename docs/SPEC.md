@@ -205,3 +205,5 @@ review, which is not a goal.
 5. **Grid polish** — pinch to change columns, the date scrubber, the trash row.
 6. **Default app** — verify the camera hand-off, open an external photo inside its album.
 7. **Private** *(done)* — fingerprint-locked groups at the end of Albums.
+
+- **Settings.** A button at the top right of every view opens a sheet: blur amount and background opacity of the glass (the glass is black under the blur), default column count, month headers on/off, autoplay of videos on/off. Stored in preferences (`Settings.kt`) and applied at once.

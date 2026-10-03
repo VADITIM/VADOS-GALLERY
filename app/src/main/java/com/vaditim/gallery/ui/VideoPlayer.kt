@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.Settings
 import android.view.TextureView
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -90,7 +91,7 @@ fun rememberVideoState(item: MediaItem?): VideoState? {
                 setAudioAttributes(AudioAttributes.DEFAULT, true)
                 setMediaItem(PlayerMediaItem.fromUri(item.uri))
                 prepare()
-                playWhenReady = true
+                playWhenReady = Settings.autoplayVideos
             },
         )
     }

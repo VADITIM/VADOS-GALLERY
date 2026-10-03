@@ -110,7 +110,7 @@ private val AlbumsPlace.isPrivate: Boolean
 private enum class AppSheet {
     NONE,
     NEW_ALBUM,
-    SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
+    SETTINGS, SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
     ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP,
     GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
     PRIVATE_NEW_GROUP,
@@ -411,6 +411,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     albumsPlace = if (place is AlbumsPlace.Folder) AlbumsPlace.Folders else AlbumsPlace.PrivateGroups
                 },
                 onCancelSelection = clearSelection,
+                onSettings = { sheet = AppSheet.SETTINGS },
             )
 
             val barModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp)
@@ -504,6 +505,14 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 }
             }
+
+            SettingsSheet(
+                visible = sheet == AppSheet.SETTINGS,
+                onDismiss = { sheet = AppSheet.NONE },
+                onColumnsChanged = { columns ->
+                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory) + albumMemories.values + privateMemories.values).forEach { it.columns = columns }
+                },
+            )
 
             // A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
             OverlaySheet(visible = sheet == AppSheet.GROUP_MENU, label = sheetGroup?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
@@ -703,7 +712,7 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 
 // The top layer: the month you are looking at, the way back out of a folder, or — while selecting — the count and the way out of the selection.
 @Composable
-private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit) {
+private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -726,6 +735,10 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd:
                 Box(Modifier.padding(start = 8.dp).pressable(onClick = onAdd).glass(Shapes.capsule).padding(horizontal = 16.dp, vertical = 11.dp)) {
                     BasicText("+ Add", style = Type.cardTitle.copy(color = LocalAccent.current))
                 }
+            }
+            Box(Modifier.weight(1f))
+            Box(Modifier.pressable(onClick = onSettings).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 11.dp)) {
+                SettingsIcon(Palette.textBright)
             }
         }
     }

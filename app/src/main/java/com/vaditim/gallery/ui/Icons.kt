@@ -117,3 +117,18 @@ fun SpeedArrows(isReverse: Boolean, count: Int, color: Color, size: Dp = 14.dp) 
         }
     }
 }
+
+// Two sliders: the settings glyph.
+@Composable
+fun SettingsIcon(color: Color, size: Dp = 22.dp) {
+    Canvas(Modifier.size(size)) {
+        val unit = this.size.minDimension / 24f
+        val stroke = Stroke(2f * unit, cap = StrokeCap.Round)
+        drawLine(color, Offset(3f * unit, 8f * unit), Offset(21f * unit, 8f * unit), 2f * unit, StrokeCap.Round)
+        drawLine(color, Offset(3f * unit, 16f * unit), Offset(21f * unit, 16f * unit), 2f * unit, StrokeCap.Round)
+        drawCircle(Color.Black, 3.6f * unit, Offset(8f * unit, 8f * unit))
+        drawCircle(color, 3.6f * unit, Offset(8f * unit, 8f * unit), style = stroke)
+        drawCircle(Color.Black, 3.6f * unit, Offset(16f * unit, 16f * unit))
+        drawCircle(color, 3.6f * unit, Offset(16f * unit, 16f * unit), style = stroke)
+    }
+}

@@ -9,6 +9,11 @@ import com.vaditim.gallery.media.ThumbnailFetcher
 import com.vaditim.gallery.media.ThumbnailKeyer
 
 class GalleryApplication : Application(), SingletonImageLoader.Factory {
+    override fun onCreate() {
+        super.onCreate()
+        Settings.init(this)
+    }
+
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             .components {

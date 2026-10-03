@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.Settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -68,7 +69,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private const val DEFAULT_COLUMNS = 4
 private const val MIN_COLUMNS = 1
 private const val MAX_COLUMNS = 5
 
@@ -83,7 +83,7 @@ class GridMemory {
     val state = LazyGridState()
     var isPositioned = false
     var knownCount = 0
-    var columns by mutableIntStateOf(DEFAULT_COLUMNS)
+    var columns by mutableIntStateOf(Settings.defaultColumns)
 }
 
 // A grid is photos with a month header in front of each month's first photo. `index` is the photo's place in the original list, which is what the viewer opens at.
@@ -97,7 +97,7 @@ fun buildEntries(items: List<MediaItem>): List<GridEntry> {
     var currentMonth: YearMonth? = null
     items.forEachIndexed { index, item ->
         val month = YearMonth.from(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault()))
-        if (month != currentMonth) {
+        if (month != currentMonth && Settings.showMonthHeaders) {
             entries += GridEntry.Header(MONTH_FORMAT.format(month), "month-$month")
             currentMonth = month
         }
@@ -119,7 +119,7 @@ fun MediaGrid(
     emptyCaption: String = "Nothing here yet.",
 ) {
     val state = memory.state
-    val entries = remember(items) { buildEntries(items) }
+    val entries = remember(items, Settings.showMonthHeaders) { buildEntries(items) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -290,7 +290,7 @@ private fun Modifier.dragSelect(
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<String> {
-    val entries = remember(items) { buildEntries(items) }
+    val entries = remember(items, Settings.showMonthHeaders) { buildEntries(items) }
     return remember(entries, memory) {
         derivedStateOf {
             when (val entry = entries.getOrNull(memory.state.firstVisibleItemIndex)) {

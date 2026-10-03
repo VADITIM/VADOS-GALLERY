@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import com.vaditim.gallery.Settings
 import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -18,15 +19,16 @@ import dev.chrisbanes.haze.hazeEffect
 val LocalHazeState = staticCompositionLocalOf<HazeState?> { null }
 
 object Glass {
-    fun style(ground: Color = Palette.ground): HazeStyle =
-        HazeStyle(backgroundColor = ground, tint = HazeTint(Palette.glassTint), blurRadius = 26.dp, noiseFactor = 0.03f)
+    // Black under the blur, with the amount of blur and of black both set in Settings.
+    fun style(): HazeStyle =
+        HazeStyle(backgroundColor = Color.Black, tint = HazeTint(Color.Black.copy(alpha = Settings.glassOpacity)), blurRadius = Settings.blurDp.dp, noiseFactor = 0.03f)
 }
 
 @Composable
 fun Modifier.glass(shape: Shape, ground: Color = Palette.ground): Modifier {
     val state = LocalHazeState.current
     val clipped = this.clip(shape)
-    return if (state == null) clipped.background(Palette.panel) else clipped.hazeEffect(state, Glass.style(ground))
+    return if (state == null) clipped.background(ground) else clipped.hazeEffect(state, Glass.style())
 }
 
 // The status-bar edge: full blur at the top of the screen, none where it meets the content, so the grid dissolves under the clock instead of being cut by a bar.
