@@ -320,13 +320,13 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                         if (isPinching) isDirectionDecided = true
                         if (!isPinching && scale <= 1.01f && !isDirectionDecided || isVerticalSwipe) {
                             val change = event.changes.first()
-                            total += change.positionChange()
+                            total += change.position - change.previousPosition
                             if (!isDirectionDecided && total.getDistance() > viewConfiguration.touchSlop) {
                                 isDirectionDecided = true
                                 isVerticalSwipe = kotlin.math.abs(total.y) > kotlin.math.abs(total.x) * 1.5f
                             }
                             if (isVerticalSwipe) {
-                                swipeOffset += change.positionChange().y
+                                swipeOffset += change.position.y - change.previousPosition.y
                                 change.consume()
                             }
                         } else if (isPinching || scale > 1.01f) {
