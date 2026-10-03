@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.geometry.isFinite
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.gestures.awaitEachGesture

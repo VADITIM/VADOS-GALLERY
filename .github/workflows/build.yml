@@ -27,7 +27,9 @@ jobs:
 
       - name: Build APK
         run: |
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease 2>&1 | tee build.log
+          # The Kotlin errors are repeated here, last, so a failed run can be read from its tail instead of from the Gradle stack trace.
+          if [ "${PIPESTATUS[0]}" -ne 0 ]; then echo "=== COMPILER ERRORS ==="; grep -E '^e: |error:' build.log; exit 1; fi
           version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
           echo "VERSION=$version" >> "$GITHUB_ENV"
           mkdir -p out
