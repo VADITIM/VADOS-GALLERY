@@ -19,4 +19,6 @@ There is no Android SDK in the cloud sessions. CI (`.github/workflows/build.yml`
 then read the run. A change is verified only on the phone.
 
 Work directly on `master`: commit and push there, no feature branches. Every push to `master` publishes
-the APK as the `debug-latest` release.
+the APK as the release `v<versionName>`.
+
+Every change raises `versionName` in `app/build.gradle.kts` (and `versionCode`): 0.1, 0.2, and so on. The release tag comes from it.

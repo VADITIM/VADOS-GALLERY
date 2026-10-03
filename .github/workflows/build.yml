@@ -5,7 +5,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Two pushes in quick succession both publish debug-latest; without this the older run can finish last and overwrite the newer APK.
+# Two pushes in quick succession both publish the same release; without this the older run can finish last and overwrite the newer APK.
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -25,25 +25,27 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APKs
+      - name: Build APK
         run: |
           ./gradlew assembleRelease --stacktrace
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
           mkdir -p out
-          cp app/build/outputs/apk/release/app-release.apk out/vados-gallery.apk
+          cp app/build/outputs/apk/release/app-release.apk "out/vados-gallery-v$version.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: vados-gallery
           path: out/
 
-      # A rolling pre-release, so the newest build on master is always one download away from the phone. The tag keeps its old name so the link already on the phone keeps working.
-      - name: Publish rolling release
+      # One release per version, tagged v<versionName>. Bump versionName in app/build.gradle.kts with every change; a push that keeps the version replaces that release.
+      - name: Publish release
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete debug-latest --cleanup-tag --yes || true
-          gh release create debug-latest out/vados-gallery.apk \
-            --prerelease --target "$GITHUB_SHA" \
-            --title "Latest build (master)" \
-            --notes "Built from $GITHUB_SHA. Install vados-gallery.apk, the optimised build."
+          gh release delete "v$VERSION" --cleanup-tag --yes || true
+          gh release create "v$VERSION" "out/vados-gallery-v$VERSION.apk" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes "Built from $GITHUB_SHA. Install vados-gallery-v$VERSION.apk."

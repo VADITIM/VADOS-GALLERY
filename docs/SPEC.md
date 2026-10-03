@@ -82,7 +82,7 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
 - **Private favourites.** A favourite that goes into Private stays a favourite — but only as a
   *private* favourite, kept in the private folder itself (`.favorites`), never in MediaStore, so it can
   never appear in the normal FAVORITES. Moving it back out to an album makes it an ordinary favourite
-  again. Private has its own **Private Favorites** card, first among the groups.
+  again. Private opens with a **Favorites** folder, always the very first row, above Today's selection.
 - **"Today's selection for you 😏"** — a large card at the top of Private showing one random private
   favourite; a new pick every time Private is entered, kept while scrolling.
 - **Screenshots and the recent-apps preview are blocked** while anything private is on screen.

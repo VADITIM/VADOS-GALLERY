@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -89,12 +91,14 @@ fun PrivateGroupsScreen(
                 MicroLabel("${groups.size} groups", Modifier.padding(top = 6.dp))
             }
         }
+        item(span = { GridItemSpan(maxLineSpan) }, contentType = "favorites") {
+            FavoritesFolder(favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites)
+        }
         if (favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
                 val todaysIndex = selectionSeed % favorites.size
                 TodaysSelection(favorites[todaysIndex], onClick = { onOpenSelection(todaysIndex) })
             }
-            item(contentType = "group") { CoverCard("Private Favorites", favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites) }
         }
         items(groups, key = { it.directory.absolutePath }, contentType = { "group" }) { group ->
             CoverCard(group.name, group.cover, group.items.size, onClick = { onOpen(group) }, onLongClick = { onLongPress(group) })
@@ -127,6 +131,32 @@ private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
         ) {
             MicroLabel("Today's selection")
             BasicText("for you 😏", style = Type.cardTitle, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+// The private favourites, always the first thing in Private: a wide row, so it reads as a folder apart from the groups below it.
+@Composable
+private fun FavoritesFolder(cover: MediaItem?, count: Int, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val request = remember(cover?.uri) { cover?.let { ImageRequest.Builder(context).data(it.uri).size(COVER_PIXELS).build() } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressable(onClick = onClick, pressedScale = 0.97f)
+            .clip(Shapes.panel)
+            .background(Palette.panel)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(56.dp).clip(Shapes.tile).background(Palette.sunken)) {
+            if (request != null) {
+                AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+        }
+        Column(Modifier.padding(start = 14.dp)) {
+            BasicText("Favorites", style = Type.cardTitle.copy(color = LocalAccent.current))
+            BasicText(count.toString(), style = Type.value, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

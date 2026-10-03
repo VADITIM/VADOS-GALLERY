@@ -10,11 +10,11 @@ the VAS design system.
 ## Install
 
 Every push to `master` publishes the APK at
-**[releases/debug-latest](https://github.com/VADITIM/VADOS-GALLERY/releases/tag/debug-latest)**.
-Install **`vados-gallery.apk`**, the optimised build. Only the release build is published.
+**[releases/latest](https://github.com/VADITIM/VADOS-GALLERY/releases/latest)**.
+Install **`vados-gallery-v<version>.apk`**, the optimised build. Only the release build is published.
 
 ```bash
-adb install -r vados-gallery.apk
+adb install -r vados-gallery-v0.1.apk
 ```
 
 Builds share one committed debug key, so a new build installs over the old one.
