@@ -5,6 +5,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Two pushes in quick succession both publish debug-latest; without this the older run can finish last and overwrite the newer APK.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   assemble:
     runs-on: ubuntu-latest
