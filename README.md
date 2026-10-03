@@ -11,8 +11,7 @@ the VAS design system.
 
 Every push to `master` publishes the APK at
 **[releases/debug-latest](https://github.com/VADITIM/VADOS-GALLERY/releases/tag/debug-latest)**.
-Install **`vados-gallery.apk`**, the optimised build. `vados-gallery-debug.apk` is the same code
-unoptimised, only for debugging with logcat.
+Install **`vados-gallery.apk`**, the optimised build. Only the release build is published.
 
 ```bash
 adb install -r vados-gallery.apk

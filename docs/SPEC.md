@@ -84,7 +84,7 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
   never appear in the normal FAVORITES. Moving it back out to an album makes it an ordinary favourite
   again. Private has its own **Private Favorites** card, first among the groups.
 - **"Today's selection for you 😏"** — a large card at the top of Private showing one random private
-  favourite; the pick is seeded by the date, so it stays the same all day and changes at midnight.
+  favourite; a new pick every time Private is entered, kept while scrolling.
 - **Screenshots and the recent-apps preview are blocked** while anything private is on screen.
 - **Nothing private is visible anywhere else on the phone.** The folder carries `.nomedia`, so
   MediaStore never indexes it and no gallery can list it; this app's own library query also excludes

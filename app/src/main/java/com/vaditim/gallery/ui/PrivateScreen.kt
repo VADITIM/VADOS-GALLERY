@@ -34,7 +34,6 @@ import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.vault.PrivateGroup
-import java.time.LocalDate
 import kotlin.random.Random
 
 private const val COVER_PIXELS = 512
@@ -69,6 +68,8 @@ fun PrivateGroupsScreen(
 ) {
     BackHandler(onBack = onBack)
     val state = rememberLazyGridState()
+    // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
+    val selectionSeed = remember { Random.nextInt(Int.MAX_VALUE) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         state = state,
@@ -90,7 +91,7 @@ fun PrivateGroupsScreen(
         }
         if (favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
-                val todaysIndex = remember(favorites.size) { todaysPick(favorites.size) }
+                val todaysIndex = selectionSeed % favorites.size
                 TodaysSelection(favorites[todaysIndex], onClick = { onOpenSelection(todaysIndex) })
             }
             item(contentType = "group") { CoverCard("Private Favorites", favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites) }
@@ -101,9 +102,6 @@ fun PrivateGroupsScreen(
         item(contentType = "new-group") { AddCard("New group", onClick = onNewGroup) }
     }
 }
-
-// One private favourite a day, the same one all day: the day number seeds the pick, so it changes at midnight and not on every visit.
-private fun todaysPick(count: Int): Int = Random(LocalDate.now().toEpochDay()).nextInt(count)
 
 @Composable
 private fun TodaysSelection(item: MediaItem, onClick: () -> Unit) {
