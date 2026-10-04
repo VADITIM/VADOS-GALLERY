@@ -250,3 +250,4 @@ review, which is not a goal.
 - **Open groups stay open.** Album groups opened on the albums list stay open after looking at an album and going back. A swipe to the left on an opened group closes it.
 - **Readable sheets.** Grey text steps and borders are kept bright enough to read on the ground; rows in sheets and settings have dividers, and values show in the accent.
 - **Review layout.** Choosing where to begin and swiping share one layout: the photo fills a rounded box, the decision buttons sit under it, and the date, position and progress bar below. Tapping the left half deletes, the right half keeps, swiping down takes back the last decision; swiping sideways still decides.
+- **Review card and upcoming photos.** The review card keeps a 9:19 shape inside the available room. The marked count sits above the position and always keeps its line. The next three photos are overlapped in the card's top right corner, nearest in front.

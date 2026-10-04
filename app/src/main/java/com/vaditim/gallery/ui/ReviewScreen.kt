@@ -1,6 +1,11 @@
 package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.key
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.expandVertically
@@ -65,6 +70,13 @@ private const val DECIDE_SHARE = 0.28f
 // Degrees the photo leans per screen width it has been dragged.
 private const val LEAN_DEGREES = 14f
 private const val NEXT_SCALE = 0.92f
+// The photo card keeps the shape of the phone's screen, whatever room is left.
+private const val CARD_RATIO = 9f / 19f
+// How many photos ahead show in the corner.
+private const val UPCOMING_COUNT = 3
+private val UPCOMING_WIDTH = 54.dp
+private val UPCOMING_HEIGHT = 72.dp
+private val UPCOMING_STEP = 16.dp
 // How far down a swipe goes to take back the last decision.
 private val UNDO_DRAG = 80.dp
 private val REVIEW_STAMP = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
@@ -135,10 +147,10 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     ) {
         // One layout for choosing and for swiping: the photo fills its container whatever its shape, and only what sits under it changes.
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp)) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(
                 Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+                    .aspectRatio(CARD_RATIO)
                     .clip(Shapes.viewerPhoto)
                     .background(Palette.sunkenDeep)
                     .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) },
@@ -205,7 +217,9 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                             verdictStrength = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f),
                         )
                     }
+                    UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT), Modifier.align(Alignment.TopEnd).padding(12.dp))
                 }
+            }
             }
 
             // Done deletes everything marked so far in one go. Inside Private that is final, so there it takes a second tap.
@@ -312,6 +326,8 @@ private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int
     val accent = LocalAccent.current
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (shown != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(shown.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH))
+        // The room is kept even when nothing is marked, so the lines below never jump.
+        BasicText("$markedCount marked", style = Type.value.copy(color = Palette.danger), modifier = Modifier.graphicsLayer { alpha = if (markedCount > 0) 1f else 0f })
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BasicText("$number", style = Type.title.copy(color = accent))
             BasicText("/ $total", style = Type.title.copy(color = Palette.textMuted))
@@ -321,7 +337,6 @@ private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int
         Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderStrong)) {
             Box(Modifier.fillMaxWidth(if (total > 0) number.toFloat() / total else 0f).height(4.dp).clip(Shapes.capsule).background(accent))
         }
-        if (markedCount > 0) BasicText("$markedCount marked", style = Type.value.copy(color = Palette.danger))
     }
 }
 
@@ -372,5 +387,34 @@ private fun ReviewCard(item: MediaItem, modifier: Modifier = Modifier, verdict: 
 private fun ReviewChip(text: String, color: androidx.compose.ui.graphics.Color = Palette.textBright) {
     Box(Modifier.clip(Shapes.capsule).background(Palette.panelSolid).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         BasicText(text, style = Type.microLabel.copy(color = color), maxLines = 1)
+    }
+}
+
+// The next photos ahead, overlapped in the corner with the nearest in front, so what comes after this one can be weighed already.
+@Composable
+private fun UpcomingPile(items: List<MediaItem>, modifier: Modifier = Modifier) {
+    if (items.isEmpty()) return
+    val context = LocalContext.current
+    Box(modifier.size(width = UPCOMING_WIDTH + UPCOMING_STEP * (UPCOMING_COUNT - 1), height = UPCOMING_HEIGHT)) {
+        items.asReversed().forEachIndexed { reversed, item ->
+            val depth = items.size - 1 - reversed
+            key(item.id) {
+                val request = remember(item.uri) {
+                    ImageRequest.Builder(context).data(item.uri).apply { if (item.isVideo && item.uri.scheme != "content") decoderFactory(VideoFrameDecoder.Factory()) }.build()
+                }
+                AsyncImage(
+                    model = request,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = -UPCOMING_STEP * depth)
+                        .size(UPCOMING_WIDTH, UPCOMING_HEIGHT)
+                        .graphicsLayer { rotationZ = -4f * depth }
+                        .clip(Shapes.tile)
+                        .border(1.dp, Palette.borderControl, Shapes.tile),
+                )
+            }
+        }
     }
 }

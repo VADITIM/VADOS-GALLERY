@@ -1,3 +1,3 @@
-- Reviewing uses the same layout as the Start fresh / Continue screen: the photo fills its own box and never pushes the buttons.
-- The choice buttons slide away and the decision buttons come in under the photo, with the date and progress below.
-- Tap the left half of the photo to delete, the right half to keep, swipe down to take back the last decision.
+- Review: the marked count sits above the position and keeps its room, so nothing moves up when it appears.
+- Review: the photo card keeps a tall phone-screen shape (9:19) instead of stretching to whatever room is left.
+- Review: the next three photos are stacked in the top right corner so you can prepare for them.
