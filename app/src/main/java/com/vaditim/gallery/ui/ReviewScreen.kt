@@ -77,8 +77,8 @@ private const val UPCOMING_COUNT = 3
 private val UPCOMING_WIDTH = 54.dp
 private val UPCOMING_HEIGHT = 72.dp
 private val UPCOMING_STEP = 16.dp
-// How far down a swipe goes to take back the last decision.
-private val UNDO_DRAG = 80.dp
+// A swipe down of this share of the card brings the last photo all the way back; past half of it, letting go takes the decision back.
+private const val UNDO_SHARE = 0.6f
 private val REVIEW_STAMP = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 // One photo at a time, newest first: swipe left to let it go, right to keep it. Nothing is touched until the end, where the photos let go are deleted in one go — to the trash, or for good inside Private, which is why that last step is always shown.
@@ -99,6 +99,8 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     var isFinishing by remember { mutableStateOf(false) }
     var isDoneArmed by remember { mutableStateOf(false) }
     val drag = remember { Animatable(0f) }
+    // How far the last decided photo has come back down over the current one, 0 to 1.
+    val comeback = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val marked = carriedMarks + decisions.filter { it.second }.map { it.first }
     val position = (startIndex ?: 0) + decisions.size
@@ -183,7 +185,11 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                                 .pointerInput(position) {
                                     var across = 0f
                                     var down = 0f
-                                    val settle = { scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }; Unit }
+                                    val settle = {
+                                        scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }
+                                        scope.launch { comeback.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) }
+                                        Unit
+                                    }
                                     detectDragGestures(
                                         onDragStart = {
                                             across = 0f
@@ -191,10 +197,13 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                                         },
                                         onDragEnd = {
                                             when {
-                                                down > UNDO_DRAG.toPx() && down > abs(across) -> {
+                                                // Past halfway the last photo finishes coming back from where the finger left it, and only then is the decision taken back.
+                                                comeback.value >= 0.5f -> scope.launch {
+                                                    comeback.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
                                                     undo()
-                                                    settle()
+                                                    comeback.snapTo(0f)
                                                 }
+                                                down > abs(across) -> settle()
                                                 drag.value < -width * DECIDE_SHARE -> decide(true)
                                                 drag.value > width * DECIDE_SHARE -> decide(false)
                                                 else -> settle()
@@ -205,7 +214,12 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                                         change.consume()
                                         across += amount.x
                                         down += amount.y
-                                        if (abs(down) <= abs(across)) scope.launch { drag.snapTo(drag.value + amount.x) }
+                                        if (abs(down) <= abs(across)) {
+                                            scope.launch { drag.snapTo(drag.value + amount.x) }
+                                        } else if (decisions.isNotEmpty()) {
+                                            // The last photo decided comes down from above with the finger.
+                                            scope.launch { comeback.snapTo((down / (size.height * UNDO_SHARE)).coerceIn(0f, 1f)) }
+                                        }
                                     }
                                 },
                             // The verdict shows on the photo as it leans: red for letting go, the accent for keeping.
@@ -216,6 +230,9 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                             },
                             verdictStrength = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f),
                         )
+                    }
+                    decisions.lastOrNull()?.first?.let { previous ->
+                        if (comeback.value > 0f) ReviewCard(previous, Modifier.graphicsLayer { translationY = -(1f - comeback.value) * size.height })
                     }
                     UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT), Modifier.align(Alignment.TopEnd).padding(12.dp))
                 }

@@ -2,6 +2,10 @@ package com.vaditim.gallery.ui
 
 import com.vaditim.gallery.AlbumStack
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -49,27 +53,36 @@ import com.vaditim.gallery.vault.PrivateGroup
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, content: @Composable () -> Unit) {
+    // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
+    val isRevealing by remember { derivedStateOf { reveal() > 0f } }
+    val isFollowing = { !visible && reveal() > 0f }
     AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
+        visible = visible || isRevealing,
+        // Already on screen under the finger, so it does not play its own arrival on top.
+        enter = if (isRevealing && !visible) EnterTransition.None else fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
         exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)),
     ) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color(0x4D000000))
+                .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f))) }
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter,
         ) {
             Column(
                 Modifier
                     .animateEnterExit(
-                        enter = slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut)) { it / 6 } +
-                            scaleIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut), initialScale = 0.96f),
+                        enter = if (isRevealing && !visible) {
+                            EnterTransition.None
+                        } else {
+                            slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut)) { it / 6 } +
+                                scaleIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut), initialScale = 0.96f)
+                        },
                         exit = slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) { it / 8 } +
                             scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.98f),
                     )
+                    .graphicsLayer { if (isFollowing()) translationY = (1f - reveal()) * (size.height + 12.dp.toPx()) }
                     .navigationBarsPadding()
                     .padding(12.dp)
                     .fillMaxWidth()
@@ -83,6 +96,8 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
         }
     }
 }
+
+private val SCRIM = Color(0x4D000000)
 
 // A hairline under a row of a sheet, inset to the row's text, so rows read as separate lines.
 fun Modifier.rowDivider(): Modifier = drawBehind {

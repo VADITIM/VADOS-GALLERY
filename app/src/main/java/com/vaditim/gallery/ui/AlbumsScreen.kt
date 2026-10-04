@@ -1,6 +1,9 @@
 package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.animation.core.Animatable
@@ -160,7 +163,7 @@ fun AlbumsScreen(
 
 // Extra room above and below a group, so groups read as separate rows.
 private val GROUP_GAP = 8.dp
-// How far a swipe to the left goes before it closes an opened group.
+// How far an opened group has to be swiped left for letting go to close it.
 private val SWIPE_CLOSE = 72.dp
 // Opened, a group lays its albums out this many to a row, whatever the album columns are.
 private const val GROUP_COLUMNS = 3
@@ -248,25 +251,28 @@ private fun GroupRow(
 
     val context = LocalContext.current
     val currentOnOpenChange by rememberUpdatedState(onOpenChange)
+    val slide = remember(stack.name) { Animatable(0f) }
+    val scope = rememberCoroutineScope()
     Layout(
         modifier = modifier
             .jiggle(stack.key, isMovable, pivot = LIST_COVER / 2)
-            // A swipe to the left lays an opened group back down.
+            // The opened group follows a swipe to the left; let go far enough and it lays itself back down, otherwise it slides home.
+            .graphicsLayer { translationX = slide.value }
             .then(
                 if (!isOpen || isRearranging) Modifier else Modifier.pointerInput(stack.name) {
-                    var travelled = 0f
+                    val home = { scope.launch { slide.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) }; Unit }
                     detectHorizontalDragGestures(
-                        onDragStart = { travelled = 0f },
-                        onDragEnd = { travelled = 0f },
-                        onDragCancel = { travelled = 0f },
+                        onDragEnd = {
+                            if (slide.value < -SWIPE_CLOSE.toPx()) {
+                                Haptics.tick(context)
+                                currentOnOpenChange(false)
+                            }
+                            home()
+                        },
+                        onDragCancel = { home() },
                     ) { change, amount ->
                         change.consume()
-                        travelled += amount
-                        if (travelled < -SWIPE_CLOSE.toPx()) {
-                            travelled = 0f
-                            Haptics.tick(context)
-                            currentOnOpenChange(false)
-                        }
+                        scope.launch { slide.snapTo((slide.value + amount).coerceAtMost(0f)) }
                     }
                 },
             ),

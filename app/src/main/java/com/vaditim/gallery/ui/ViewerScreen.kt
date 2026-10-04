@@ -93,6 +93,8 @@ private const val MAX_ZOOM = 5f
 private const val PULL_RANGE = 0.4f
 // The share of the full pull by which the buttons have left completely.
 private const val CHROME_PULL_SHARE = 0.35f
+// A swipe up of this share of the screen height has raised the details all the way.
+private const val LIFT_RANGE = 0.3f
 // How many of its own heights a button travels on its way out.
 private const val CHROME_TRAVEL = 1.6f
 private const val HOLD_SPEED = 1.5f
@@ -136,6 +138,8 @@ fun ViewerScreen(
     var cropping by remember { mutableStateOf<MediaItem?>(null) }
     // How far a swipe down has gone, 0 to 1: the buttons slide out with it and come back as it is let go.
     var pull by remember { mutableFloatStateOf(0f) }
+    // How far a swipe up has raised the details, 0 to 1: the sheet rises with the finger rather than appearing on release.
+    var lift by remember { mutableFloatStateOf(0f) }
     val isChromeShown = isChromeVisible && isChromeAllowed
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
@@ -170,6 +174,7 @@ fun ViewerScreen(
                         pull = fraction
                         onPull(fraction)
                     },
+                    onLift = { lift = it },
                     onRatio = { onPhotoRatio(items[page].id, it) },
                 )
             }
@@ -181,7 +186,7 @@ fun ViewerScreen(
                 // No back button: the system back gesture or a swipe down closes the viewer.
                 horizontalArrangement = Arrangement.End,
             ) {
-                ChromePiece(isChromeShown, isFromTop = true, order = 0, pull = { pull }) {
+                ChromePiece(isChromeShown, isFromTop = true, order = 0, pull = { maxOf(pull, lift) }) {
                     Row(
                         Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -198,8 +203,8 @@ fun ViewerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0, pull = { pull }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
-                ChromePiece(isChromeShown, isFromTop = false, order = 1, pull = { pull }) {
+                if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
+                ChromePiece(isChromeShown, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }) {
                 Row(
                     Modifier
                         .glass(Shapes.capsule, Palette.viewerGround)
@@ -330,7 +335,7 @@ fun ViewerScreen(
                 }
             }
 
-            OverlaySheet(visible = overlay == Overlay.DETAILS, label = "DETAILS", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
+            OverlaySheet(visible = overlay == Overlay.DETAILS, label = "DETAILS", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }, reveal = { lift }) {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicText(current.name, style = Type.caption.copy(color = Palette.textBright))
                     BasicText(formatStamp(current), style = Type.value)
@@ -351,7 +356,7 @@ fun ViewerScreen(
 
 // Pinch or double-tap zooms a photo. While it is zoomed the page keeps every drag for panning, so the pager only swipes at normal size.
 @Composable
-private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onSwipeDown: () -> Unit, onSwipeUp: () -> Unit, onPull: (Float) -> Unit, onRatio: (Float) -> Unit) {
+private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onSwipeDown: () -> Unit, onSwipeUp: () -> Unit, onPull: (Float) -> Unit, onLift: (Float) -> Unit, onRatio: (Float) -> Unit) {
     val context = LocalContext.current
     val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
@@ -506,8 +511,9 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                             }
                             if (isVerticalSwipe) {
                                 swipeOffset += change.position.y - change.previousPosition.y
-                                // Only a downward pull moves anything: it is reported up so the whole viewer can shrink towards its tile as the finger goes. Swiping up changes nothing on screen until the details open.
+                                // Both directions are reported as the finger goes: down shrinks the viewer towards its tile, up raises the details.
                                 onPull((swipeOffset.coerceAtLeast(0f) / (size.height * PULL_RANGE)).coerceIn(0f, 1f))
+                                onLift((-swipeOffset / (size.height * LIFT_RANGE)).coerceIn(0f, 1f))
                                 change.consume()
                             }
                         } else if (isPinching || scale > 1.01f) {
@@ -534,12 +540,21 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                         val released = swipeOffset
                         if (released > distance) {
                             onSwipeDown()
+                        } else if (released < -distance) {
+                            // The details finish rising from where the finger left them, and only then count as open.
+                            scope.launch {
+                                val lifted = (-released / (size.height * LIFT_RANGE)).coerceIn(0f, 1f)
+                                animate(lifted, 1f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { value, _ -> onLift(value) }
+                                onSwipeUp()
+                                swipeOffset = 0f
+                                onLift(0f)
+                            }
                         } else {
-                            if (released < -distance) onSwipeUp()
                             scope.launch {
                                 animate(released, 0f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { value, _ ->
                                     swipeOffset = value
                                     onPull((value.coerceAtLeast(0f) / (size.height * PULL_RANGE)).coerceIn(0f, 1f))
+                                    onLift((-value / (size.height * LIFT_RANGE)).coerceIn(0f, 1f))
                                 }
                             }
                         }

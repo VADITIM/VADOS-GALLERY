@@ -1,3 +1,4 @@
-- Viewer: while you pull a photo down, the buttons slide out with your finger and come back as you let go, instead of jumping at a threshold.
-- Viewer: closing with a swipe down carries on smoothly from where you let go instead of jumping in size.
-- Viewer: when the photo you ended on is off screen in the grid, the grid scrolls to it as the pull starts, so the photo shrinks straight into its tile.
+- Viewer: swiping up raises the details sheet with your finger; let go early and it sinks back, past the point it finishes opening.
+- Viewer: the buttons slide away with a swipe up too, not just a swipe down.
+- Review: swiping down brings the last photo back from above as you pull; let go past halfway to undo, earlier to cancel.
+- Albums: an opened group slides left with your finger and closes when let go far enough, instead of closing mid-swipe.
