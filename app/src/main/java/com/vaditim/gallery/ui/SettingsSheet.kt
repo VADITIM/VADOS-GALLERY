@@ -57,10 +57,10 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
         if ((next * 20).toInt() != (fraction * 20).toInt()) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
         onChange(next)
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+    Column(Modifier.fillMaxWidth().rowDivider().padding(horizontal = 20.dp, vertical = 14.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             BasicText(label, style = Type.cardTitle)
-            BasicText(value, style = Type.value)
+            BasicText(value, style = Type.value.copy(color = LocalAccent.current))
         }
         Box(
             Modifier
@@ -82,7 +82,7 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
                 },
             contentAlignment = Alignment.CenterStart,
         ) {
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderStrong))
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderControl))
             Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(4.dp).clip(Shapes.capsule).background(LocalAccent.current))
         }
     }
@@ -91,19 +91,19 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
 @Composable
 private fun SettingsToggle(label: String, isOn: Boolean, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().pressable(onClick = { onChange(!isOn) }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
+        Modifier.fillMaxWidth().rowDivider().pressable(onClick = { onChange(!isOn) }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicText(label, style = Type.cardTitle)
-        Box(Modifier.size(width = 44.dp, height = 26.dp).clip(Shapes.capsule).background(if (isOn) LocalAccent.current else Palette.borderStrong)) {
+        Box(Modifier.size(width = 44.dp, height = 26.dp).clip(Shapes.capsule).background(if (isOn) LocalAccent.current else Palette.borderControl)) {
             Box(
                 Modifier
                     .padding(3.dp)
                     .size(20.dp)
                     .align(if (isOn) Alignment.CenterEnd else Alignment.CenterStart)
                     .clip(Shapes.capsule)
-                    .background(Palette.textBright),
+                    .background(if (isOn) Palette.ground else Palette.textBright),
             )
         }
     }

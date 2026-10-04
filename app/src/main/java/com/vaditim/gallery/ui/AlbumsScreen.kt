@@ -1,6 +1,8 @@
 package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -83,13 +85,14 @@ fun AlbumsScreen(
     onArrange: (paths: List<String>) -> Unit = {},
     selectedPaths: Set<String> = emptySet(),
     onToggle: (List<Album>) -> Unit = {},
+    openStacks: Set<String> = emptySet(),
+    onOpenStacksChange: (Set<String>) -> Unit = {},
 ) {
     val isPicking = selectedPaths.isNotEmpty()
     val entries = remember(albums, Settings.groupedAlbums, Settings.albumStacks) { entriesOf(albums) }
-    // Several groups can be open at once; opening one leaves the others as they are.
-    var openStacks by remember { mutableStateOf(emptySet<String>()) }
+    // Several groups can be open at once; opening one leaves the others as they are. The set lives above this screen so it survives opening an album and coming back.
     // While rearranging, back ends rearranging (the app root handles that) rather than closing groups.
-    BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging) { openStacks = emptySet() }
+    BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging) { onOpenStacksChange(emptySet()) }
 
     fun arrange(moved: List<AlbumEntry>, group: String? = null, groupAlbums: List<Album> = emptyList()) = onArrange(
         moved.flatMap { entry ->
@@ -133,7 +136,7 @@ fun AlbumsScreen(
                     GroupRow(
                         stack = entry,
                         isOpen = isOpen,
-                        onOpenChange = { open -> openStacks = if (open) openStacks + entry.name else openStacks - entry.name },
+                        onOpenChange = { open -> onOpenStacksChange(if (open) openStacks + entry.name else openStacks - entry.name) },
                         isPicking = isPicking,
                         selectedPaths = selectedPaths,
                         onToggle = onToggle,
@@ -157,6 +160,8 @@ fun AlbumsScreen(
 
 // Extra room above and below a group, so groups read as separate rows.
 private val GROUP_GAP = 8.dp
+// How far a swipe to the left goes before it closes an opened group.
+private val SWIPE_CLOSE = 72.dp
 // Opened, a group lays its albums out this many to a row, whatever the album columns are.
 private const val GROUP_COLUMNS = 3
 // How much of the opening the albums' departures are spread over; each album then takes the rest to arrive.
@@ -241,8 +246,30 @@ private fun GroupRow(
         key(album.id) { animateFloatAsState(index.toFloat(), tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "slot") }
     }
 
+    val context = LocalContext.current
+    val currentOnOpenChange by rememberUpdatedState(onOpenChange)
     Layout(
-        modifier = modifier.jiggle(stack.key, isMovable, pivot = LIST_COVER / 2),
+        modifier = modifier
+            .jiggle(stack.key, isMovable, pivot = LIST_COVER / 2)
+            // A swipe to the left lays an opened group back down.
+            .then(
+                if (!isOpen || isRearranging) Modifier else Modifier.pointerInput(stack.name) {
+                    var travelled = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { travelled = 0f },
+                        onDragEnd = { travelled = 0f },
+                        onDragCancel = { travelled = 0f },
+                    ) { change, amount ->
+                        change.consume()
+                        travelled += amount
+                        if (travelled < -SWIPE_CLOSE.toPx()) {
+                            travelled = 0f
+                            Haptics.tick(context)
+                            currentOnOpenChange(false)
+                        }
+                    }
+                },
+            ),
         content = {
             Column(Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = { if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress() })) {
                 BasicText(stack.name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)

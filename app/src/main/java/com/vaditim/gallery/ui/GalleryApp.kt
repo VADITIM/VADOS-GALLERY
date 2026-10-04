@@ -239,6 +239,8 @@ private fun Library(viewModel: GalleryViewModel) {
         val order = Settings.groupOrder
         privateContents.groups.sortedBy { group -> order.indexOf(group.name).let { if (it < 0) Int.MAX_VALUE else it } }
     }
+    // Album groups left open stay open while an album from one of them is looked at.
+    var openAlbumStacks by remember { mutableStateOf(emptySet<String>()) }
     val albumMemories = remember { mutableMapOf<Long, GridMemory>() }
     val locationMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateMemories = remember { mutableMapOf<String, GridMemory>() }
@@ -418,6 +420,8 @@ private fun Library(viewModel: GalleryViewModel) {
                         label = "place",
                     ) { shownPlace -> when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
+                            openStacks = openAlbumStacks,
+                            onOpenStacksChange = { openAlbumStacks = it },
                             albums = arrangedAlbums,
                             isRearranging = isRearranging,
                             onArrange = { Settings.updateAlbumOrder(it) },

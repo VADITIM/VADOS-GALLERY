@@ -1,1 +1,3 @@
-- Release signing with a dedicated key is prepared but on hold; this build is still signed as before and installs over the last one.
+- Album groups you opened stay open when you come back from an album.
+- Swipe left on an opened group to close it.
+- Easier to read: lighter grey text, stronger borders, dividers between rows in settings and sheets, values in the accent colour, clearer toggles and sliders.

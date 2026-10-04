@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import com.vaditim.gallery.vas.LocalAccent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -81,10 +84,16 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     }
 }
 
+// A hairline under a row of a sheet, inset to the row's text, so rows read as separate lines.
+fun Modifier.rowDivider(): Modifier = drawBehind {
+    val inset = 20.dp.toPx()
+    drawLine(Palette.border, Offset(inset, size.height - 0.5f), Offset(size.width - inset, size.height - 0.5f), strokeWidth = 1.dp.toPx())
+}
+
 @Composable
 fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, icon: (@Composable (Color) -> Unit)? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
+        Modifier.fillMaxWidth().rowDivider().pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -92,7 +101,7 @@ fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.text
             icon?.invoke(color)
             BasicText(text, style = Type.cardTitle.copy(color = color), maxLines = 1)
         }
-        if (trailing != null) BasicText(trailing, style = Type.value)
+        if (trailing != null) BasicText(trailing, style = Type.value.copy(color = LocalAccent.current))
     }
 }
 
