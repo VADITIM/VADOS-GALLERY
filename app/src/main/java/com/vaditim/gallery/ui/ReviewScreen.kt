@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -76,6 +77,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     var carriedMarks by remember { mutableStateOf(emptyList<MediaItem>()) }
     val decisions = remember { mutableStateListOf<Pair<MediaItem, Boolean>>() }
     var isFinishing by remember { mutableStateOf(false) }
+    var isDoneArmed by remember { mutableStateOf(false) }
     val drag = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val marked = carriedMarks + decisions.filter { it.second }.map { it.first }
@@ -93,6 +95,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         scope.launch {
             drag.animateTo(if (isDelete) -width * 1.4f else width * 1.4f, tween(Motion.STATE_MS, easing = Motion.powerTwoIn))
             decisions += order[position] to isDelete
+            isDoneArmed = false
             furthest = maxOf(furthest, position + 1)
             saveProgress(carriedMarks + decisions.filter { it.second }.map { it.first })
             Haptics.tick(context)
@@ -158,7 +161,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             }
         }
 
-        Row(
+        if (startIndex != null) Row(
             Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -171,8 +174,37 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             if (furthest > position + 1) ReviewChip("MAX $furthest", Palette.textMuted)
         }
 
+        if (startIndex != null) Column(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+        // Done deletes everything marked so far in one go. Inside Private that is final, so there it takes a second tap.
+        if (marked.isNotEmpty()) {
+            val doneColor = if (isDoneArmed) Palette.danger else Palette.textBright
+            Row(
+                Modifier
+                    .pressable(onClick = {
+                        if (isPrivate && !isDoneArmed) {
+                            isDoneArmed = true
+                        } else {
+                            onDelete(marked)
+                            saveProgress(emptyList())
+                            onClose()
+                        }
+                    })
+                    .clip(Shapes.capsule)
+                    .background(if (isDoneArmed) Palette.danger.copy(alpha = 0.22f) else Palette.panelSolid)
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TrashIcon(Palette.danger, size = 18.dp)
+                BasicText(if (isDoneArmed) "TAP AGAIN · ${marked.size}" else "DONE · ${marked.size}", style = Type.action.copy(color = doneColor))
+            }
+        }
         Row(
-            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp).clip(Shapes.capsule).background(Palette.panelSolid).padding(5.dp),
+            Modifier.clip(Shapes.capsule).background(Palette.panelSolid).padding(5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { decide(isDelete = true) }) { TrashIcon(Palette.danger) }
@@ -185,6 +217,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             }) { RestoreIcon(if (decisions.isEmpty()) Palette.textFaint else Palette.textBody) }
             if (marked.isNotEmpty()) BasicText("${marked.size}", style = Type.value.copy(color = Palette.danger), modifier = Modifier.padding(horizontal = 6.dp))
             IconButton(onClick = { decide(isDelete = false) }) { CheckIcon(LocalAccent.current) }
+        }
         }
 
         OverlaySheet(
@@ -215,30 +248,74 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             }
         }
 
-        // A folder reviewed before opens on a choice: carry on from the furthest point, or go through it again from the newest.
-        OverlaySheet(
-            visible = startIndex == null,
-            label = if (furthest >= order.size) "REVIEWED ALL ${order.size}" else "REVIEWED $furthest / ${order.size}",
-            ground = Palette.viewerGround,
-            onDismiss = onClose,
-        ) {
-            if (furthest < order.size || savedMarks.isNotEmpty()) {
-                SheetRow(
-                    if (furthest < order.size) "Continue from ${furthest + 1}" else "Continue",
-                    trailing = if (savedMarks.isNotEmpty()) "${savedMarks.size} marked" else null,
-                    color = LocalAccent.current,
-                    icon = { CheckIcon(it) },
-                ) {
+        // A folder reviewed before opens on where it was left: the last photo looked at, how far that is, and the choice to carry on or begin again from the newest.
+        if (startIndex == null) {
+            ResumePane(
+                lastSeen = order.getOrNull(furthest - 1) ?: savedMarks.firstOrNull(),
+                reached = furthest,
+                total = order.size,
+                markedCount = savedMarks.size,
+                canContinue = furthest < order.size || savedMarks.isNotEmpty(),
+                onContinue = {
                     carriedMarks = savedMarks
                     startIndex = furthest
                     if (furthest >= order.size) isFinishing = true
-                }
-            }
-            SheetRow("Start fresh", icon = { RestoreIcon(it) }) {
-                startIndex = 0
-                saveProgress(emptyList())
+                },
+                onStartFresh = {
+                    startIndex = 0
+                    saveProgress(emptyList())
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ResumePane(lastSeen: MediaItem?, reached: Int, total: Int, markedCount: Int, canContinue: Boolean, onContinue: () -> Unit, onStartFresh: () -> Unit) {
+    val accent = LocalAccent.current
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            if (lastSeen != null) {
+                val context = LocalContext.current
+                val request = remember(lastSeen.uri) { ImageRequest.Builder(context).data(lastSeen.uri).build() }
+                AsyncImage(
+                    model = request,
+                    contentDescription = lastSeen.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().clip(Shapes.viewerPhoto),
+                )
             }
         }
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (lastSeen != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(lastSeen.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH))
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BasicText("$reached", style = Type.title.copy(color = accent))
+                BasicText("/ $total", style = Type.title.copy(color = Palette.textMuted))
+            }
+            // How far through the folder the furthest sitting got.
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderStrong)) {
+                Box(Modifier.fillMaxWidth(if (total > 0) reached.toFloat() / total else 0f).height(4.dp).clip(Shapes.capsule).background(accent))
+            }
+            if (markedCount > 0) BasicText("$markedCount marked", style = Type.value.copy(color = Palette.danger))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ResumeButton("START FRESH", Palette.panelSolid, Palette.textBright, Modifier.weight(1f), onStartFresh)
+            if (canContinue) ResumeButton("CONTINUE", accent, Palette.viewerGround, Modifier.weight(1f), onContinue)
+        }
+    }
+}
+
+@Composable
+private fun ResumeButton(label: String, background: androidx.compose.ui.graphics.Color, color: androidx.compose.ui.graphics.Color, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.pressable(onClick = onClick).clip(Shapes.capsule).background(background).padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        BasicText(label, style = Type.action.copy(color = color))
     }
 }
 

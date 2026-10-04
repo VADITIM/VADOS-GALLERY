@@ -1,5 +1,2 @@
-- Review remembers where you stopped in each folder: open it again to continue from the furthest photo or start fresh. The furthest count never goes back.
-- Photos marked in review can be kept marked when you close, and are still there next time.
-- Review photos fill the whole screen on black, so the next photo no longer shows around a photo of another shape.
-- The back buttons are gone (folders and the viewer close with the back gesture), and so is the + button in albums and groups; the top buttons are evenly spaced.
-- Every button now vibrates when pressed.
+- Review has a Done button above its buttons once something is marked: it deletes everything you marked in one go (inside Private it asks for a second tap, since that delete is final).
+- Reopening a folder's review now shows the last photo you looked at, how far you got with a progress bar, how many are marked, and two clear buttons: Start fresh and Continue.
