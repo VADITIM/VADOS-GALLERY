@@ -1,2 +1,4 @@
-- Video controls are one slim bar: play, time, timeline, length, loop and sound.
-- New sound toggle: the speaker gets a stroke across it as its waves fade out, and back again. Sound off stays off for every video until turned back on.
+- Album groups each sit on a row of their own; opening one fans its albums out to the right and on into the next rows.
+- The cards under a group's cover now fan out visibly: each one shifted, leaning and darker than the one above.
+- Select several albums at once: long-press an album → Select, then tap others (a group selects all its albums). Add them to a group, move them to Private, or delete them (second tap).
+- The same works for private groups: Select, then move them out to an album or delete them (second tap).

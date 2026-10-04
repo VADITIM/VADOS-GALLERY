@@ -195,6 +195,8 @@ private fun Library(viewModel: GalleryViewModel) {
     val viewerProgress = remember { Animatable(0f) }
     var scrollToNewestRequest by remember { mutableIntStateOf(0) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
+    // Albums (by folder path) or private groups (by name) picked in a cover grid; only one of the two grids is ever on screen.
+    var selectedCovers by remember { mutableStateOf(emptySet<String>()) }
     var isDeleteArmed by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
@@ -244,6 +246,14 @@ private fun Library(viewModel: GalleryViewModel) {
     val openPrivateGroup = (place as? AlbumsPlace.PrivateFolder)?.let { folder -> privateContents.groups.firstOrNull { it.name == folder.name } }
     val isInPrivate = place?.isPrivate == true
     val openLocation = (place as? AlbumsPlace.Location)?.let { shown -> locations.firstOrNull { it.key == shown.key } }
+    val selectedAlbums = if (place == AlbumsPlace.Folders) arrangedAlbums.filter { it.relativePath in selectedCovers } else emptyList()
+    val selectedGroups = if (place == AlbumsPlace.PrivateGroups) arrangedGroups.filter { it.name in selectedCovers } else emptyList()
+    val isSelectingCovers = selectedAlbums.isNotEmpty() || selectedGroups.isNotEmpty()
+    // What an album or group sheet acts on: the picked covers while picking, else the one long-pressed.
+    val targetAlbums = selectedAlbums.ifEmpty { listOfNotNull(sheetAlbum) }
+    val targetGroups = selectedGroups.ifEmpty { listOfNotNull(sheetGroup) }
+    val targetAlbumsLabel = targetAlbums.singleOrNull()?.name?.uppercase() ?: "${targetAlbums.size} ALBUMS"
+    val targetGroupsLabel = targetGroups.singleOrNull()?.name?.uppercase() ?: "${targetGroups.size} GROUPS"
 
     // The items of the grid on screen, which is what a selection is made of.
     val gridItems: List<MediaItem> = when {
@@ -264,6 +274,7 @@ private fun Library(viewModel: GalleryViewModel) {
     }
     val clearSelection = {
         selectedIds = emptySet()
+        selectedCovers = emptySet()
         isDeleteArmed = false
         sheet = AppSheet.NONE
     }
@@ -272,7 +283,11 @@ private fun Library(viewModel: GalleryViewModel) {
         isRearranging = false
     }
     BackHandler(enabled = isRearranging) { isRearranging = false }
-    BackHandler(enabled = isSelecting) { clearSelection() }
+    BackHandler(enabled = isSelecting || isSelectingCovers) { clearSelection() }
+    val toggleCovers: (List<String>) -> Unit = { keys ->
+        selectedCovers = if (keys.all { it in selectedCovers }) selectedCovers - keys.toSet() else selectedCovers + keys
+        isDeleteArmed = false
+    }
 
     // Leaving the app locks Private again, and drops anyone standing in it back to the albums list.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.lockPrivate() }
@@ -389,6 +404,8 @@ private fun Library(viewModel: GalleryViewModel) {
                             albums = arrangedAlbums,
                             isRearranging = isRearranging,
                             onArrange = { Settings.updateAlbumOrder(it) },
+                            selectedPaths = selectedCovers,
+                            onToggle = { picked -> toggleCovers(picked.map { it.relativePath }) },
                             state = albumsListState,
                             onOpen = { albumsPlace = AlbumsPlace.Folder(it.id) },
                             onLongPress = { album ->
@@ -447,6 +464,8 @@ private fun Library(viewModel: GalleryViewModel) {
                         AlbumsPlace.PrivateGroups -> PrivateGroupsScreen(
                             groups = arrangedGroups,
                             isRearranging = isRearranging,
+                            selectedNames = selectedCovers,
+                            onToggle = { toggleCovers(listOf(it.name)) },
                             onMove = { from, to ->
                                 val names = arrangedGroups.map { it.name }.toMutableList()
                                 names.add(to, names.removeAt(from))
@@ -510,7 +529,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     else -> null
                 },
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
-                selectedCount = selectedItems.size,
+                selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onAdd = when {
                     openAlbum != null -> { { picker = PickerTarget.IntoAlbum(openAlbum.relativePath, openAlbum.name) } }
                     openPrivateGroup != null -> { { picker = PickerTarget.IntoGroup(openPrivateGroup.name) } }
@@ -532,6 +551,34 @@ private fun Library(viewModel: GalleryViewModel) {
             if (isRearranging) {
                 Box(barModifier.pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.Confirm); isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
                     CheckIcon(accent)
+                }
+            } else if (isSelectingCovers) {
+                Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
+                    val deleteModifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier
+                    if (selectedGroups.isNotEmpty()) {
+                        IconButton(onClick = { sheet = AppSheet.GROUP_MOVE_OUT }) { LockIcon(Palette.textBody, isOpen = true) }
+                        // Private groups are outside the system trash, so deleting them takes a second tap.
+                        IconButton(onClick = {
+                            if (isDeleteArmed) {
+                                selectedGroups.forEach { actions.deleteGroup(it) }
+                                clearSelection()
+                            } else {
+                                isDeleteArmed = true
+                            }
+                        }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+                    } else {
+                        if (Settings.groupedAlbums) IconButton(onClick = { sheet = AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
+                        IconButton(onClick = { sheet = AppSheet.ALBUM_GROUP }) { LockIcon(Palette.textBody) }
+                        // Whole albums at once, so it takes a second tap even though the trash can give them back.
+                        IconButton(onClick = {
+                            if (isDeleteArmed) {
+                                actions.trash(selectedAlbums.flatMap { it.items })
+                                clearSelection()
+                            } else {
+                                isDeleteArmed = true
+                            }
+                        }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+                    }
                 }
             } else if (isSelecting) {
                 Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
@@ -634,6 +681,10 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed album: one entry, because moving the whole folder into Private is the thing it is for.
             OverlaySheet(visible = sheet == AppSheet.ALBUM_MENU, label = sheetAlbum?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.ALBUM_RENAME }
+                SheetRow("Select", icon = { CheckIcon(it) }) {
+                    sheetAlbum?.let { selectedCovers = setOf(it.relativePath) }
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
                     isRearranging = true
                     sheet = AppSheet.NONE
@@ -671,6 +722,10 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed album group. Ungrouping only lays its albums back into the grid; no photo is touched.
             OverlaySheet(visible = sheet == AppSheet.STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.STACK_RENAME }
+                SheetRow("Select", icon = { CheckIcon(it) }) {
+                    selectedCovers = Settings.albumStacks.firstOrNull { it.name == sheetStack }?.paths.orEmpty().toSet()
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
                     isRearranging = true
                     sheet = AppSheet.NONE
@@ -682,11 +737,11 @@ private fun Library(viewModel: GalleryViewModel) {
             }
             StackPickerSheet(
                 visible = sheet == AppSheet.ALBUM_STACK,
-                label = "MOVE ${sheetAlbum?.name?.uppercase().orEmpty()} TO",
-                stacks = Settings.albumStacks.filter { stack -> !stack.paths.contains(sheetAlbum?.relativePath.orEmpty()) },
+                label = "MOVE $targetAlbumsLabel TO",
+                stacks = Settings.albumStacks.filter { stack -> !targetAlbums.all { stack.paths.contains(it.relativePath) } },
                 onPick = { name ->
-                    sheetAlbum?.let { Settings.updateAlbumStacks(Settings.albumStacks.withAlbum(it.relativePath, name)) }
-                    sheet = AppSheet.NONE
+                    Settings.updateAlbumStacks(targetAlbums.fold(Settings.albumStacks) { stacks, album -> stacks.withAlbum(album.relativePath, name) })
+                    if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                 },
                 onNewStack = { sheet = AppSheet.ALBUM_NEW_STACK },
                 onDismiss = { sheet = AppSheet.NONE },
@@ -703,6 +758,10 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
             OverlaySheet(visible = sheet == AppSheet.GROUP_MENU, label = sheetGroup?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.GROUP_RENAME }
+                SheetRow("Select", icon = { CheckIcon(it) }) {
+                    sheetGroup?.let { selectedCovers = setOf(it.name) }
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Rearrange groups", icon = { GripIcon(it) }) {
                     isRearranging = true
                     sheet = AppSheet.NONE
@@ -727,23 +786,23 @@ private fun Library(viewModel: GalleryViewModel) {
             }
             AlbumPickerSheet(
                 visible = sheet == AppSheet.GROUP_MOVE_OUT,
-                label = "MOVE ${sheetGroup?.name?.uppercase().orEmpty()} OUT TO",
+                label = "MOVE $targetGroupsLabel OUT TO",
                 albums = albums,
                 excludedAlbumId = null,
                 onPick = { album ->
-                    sheetGroup?.let { group -> actions.unhide(group.items, album) { viewModel.vault.removeGroupIfEmpty(group.name) } }
-                    sheet = AppSheet.NONE
+                    targetGroups.forEach { group -> actions.unhide(group.items, album) { viewModel.vault.removeGroupIfEmpty(group.name) } }
+                    if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                 },
                 onNewAlbum = { sheet = AppSheet.GROUP_MOVE_OUT_NEW_ALBUM },
                 onDismiss = { sheet = AppSheet.NONE },
             )
             GroupPickerSheet(
                 visible = sheet == AppSheet.ALBUM_GROUP,
-                label = "MOVE ${sheetAlbum?.name?.uppercase().orEmpty()} TO",
+                label = "MOVE $targetAlbumsLabel TO",
                 groups = privateContents.groups,
                 excludedGroupName = null,
                 onPick = { name ->
-                    sheetAlbum?.let { pendingPrivate = PendingPrivate(it.items, name, isSelection = false) }
+                    pendingPrivate = PendingPrivate(targetAlbums.flatMap { it.items }, name, isSelection = isSelectingCovers)
                     sheet = AppSheet.CONFIRM_PRIVATE
                 },
                 onNewGroup = { sheet = AppSheet.ALBUM_NEW_GROUP },
@@ -827,8 +886,8 @@ private fun Library(viewModel: GalleryViewModel) {
                     label = "NEW GROUP",
                     action = "CREATE",
                     onConfirm = { name ->
-                        sheetAlbum?.let { Settings.updateAlbumStacks(Settings.albumStacks.withAlbum(it.relativePath, name)) }
-                        sheet = AppSheet.NONE
+                        Settings.updateAlbumStacks(targetAlbums.fold(Settings.albumStacks) { stacks, album -> stacks.withAlbum(album.relativePath, name) })
+                        if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
                 )
@@ -853,10 +912,10 @@ private fun Library(viewModel: GalleryViewModel) {
                 AppSheet.GROUP_MOVE_OUT_NEW_ALBUM -> NameSheet(
                     label = "NEW ALBUM",
                     action = "MOVE HERE",
-                    initialName = sheetGroup?.name.orEmpty(),
+                    initialName = targetGroups.singleOrNull()?.name.orEmpty(),
                     onConfirm = { name ->
-                        sheetGroup?.let { group -> actions.unhide(group.items, newAlbumPath(name), name) { viewModel.vault.removeGroupIfEmpty(group.name) } }
-                        sheet = AppSheet.NONE
+                        targetGroups.forEach { group -> actions.unhide(group.items, newAlbumPath(name), name) { viewModel.vault.removeGroupIfEmpty(group.name) } }
+                        if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
                 )
@@ -877,9 +936,9 @@ private fun Library(viewModel: GalleryViewModel) {
                 AppSheet.ALBUM_NEW_GROUP -> NameSheet(
                     label = "NEW PRIVATE GROUP",
                     action = "MOVE HERE",
-                    initialName = sheetAlbum?.name.orEmpty(),
+                    initialName = targetAlbums.singleOrNull()?.name.orEmpty(),
                     onConfirm = { name ->
-                        sheetAlbum?.let { pendingPrivate = PendingPrivate(it.items, name, isSelection = false) }
+                        pendingPrivate = PendingPrivate(targetAlbums.flatMap { it.items }, name, isSelection = isSelectingCovers)
                         sheet = AppSheet.CONFIRM_PRIVATE
                     },
                     onDismiss = { sheet = AppSheet.NONE },

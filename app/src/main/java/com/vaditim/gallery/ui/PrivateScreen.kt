@@ -83,8 +83,12 @@ fun PrivateGroupsScreen(
     isViewerOpen: Boolean = false,
     isRearranging: Boolean = false,
     onMove: (from: Int, to: Int) -> Unit = { _, _ -> },
+    selectedNames: Set<String> = emptySet(),
+    onToggle: (PrivateGroup) -> Unit = {},
 ) {
-    BackHandler(onBack = onBack)
+    val isPicking = selectedNames.isNotEmpty()
+    // While picking, back clears the pick first (the app root handles that), so this one stands aside.
+    BackHandler(enabled = !isPicking, onBack = onBack)
     val reorder = rememberReorder(state, groups.map { it.name }, onMove)
     // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
     val selectionSeed = remember { Random.nextInt(Int.MAX_VALUE) }
@@ -103,9 +107,10 @@ fun PrivateGroupsScreen(
                 group.name,
                 group.cover,
                 group.items.size,
-                onClick = { if (!isRearranging) onOpen(group) },
-                onLongClick = { if (!isRearranging) onLongPress(group) },
+                onClick = { if (isPicking) onToggle(group) else if (!isRearranging) onOpen(group) },
+                onLongClick = { if (isPicking) onToggle(group) else if (!isRearranging) onLongPress(group) },
                 modifier = reorderable(reorder, group.name, isRearranging),
+                isSelected = group.name in selectedNames,
             )
         }
         item(contentType = "new-group") { AddCard("New group", onClick = onNewGroup) }

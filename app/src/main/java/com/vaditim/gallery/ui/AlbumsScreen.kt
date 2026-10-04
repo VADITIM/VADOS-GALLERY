@@ -67,7 +67,10 @@ fun AlbumsScreen(
     footer: @Composable () -> Unit,
     isRearranging: Boolean = false,
     onArrange: (paths: List<String>) -> Unit = {},
+    selectedPaths: Set<String> = emptySet(),
+    onToggle: (List<Album>) -> Unit = {},
 ) {
+    val isPicking = selectedPaths.isNotEmpty()
     val entries = remember(albums, Settings.groupedAlbums, Settings.albumStacks) { entriesOf(albums) }
     val scope = rememberCoroutineScope()
     var openStack by remember { mutableStateOf<String?>(null) }
@@ -105,89 +108,152 @@ fun AlbumsScreen(
     // Outside rearranging, every card still glides to its new place when an opened group pushes the rest along.
     fun LazyGridItemScope.placement(key: Any): Modifier = if (isRearranging) reorderable(reorder, key, true) else Modifier.animateItem()
 
+    // Every group starts a row of its own and ends it, so a stack never shares a row and opening it fans out to the right of it.
+    val cells = remember(entries, shownStack) { cellsOf(entries, shownStack) }
+    val spans = remember(cells, Settings.albumColumns) { spansOf(cells, Settings.albumColumns) }
+
     CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Albums", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
-        for (entry in entries) {
-            when (entry) {
-                is AlbumEntry.Single -> item(key = entry.key, contentType = "album") {
-                    val album = entry.album
-                    CoverCard(
-                        album.name,
-                        album.cover,
-                        album.items.size,
-                        onClick = { if (!isRearranging) onOpen(album) },
-                        onLongClick = { if (!isRearranging) onLongPress(album) },
-                        modifier = placement(entry.key),
-                    )
-                }
-                is AlbumEntry.Stack -> if (entry.name != shownStack) {
-                    item(key = entry.key, contentType = "stack") {
-                        StackCard(
-                            entry.name,
-                            entry.albums.map { it.cover },
-                            entry.albums.sumOf { it.items.size },
-                            onClick = { if (!isRearranging) expand(entry.name) },
-                            onLongClick = { if (!isRearranging) onStackLongPress(entry.name) },
-                            modifier = placement(entry.key),
+        cells.forEachIndexed { index, cell ->
+            val span = spans[index]
+            when (cell) {
+                is AlbumCell.Single -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "album") {
+                    val album = cell.album
+                    SpanCell(span, placement(cell.key)) {
+                        CoverCard(
+                            album.name,
+                            album.cover,
+                            album.items.size,
+                            onClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onOpen(album) },
+                            onLongClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onLongPress(album) },
+                            isSelected = album.relativePath in selectedPaths,
                         )
                     }
-                } else {
-                    entry.albums.forEachIndexed { depth, album ->
-                        if (depth == 0) {
-                            // The top card keeps the group's place and stays above the albums sliding out from under it.
-                            item(key = entry.key, contentType = "album") {
-                                CoverCard(
-                                    album.name,
-                                    album.cover,
-                                    album.items.size,
-                                    onClick = { onOpen(album) },
-                                    onLongClick = { onLongPress(album) },
-                                    modifier = Modifier.animateItem().zIndex(1f).onGloballyPositioned { origin = it.positionInRoot() },
-                                )
-                            }
-                        } else {
-                            item(key = album.id, contentType = "album") {
-                                var own by remember { mutableStateOf<Offset?>(null) }
-                                CoverCard(
-                                    album.name,
-                                    album.cover,
-                                    album.items.size,
-                                    onClick = { onOpen(album) },
-                                    onLongClick = { onLongPress(album) },
-                                    modifier = Modifier
-                                        .animateItem(fadeInSpec = null, fadeOutSpec = null)
-                                        .onGloballyPositioned { own = it.positionInRoot() }
-                                        .zIndex(-depth.toFloat())
-                                        .graphicsLayer {
-                                            val at = own
-                                            val p = spread.value
-                                            if (at == null) {
-                                                alpha = 0f
-                                            } else {
-                                                translationX = (origin.x - at.x) * (1f - p)
-                                                translationY = (origin.y - at.y) * (1f - p)
-                                                rotationZ = stackTilt(depth) * (1f - p)
-                                                val scale = STACK_UNDER_SCALE + (1f - STACK_UNDER_SCALE) * p
-                                                scaleX = scale
-                                                scaleY = scale
-                                                // Hidden while it still lies under the top card, so two names never print over each other.
-                                                alpha = (p * 4f).coerceAtMost(1f)
-                                            }
-                                        },
-                                )
-                            }
-                        }
+                }
+                is AlbumCell.Stack -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "stack") {
+                    val stack = cell.stack
+                    SpanCell(span, placement(cell.key)) {
+                        StackCard(
+                            stack.name,
+                            stack.albums.map { it.cover },
+                            stack.albums.sumOf { it.items.size },
+                            onClick = { if (isPicking) onToggle(stack.albums) else if (!isRearranging) expand(stack.name) },
+                            onLongClick = { if (isPicking) onToggle(stack.albums) else if (!isRearranging) onStackLongPress(stack.name) },
+                            isSelected = stack.albums.all { it.relativePath in selectedPaths },
+                        )
                     }
-                    item(key = "collapse:${entry.name}", contentType = "collapse") {
-                        CollapseCard(entry.name, onClick = collapse, modifier = Modifier.animateItem().graphicsLayer { alpha = spread.value })
+                }
+                // The top card keeps the group's place and stays above the albums sliding out from under it.
+                is AlbumCell.Top -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "album") {
+                    val album = cell.album
+                    SpanCell(span, Modifier.animateItem().zIndex(1f)) {
+                        CoverCard(
+                            album.name,
+                            album.cover,
+                            album.items.size,
+                            onClick = { if (isPicking) onToggle(listOf(album)) else onOpen(album) },
+                            onLongClick = { if (isPicking) onToggle(listOf(album)) else onLongPress(album) },
+                            modifier = Modifier.onGloballyPositioned { origin = it.positionInRoot() },
+                            isSelected = album.relativePath in selectedPaths,
+                        )
+                    }
+                }
+                is AlbumCell.Member -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "album") {
+                    val album = cell.album
+                    val depth = cell.depth
+                    var own by remember { mutableStateOf<Offset?>(null) }
+                    SpanCell(span, Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null).zIndex(-depth.toFloat())) {
+                        CoverCard(
+                            album.name,
+                            album.cover,
+                            album.items.size,
+                            onClick = { if (isPicking) onToggle(listOf(album)) else onOpen(album) },
+                            onLongClick = { if (isPicking) onToggle(listOf(album)) else onLongPress(album) },
+                            isSelected = album.relativePath in selectedPaths,
+                            modifier = Modifier
+                                .onGloballyPositioned { own = it.positionInRoot() }
+                                .graphicsLayer {
+                                    val at = own
+                                    val p = spread.value
+                                    if (at == null) {
+                                        alpha = 0f
+                                    } else {
+                                        // Leaves from exactly where its card lay in the stack: shifted, leaning, smaller.
+                                        translationX = (origin.x - at.x + stackShift(depth).toPx()) * (1f - p)
+                                        translationY = (origin.y - at.y) * (1f - p)
+                                        rotationZ = stackTilt(depth) * (1f - p)
+                                        val scale = stackScale(depth) + (1f - stackScale(depth)) * p
+                                        scaleX = scale
+                                        scaleY = scale
+                                        // Hidden while it still lies under the top card, so two names never print over each other.
+                                        alpha = (p * 4f).coerceAtMost(1f)
+                                    }
+                                },
+                        )
+                    }
+                }
+                is AlbumCell.Collapse -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "collapse") {
+                    SpanCell(span, Modifier.animateItem()) {
+                        CollapseCard(cell.name, onClick = collapse, modifier = Modifier.graphicsLayer { alpha = spread.value })
                     }
                 }
             }
         }
         item(key = "new-album", contentType = "new-album") { Box(Modifier.animateItem()) { AddCard("New album", onClick = onNewAlbum) } }
         item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem()) { footer() } }
+    }
+}
+
+// One grid item of the albums screen; an opened group is its top card, the albums under it and the card that folds them back.
+private sealed interface AlbumCell {
+    val key: Any
+
+    data class Single(val album: Album) : AlbumCell {
+        override val key: Any get() = album.id
+    }
+
+    data class Stack(val stack: AlbumEntry.Stack) : AlbumCell {
+        override val key: Any get() = stack.key
+    }
+
+    data class Top(val stack: AlbumEntry.Stack, val album: Album) : AlbumCell {
+        override val key: Any get() = stack.key
+    }
+
+    data class Member(val album: Album, val depth: Int) : AlbumCell {
+        override val key: Any get() = album.id
+    }
+
+    data class Collapse(val name: String) : AlbumCell {
+        override val key: Any get() = "collapse:$name"
+    }
+}
+
+private fun cellsOf(entries: List<AlbumEntry>, openStack: String?): List<AlbumCell> = entries.flatMap { entry ->
+    when (entry) {
+        is AlbumEntry.Single -> listOf(AlbumCell.Single(entry.album))
+        is AlbumEntry.Stack -> if (entry.name != openStack) {
+            listOf(AlbumCell.Stack(entry))
+        } else {
+            listOf<AlbumCell>(AlbumCell.Top(entry, entry.albums.first())) +
+                entry.albums.drop(1).mapIndexed { index, album -> AlbumCell.Member(album, index + 1) } +
+                AlbumCell.Collapse(entry.name)
+        }
+    }
+}
+
+// How many cells each item takes: a stack fills its row, and whatever comes right before a group, or closes one, stretches to the row's end.
+private fun spansOf(cells: List<AlbumCell>, columns: Int): List<Int> {
+    if (columns <= 1) return List(cells.size) { 1 }
+    var column = 0
+    return cells.mapIndexed { index, cell ->
+        val next = cells.getOrNull(index + 1)
+        val endsRow = cell is AlbumCell.Stack || cell is AlbumCell.Collapse || next is AlbumCell.Stack || next is AlbumCell.Top
+        val span = if (endsRow) columns - column else 1
+        column = (column + span) % columns
+        span
     }
 }
 

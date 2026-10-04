@@ -1,5 +1,15 @@
 package com.vaditim.gallery.ui
 
+import kotlin.math.min
+import com.vaditim.gallery.vas.Motion
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.border
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -50,6 +60,7 @@ import com.vaditim.gallery.vas.pressable
 private const val COVER_PIXELS = 512
 private const val PINCH_STEP = 1.28f
 private val LIST_COVER = 84.dp
+val COVER_GAP = 14.dp
 
 // Albums, private groups and locations are one kind of screen: a grid of covers whose columns, list layout, shrinking names and pinch are the same everywhere. A new cover screen is built from these, not beside them.
 @Composable
@@ -64,7 +75,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
             top = contentPadding.calculateTopPadding() + 8.dp,
             bottom = contentPadding.calculateBottomPadding() + 12.dp,
         ),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(COVER_GAP),
         verticalArrangement = Arrangement.spacedBy(if (Settings.albumColumns == 1) 12.dp else 20.dp),
         modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
         content = content,
@@ -73,11 +84,11 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
 
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false) {
     val request = rememberCoverRequest(cover)
     if (Settings.albumColumns == 1) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
-            CoverImage(request, name, Modifier.size(LIST_COVER))
+            CoverImage(request, name, Modifier.size(LIST_COVER), isSelected)
             Column(Modifier.padding(start = 18.dp).weight(1f)) {
                 BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
@@ -85,7 +96,7 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
         }
     } else {
         Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
-            CoverImage(request, name, Modifier.fillMaxWidth().aspectRatio(1f))
+            CoverImage(request, name, Modifier.fillMaxWidth().aspectRatio(1f), isSelected)
             // Narrow cards shrink the name until it fits, down to a size that still reads; only past that is it cut.
             BasicText(
                 name,
@@ -118,20 +129,21 @@ private fun rememberCoverRequest(cover: MediaItem?): ImageRequest? {
     }
 }
 
-// How far each card of a stack leans: the top one straight, the ones under it alternating sides and leaning less the deeper they lie.
-fun stackTilt(depth: Int): Float = when (depth) {
-    0 -> 0f
-    else -> (if (depth % 2 == 1) -1f else 1f) * (STACK_TILT_DEGREES - depth).coerceAtLeast(2f)
-}
+// The cards under the top one fan out to the right, each leaning further, shifted further and a little smaller and darker, so the stack reads as several cards at a glance.
+fun stackTilt(depth: Int): Float = STACK_TILT_DEGREES * min(depth, STACK_VISIBLE_LAYERS - 1)
+fun stackShift(depth: Int): Dp = STACK_SHIFT * min(depth, STACK_VISIBLE_LAYERS - 1)
+fun stackScale(depth: Int): Float = 1f - STACK_SHRINK * min(depth, STACK_VISIBLE_LAYERS - 1)
+fun stackShade(depth: Int): Float = 1f - STACK_DARKEN * min(depth, STACK_VISIBLE_LAYERS - 1)
 
-// The scale of a card lying under the top one, so its leaning corners stay mostly hidden behind it.
-const val STACK_UNDER_SCALE = 0.94f
-private const val STACK_TILT_DEGREES = 8f
-private const val STACK_VISIBLE_LAYERS = 3
+private const val STACK_TILT_DEGREES = 7f
+private val STACK_SHIFT = 9.dp
+private const val STACK_SHRINK = 0.05f
+private const val STACK_DARKEN = 0.2f
+private const val STACK_VISIBLE_LAYERS = 4
 
 // A group of covers lying on each other, each leaning a little, the first on top.
 @Composable
-fun StackCard(name: String, covers: List<MediaItem?>, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+fun StackCard(name: String, covers: List<MediaItem?>, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false) {
     val requests = covers.take(STACK_VISIBLE_LAYERS).map { rememberCoverRequest(it) }
     val stack: @Composable (Modifier) -> Unit = { size ->
         Box(size) {
@@ -141,10 +153,12 @@ fun StackCard(name: String, covers: List<MediaItem?>, count: Int, onClick: () ->
                     name,
                     Modifier.matchParentSize().graphicsLayer {
                         rotationZ = stackTilt(depth)
-                        val scale = if (depth == 0) 1f else STACK_UNDER_SCALE
-                        scaleX = scale
-                        scaleY = scale
+                        translationX = stackShift(depth).toPx()
+                        scaleX = stackScale(depth)
+                        scaleY = stackScale(depth)
                     },
+                    isSelected = depth == 0 && isSelected,
+                    shade = stackShade(depth),
                 )
             }
         }
@@ -152,7 +166,7 @@ fun StackCard(name: String, covers: List<MediaItem?>, count: Int, onClick: () ->
     if (Settings.albumColumns == 1) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
             stack(Modifier.size(LIST_COVER))
-            Column(Modifier.padding(start = 18.dp).weight(1f)) {
+            Column(Modifier.padding(start = 18.dp + stackShift(STACK_VISIBLE_LAYERS)).weight(1f)) {
                 BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
             }
@@ -203,11 +217,33 @@ fun CollapseCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifi
     }
 }
 
+// `shade` below 1 darkens the picture, for the cards lying deeper in a stack.
 @Composable
-private fun CoverImage(request: ImageRequest?, name: String, modifier: Modifier) {
-    Box(modifier.clip(Shapes.cover).background(Palette.sunken)) {
+private fun CoverImage(request: ImageRequest?, name: String, modifier: Modifier, isSelected: Boolean = false, shade: Float = 1f) {
+    val selectedScale by animateFloatAsState(if (isSelected) 0.9f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
+    Box(modifier.graphicsLayer { scaleX = selectedScale; scaleY = selectedScale }.clip(Shapes.cover).background(Palette.sunken)) {
         if (request != null) {
-            AsyncImage(model = request, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = request,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                colorFilter = if (shade < 1f) ColorFilter.colorMatrix(ColorMatrix().apply { setToScale(shade, shade, shade, 1f) }) else null,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (isSelected) Box(Modifier.fillMaxSize().border(3.dp, LocalAccent.current, Shapes.cover))
+    }
+}
+
+// A cover that takes `span` cells of a row but draws in the first, so the row ends after it; cells keep their width and gap.
+@Composable
+fun SpanCell(span: Int, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    if (span <= 1) {
+        Box(modifier) { content() }
+    } else {
+        Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COVER_GAP)) {
+            Box(Modifier.weight(1f)) { content() }
+            repeat(span - 1) { Spacer(Modifier.weight(1f)) }
         }
     }
 }
