@@ -58,6 +58,8 @@ private const val TRACK_SHARE = 0.5f
 private val STRIP_WIDTH = 24.dp
 private val LABEL_HEIGHT = 18.dp
 private val THUMB_HEIGHT = 22.dp
+// Labels are never further apart than this; with few of them the timeline is shorter, centred where it always is.
+private val MAX_GAP = 24.dp
 private val YEAR_FORMAT = DateTimeFormatter.ofPattern("yyyy", Locale.ENGLISH)
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 private val BUBBLE_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
@@ -106,7 +108,14 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
     val reveal by animateFloatAsState(if (isHeld) 1f else 0f, tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline")
     // The newest index asked for; scrolls are conflated, so a fast slide never queues up jumps.
     val target = remember { mutableIntStateOf(-1) }
-    LaunchedEffect(state) { snapshotFlow { target.intValue }.collect { if (it >= 0) state.scrollToItem(it) } }
+    LaunchedEffect(state) {
+        snapshotFlow { target.intValue }.collect { index ->
+            if (index < 0) return@collect
+            state.scrollToItem(index)
+            // The month's first photo (or its header) belongs at the top, just under the header room, not merely somewhere on screen.
+            state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { if (it.offset.y != 0) state.scrollBy(it.offset.y.toFloat()) }
+        }
+    }
     // The month the grid is showing, for the marker at rest.
     val viewMark by remember(state, marks) {
         derivedStateOf {
@@ -124,7 +133,10 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val density = LocalDensity.current
         val labelHalf = with(density) { LABEL_HEIGHT.toPx() } / 2f
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
-        fun slotY(slot: Int, count: Int): Float = if (count <= 1) track / 2f else track * slot / (count - 1)
+        val maxGap = with(density) { MAX_GAP.toPx() }
+        fun gapFor(count: Int): Float = if (count <= 1) 0f else minOf(maxGap, track / (count - 1))
+        // Evenly apart and centred on the track, so a few years sit close together in the middle rather than spread over half the screen.
+        fun slotY(slot: Int, count: Int): Float = track / 2f + (slot - (count - 1) / 2f) * gapFor(count)
         fun yOf(label: TimelineLabel, within: List<TimelineLabel>): Float = top + slotY(within.indexOf(label), within.size)
 
         labels.forEach { label ->
@@ -192,12 +204,14 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                         // A year opening or closing respaces the labels under a still finger, so after a switch the finger has to travel a little before another one counts.
                         var switchedAt = Float.NaN
                         fun follow(y: Float) {
-                            val clamped = y.coerceIn(0f, track)
-                            fingerY = top + clamped
                             val shown = labelsOf(years, monthsByYear, heldYear)
-                            val slot = if (shown.size <= 1) 0 else (clamped / track * (shown.size - 1)).roundToInt()
+                            val gap = gapFor(shown.size)
+                            // The finger can be anywhere on the half-screen strip; past the first or last label it stays on that label.
+                            val clamped = y.coerceIn(slotY(0, shown.size), slotY(shown.lastIndex, shown.size))
+                            fingerY = top + clamped
+                            val slot = if (shown.size <= 1) 0 else ((clamped - slotY(0, shown.size)) / gap).roundToInt().coerceIn(0, shown.lastIndex)
                             val label = shown[slot]
-                            val canSwitch = switchedAt.isNaN() || abs(clamped - switchedAt) > track / (shown.size.coerceAtLeast(2) - 1)
+                            val canSwitch = switchedAt.isNaN() || abs(clamped - switchedAt) > gap
                             val mark = when {
                                 label.month != null -> label.month
                                 label.year == heldYear -> heldMark ?: monthsByYear[label.year]?.first()
