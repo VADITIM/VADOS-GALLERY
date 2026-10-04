@@ -1,3 +1,4 @@
-- Groups jiggle like albums while rearranging, swinging about their own card.
-- Opening a group: its albums peel off the stack one after another and settle into place with a slight overshoot; names appear once each card is clear. Closing runs it back, the furthest album first.
-- Rearranging with a group open moves the albums inside that group; with every group closed, albums and whole groups move. Starting to rearrange no longer closes the group.
+- Album groups are rows of their own, like the one-column view: the stack on the left, the name and count beside it, with a gap between groups.
+- Opening a group lifts the same cards off the stack one after another into rows of three, whatever the album columns are; closing lays them back down. One continuous motion, nothing swapped.
+- Opening a group leaves other open groups open.
+- Rearranging: albums inside an open group can be dragged into a new order; closed groups and albums move as wholes. Everything that can move jiggles.

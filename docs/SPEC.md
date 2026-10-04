@@ -232,3 +232,4 @@ review, which is not a goal.
 - Covers can be selected several at once (menu → Select, then tap): albums can then be grouped, moved to Private or deleted; private groups moved out or deleted. Deleting takes a second tap.
 - While rearranging, covers jiggle slightly. Double-tapping a zoomed photo always returns it to its original size.
 - Rearranging with a group open orders that group's albums; with groups closed, it orders albums and groups. Opening a group peels its albums off the stack one after another.
+- A group is always shown as a one-column row (stack, then name and count). Opened, its albums lie three to a row. Several groups can be open at once.

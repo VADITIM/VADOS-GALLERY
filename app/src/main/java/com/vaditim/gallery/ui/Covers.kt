@@ -84,9 +84,9 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
 
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = Settings.albumColumns == 1) {
     val request = rememberCoverRequest(cover)
-    if (Settings.albumColumns == 1) {
+    if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
             CoverImage(request, name, Modifier.size(LIST_COVER), isSelected)
             Column(Modifier.padding(start = 18.dp).weight(1f).graphicsLayer { alpha = labelAlpha() }) {
@@ -141,63 +141,11 @@ private const val STACK_SHRINK = 0.05f
 private const val STACK_DARKEN = 0.2f
 private const val STACK_VISIBLE_LAYERS = 4
 
-// A group of covers lying on each other, each leaning a little, the first on top.
-@Composable
-fun StackCard(name: String, covers: List<MediaItem?>, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false) {
-    val requests = covers.take(STACK_VISIBLE_LAYERS).map { rememberCoverRequest(it) }
-    val stack: @Composable (Modifier) -> Unit = { size ->
-        Box(size) {
-            for (depth in requests.indices.reversed()) {
-                CoverImage(
-                    requests[depth],
-                    name,
-                    Modifier.matchParentSize().graphicsLayer {
-                        rotationZ = stackTilt(depth)
-                        translationX = stackShift(depth).toPx()
-                        scaleX = stackScale(depth)
-                        scaleY = stackScale(depth)
-                    },
-                    isSelected = depth == 0 && isSelected,
-                    shade = stackShade(depth),
-                )
-            }
-        }
-    }
-    if (Settings.albumColumns == 1) {
-        Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
-            stack(Modifier.size(LIST_COVER))
-            Column(Modifier.padding(start = 18.dp + stackShift(STACK_VISIBLE_LAYERS)).weight(1f)) {
-                BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
-            }
-        }
-    } else {
-        Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
-            stack(Modifier.fillMaxWidth().aspectRatio(1f))
-            BasicText(
-                name,
-                style = Type.cardTitle.copy(color = LocalAccent.current),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.padding(start = 4.dp, top = 10.dp),
-            )
-            BasicText(
-                count.toString(),
-                style = Type.value,
-                maxLines = 1,
-                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.value.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
-            )
-        }
-    }
-}
-
 // The card at the end of an opened stack that lays it back down.
 @Composable
-fun CollapseCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun CollapseCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, isList: Boolean = Settings.albumColumns == 1) {
     val glyph = @Composable { BasicText("‹", style = Type.title.copy(color = LocalAccent.current)) }
-    if (Settings.albumColumns == 1) {
+    if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) { glyph() }
             BasicText(label, style = Type.cardTitle.copy(fontSize = 20.sp, color = Palette.textMuted), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 18.dp))

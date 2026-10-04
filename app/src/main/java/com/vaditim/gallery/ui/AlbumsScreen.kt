@@ -3,33 +3,45 @@ package com.vaditim.gallery.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridItemScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.unit.sp
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.media.Album
+import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Type
-import kotlinx.coroutines.launch
+import com.vaditim.gallery.vas.pressable
+import kotlin.math.floor
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 // What one place in the albums grid holds: an album, or (with Grouped albums on) a group of them lying as a stack.
 private sealed interface AlbumEntry {
@@ -74,235 +86,282 @@ fun AlbumsScreen(
 ) {
     val isPicking = selectedPaths.isNotEmpty()
     val entries = remember(albums, Settings.groupedAlbums, Settings.albumStacks) { entriesOf(albums) }
-    val scope = rememberCoroutineScope()
-    var openStack by remember { mutableStateOf<String?>(null) }
-    // Time through opening or closing, 0 to 1, run evenly; each album turns it into its own eased, staggered progress.
-    val spread = remember { Animatable(1f) }
-    var isOpening by remember { mutableStateOf(true) }
-    // Where the group's top card is on screen: the opened albums leave from it and return to it.
-    var origin by remember { mutableStateOf(Offset.Zero) }
-    val openGroup = entries.firstOrNull { it is AlbumEntry.Stack && it.name == openStack } as AlbumEntry.Stack?
-    val shownStack = openGroup?.name
-    val expand: (String) -> Unit = { name ->
-        scope.launch {
-            openStack = name
-            isOpening = true
-            spread.snapTo(0f)
-            spread.animateTo(1f, tween(Motion.STACK_MS, easing = LinearEasing))
-        }
-    }
-    val collapse: () -> Unit = {
-        scope.launch {
-            isOpening = false
-            spread.animateTo(0f, tween(Motion.STACK_MS, easing = LinearEasing))
-            openStack = null
-        }
-    }
-    // While rearranging, back ends rearranging (the app root handles that) rather than closing the group.
-    BackHandler(enabled = shownStack != null && !isRearranging, onBack = collapse)
+    // Several groups can be open at once; opening one leaves the others as they are.
+    var openStacks by remember { mutableStateOf(emptySet<String>()) }
+    // While rearranging, back ends rearranging (the app root handles that) rather than closing groups.
+    BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging) { openStacks = emptySet() }
 
-    // An open group rearranges its own albums; with every group closed, the albums and groups are what move.
-    val isArrangingGroup = isRearranging && openGroup != null
-    val reorderKeys = if (openGroup != null && isArrangingGroup) openGroup.albums.map { it.id } else entries.map { it.key }
-    val reorder = rememberReorder(state, reorderKeys) { from, to ->
-        val inGroup = openGroup?.takeIf { isArrangingGroup }?.albums?.toMutableList()?.apply { add(to, removeAt(from)) }
-        val moved = if (inGroup != null) entries else entries.toMutableList().apply { add(to, removeAt(from)) }
-        onArrange(
-            moved.flatMap { entry ->
-                when (entry) {
-                    is AlbumEntry.Single -> listOf(entry.album.relativePath)
-                    is AlbumEntry.Stack -> (if (inGroup != null && entry.name == openGroup?.name) inGroup else entry.albums).map { it.relativePath }
-                }
-            },
-        )
-    }
-    // Cards that cannot move right now still glide, at the group's pace, when an opening group pushes the rest along.
-    @Composable
-    fun LazyGridItemScope.placement(key: Any, isMovable: Boolean, still: Modifier = Modifier): Modifier =
-        if (isMovable) reorderable(reorder, key, true) else Modifier.animateItem(placementSpec = tween(Motion.STACK_MS, easing = Motion.powerThreeInOut)).then(still)
+    fun arrange(moved: List<AlbumEntry>, group: String? = null, groupAlbums: List<Album> = emptyList()) = onArrange(
+        moved.flatMap { entry ->
+            when (entry) {
+                is AlbumEntry.Single -> listOf(entry.album.relativePath)
+                is AlbumEntry.Stack -> (if (entry.name == group) groupAlbums else entry.albums).map { it.relativePath }
+            }
+        },
+    )
+    // Albums and closed groups move as wholes; an open group's albums move inside it.
+    val reorder = rememberReorder(state, entries.map { it.key }) { from, to -> arrange(entries.toMutableList().apply { add(to, removeAt(from)) }) }
+    val glide = tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut)
 
-    // One album's progress out of the stack: the deeper cards leave a little later and come back a little sooner, and opening overshoots its place slightly.
-    fun progressOf(depth: Int, count: Int): Float {
-        val start = if (count <= 1) 0f else (depth - 1).toFloat() / (count - 1) * STAGGER_SPAN
-        val local = ((spread.value - start) / (1f - STAGGER_SPAN)).coerceIn(0f, 1f)
-        return if (isOpening) Motion.backOut.transform(local) else Motion.powerThreeInOut.transform(local)
-    }
-
-    // Every group starts a row of its own and ends it, so a stack never shares a row and opening it fans out to the right of it.
-    val cells = remember(entries, shownStack) { cellsOf(entries, shownStack) }
-    val spans = remember(cells, Settings.albumColumns) { spansOf(cells, Settings.albumColumns) }
+    // Every group is a row of its own, so the albums before it end their row early.
+    val spans = remember(entries, Settings.albumColumns) { spansOf(entries, Settings.albumColumns) }
 
     CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Albums", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
-        cells.forEachIndexed { index, cell ->
+        entries.forEachIndexed { index, entry ->
             val span = spans[index]
-            when (cell) {
-                is AlbumCell.Single -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "album") {
-                    val album = cell.album
-                    val isMovable = isRearranging && !isArrangingGroup
-                    SpanCell(span, placement(cell.key, isMovable)) {
+            when (entry) {
+                is AlbumEntry.Single -> item(key = entry.key, span = { GridItemSpan(span) }, contentType = "album") {
+                    val album = entry.album
+                    SpanCell(span, if (isRearranging) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide)) {
                         CoverCard(
                             album.name,
                             album.cover,
                             album.items.size,
                             onClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onOpen(album) },
                             onLongClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onLongPress(album) },
-                            modifier = Modifier.jiggle(reorder, cell.key, isMovable),
+                            modifier = Modifier.jiggle(reorder, entry.key, isRearranging),
                             isSelected = album.relativePath in selectedPaths,
                         )
                     }
                 }
-                is AlbumCell.Stack -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "stack") {
-                    val stack = cell.stack
-                    val isMovable = isRearranging && !isArrangingGroup
-                    SpanCell(span, placement(cell.key, isMovable)) {
-                        StackCard(
-                            stack.name,
-                            stack.albums.map { it.cover },
-                            stack.albums.sumOf { it.items.size },
-                            onClick = { if (isPicking) onToggle(stack.albums) else expand(stack.name) },
-                            onLongClick = { if (isPicking) onToggle(stack.albums) else if (!isRearranging) onStackLongPress(stack.name) },
-                            modifier = Modifier.jiggle(reorder, cell.key, isMovable),
-                            isSelected = stack.albums.all { it.relativePath in selectedPaths },
-                        )
-                    }
-                }
-                // The top card keeps the group's place and stays above the albums sliding out from under it.
-                is AlbumCell.Top -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "album") {
-                    val album = cell.album
-                    SpanCell(span, placement(cell.key, isArrangingGroup, Modifier.zIndex(1f))) {
-                        CoverCard(
-                            album.name,
-                            album.cover,
-                            album.items.size,
-                            onClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onOpen(album) },
-                            onLongClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onLongPress(album) },
-                            modifier = Modifier.onGloballyPositioned { origin = it.positionInRoot() }.jiggle(reorder, cell.key, isArrangingGroup),
-                            isSelected = album.relativePath in selectedPaths,
-                        )
-                    }
-                }
-                is AlbumCell.Member -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "album") {
-                    val album = cell.album
-                    val depth = cell.depth
-                    var own by remember { mutableStateOf<Offset?>(null) }
-                    SpanCell(span, placement(cell.key, isArrangingGroup, Modifier.zIndex(-depth.toFloat()))) {
-                        CoverCard(
-                            album.name,
-                            album.cover,
-                            album.items.size,
-                            onClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onOpen(album) },
-                            onLongClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onLongPress(album) },
-                            isSelected = album.relativePath in selectedPaths,
-                            // The name waits until the card is well clear of the stack, so two names never print over each other.
-                            labelAlpha = { ((progressOf(depth, cell.count) - 0.5f) * 2f).coerceIn(0f, 1f) },
-                            modifier = Modifier
-                                .onGloballyPositioned { own = it.positionInRoot() }
-                                .graphicsLayer {
-                                    val at = own
-                                    if (at == null) {
-                                        alpha = 0f
-                                    } else {
-                                        val p = progressOf(depth, cell.count)
-                                        val rest = 1f - p
-                                        // Turned and scaled about the middle of its picture, the way the card lay in the stack.
-                                        transformOrigin = if (Settings.albumColumns == 1) {
-                                            TransformOrigin(LIST_COVER.toPx() / 2f / size.width, 0.5f)
-                                        } else {
-                                            TransformOrigin(0.5f, size.width / 2f / size.height)
-                                        }
-                                        translationX = (origin.x - at.x + stackShift(depth).toPx()) * rest
-                                        translationY = (origin.y - at.y) * rest
-                                        rotationZ = stackTilt(depth) * rest
-                                        val scale = stackScale(depth) + (1f - stackScale(depth)) * p
-                                        scaleX = scale
-                                        scaleY = scale
-                                        // Lying deeper it is darker, as in the stack; the ground behind is near black, so fading it darkens it.
-                                        alpha = stackShade(depth) + (1f - stackShade(depth)) * p.coerceIn(0f, 1f)
-                                    }
-                                }
-                                .jiggle(reorder, cell.key, isArrangingGroup),
-                        )
-                    }
-                }
-                is AlbumCell.Collapse -> item(key = cell.key, span = { GridItemSpan(span) }, contentType = "collapse") {
-                    SpanCell(span, Modifier.animateItem(placementSpec = tween(Motion.STACK_MS, easing = Motion.powerThreeInOut))) {
-                        CollapseCard(
-                            cell.name,
-                            onClick = collapse,
-                            modifier = Modifier.graphicsLayer {
-                                // Arrives last and leaves first.
-                                val shown = ((spread.value - 0.6f) / 0.4f).coerceIn(0f, 1f)
-                                alpha = shown
-                                scaleX = 0.85f + 0.15f * shown
-                                scaleY = scaleX
-                            },
-                        )
-                    }
+                is AlbumEntry.Stack -> item(key = entry.key, span = { GridItemSpan(maxLineSpan) }, contentType = "stack") {
+                    val isOpen = entry.name in openStacks
+                    val isMovable = isRearranging && !isOpen
+                    GroupRow(
+                        stack = entry,
+                        isOpen = isOpen,
+                        onOpenChange = { open -> openStacks = if (open) openStacks + entry.name else openStacks - entry.name },
+                        isPicking = isPicking,
+                        selectedPaths = selectedPaths,
+                        onToggle = onToggle,
+                        onOpenAlbum = onOpen,
+                        onLongPress = onLongPress,
+                        onStackLongPress = { onStackLongPress(entry.name) },
+                        isRearranging = isRearranging,
+                        isMovable = isMovable,
+                        onArrangeGroup = { reordered -> arrange(entries, entry.name, reordered) },
+                        modifier = (if (isMovable) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide))
+                            .padding(vertical = GROUP_GAP),
+                    )
                 }
             }
         }
-        item(key = "new-album", contentType = "new-album") { Box(Modifier.animateItem(placementSpec = tween(Motion.STACK_MS, easing = Motion.powerThreeInOut))) { AddCard("New album", onClick = onNewAlbum) } }
-        item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = tween(Motion.STACK_MS, easing = Motion.powerThreeInOut))) { footer() } }
+        item(key = "new-album", contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide)) { AddCard("New album", onClick = onNewAlbum) } }
+        item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide)) { footer() } }
     }
 }
 
+// Extra room above and below a group, so groups read as separate rows.
+private val GROUP_GAP = 8.dp
+// Opened, a group lays its albums out this many to a row, whatever the album columns are.
+private const val GROUP_COLUMNS = 3
 // How much of the opening the albums' departures are spread over; each album then takes the rest to arrive.
 private const val STAGGER_SPAN = 0.35f
+private val GROUP_LABEL_GAP = 18.dp
+private val GROUP_ROW_GAP = 20.dp
 
-// One grid item of the albums screen; an opened group is its top card, the albums under it and the card that folds them back.
-private sealed interface AlbumCell {
-    val key: Any
-
-    data class Single(val album: Album) : AlbumCell {
-        override val key: Any get() = album.id
-    }
-
-    data class Stack(val stack: AlbumEntry.Stack) : AlbumCell {
-        override val key: Any get() = stack.key
-    }
-
-    // Keyed by the album, not the group, so the open group's albums can be rearranged among themselves.
-    data class Top(val stack: AlbumEntry.Stack, val album: Album) : AlbumCell {
-        override val key: Any get() = album.id
-    }
-
-    data class Member(val album: Album, val depth: Int, val count: Int) : AlbumCell {
-        override val key: Any get() = album.id
-    }
-
-    data class Collapse(val name: String) : AlbumCell {
-        override val key: Any get() = "collapse:$name"
-    }
-}
-
-private fun cellsOf(entries: List<AlbumEntry>, openStack: String?): List<AlbumCell> = entries.flatMap { entry ->
-    when (entry) {
-        is AlbumEntry.Single -> listOf(AlbumCell.Single(entry.album))
-        is AlbumEntry.Stack -> if (entry.name != openStack) {
-            listOf(AlbumCell.Stack(entry))
-        } else {
-            listOf<AlbumCell>(AlbumCell.Top(entry, entry.albums.first())) +
-                entry.albums.drop(1).mapIndexed { index, album -> AlbumCell.Member(album, index + 1, entry.albums.size - 1) } +
-                AlbumCell.Collapse(entry.name)
-        }
-    }
-}
-
-// How many cells each item takes: a stack fills its row, and whatever comes right before a group, or closes one, stretches to the row's end.
-private fun spansOf(cells: List<AlbumCell>, columns: Int): List<Int> {
-    if (columns <= 1) return List(cells.size) { 1 }
+// The albums before a group stretch to the end of their row, so the group starts a row of its own.
+private fun spansOf(entries: List<AlbumEntry>, columns: Int): List<Int> {
+    if (columns <= 1) return List(entries.size) { 1 }
     var column = 0
-    return cells.mapIndexed { index, cell ->
-        val next = cells.getOrNull(index + 1)
-        val endsRow = cell is AlbumCell.Stack || cell is AlbumCell.Collapse || next is AlbumCell.Stack || next is AlbumCell.Top
+    return entries.mapIndexed { index, entry ->
+        val endsRow = entry is AlbumEntry.Stack || entries.getOrNull(index + 1) is AlbumEntry.Stack
         val span = if (endsRow) columns - column else 1
         column = (column + span) % columns
         span
     }
 }
+
+// Geometry of the last layout, for the drag inside an open group to find the slot under the finger.
+private class GroupGeometry {
+    var cell = 1f
+    var gap = 0f
+    var rowHeight = 1f
+    var rowGap = 0f
+
+    fun slot(index: Int): Offset = Offset((index % GROUP_COLUMNS) * (cell + gap), (index / GROUP_COLUMNS) * (rowHeight + rowGap))
+
+    // A fractional slot lies between its two neighbours, so a card gliding to a new place passes through the ones between.
+    fun slot(position: Float): Offset {
+        val lower = floor(position).toInt().coerceAtLeast(0)
+        val fraction = position - lower
+        return if (fraction == 0f) slot(lower) else slot(lower) + (slot(lower + 1) - slot(lower)) * fraction
+    }
+
+    fun slotAt(point: Offset, count: Int): Int {
+        val column = (point.x / (cell + gap)).toInt().coerceIn(0, GROUP_COLUMNS - 1)
+        val row = (point.y / (rowHeight + rowGap)).toInt().coerceAtLeast(0)
+        return (row * GROUP_COLUMNS + column).coerceIn(0, count - 1)
+    }
+}
+
+// A group: its albums lie as a leaning stack with the name and count beside it, like a one-column row. Opened, the same cards lift off the stack one after another into rows of three, ending with the card that lays them back down; nothing is swapped, so opening and closing are one continuous motion.
+@Composable
+private fun GroupRow(
+    stack: AlbumEntry.Stack,
+    isOpen: Boolean,
+    onOpenChange: (Boolean) -> Unit,
+    isPicking: Boolean,
+    selectedPaths: Set<String>,
+    onToggle: (List<Album>) -> Unit,
+    onOpenAlbum: (Album) -> Unit,
+    onLongPress: (Album) -> Unit,
+    onStackLongPress: () -> Unit,
+    isRearranging: Boolean,
+    isMovable: Boolean,
+    onArrangeGroup: (List<Album>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val albums = stack.albums
+    val count = albums.size
+    // Time through opening or closing, 0 to 1, run evenly; each card turns it into its own eased, staggered progress.
+    val time = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
+    LaunchedEffect(isOpen) { time.animateTo(if (isOpen) 1f else 0f, tween(Motion.STACK_MS, easing = LinearEasing)) }
+    val isShut = !isOpen && time.value == 0f
+    val isArranging = isRearranging && isOpen
+    val geometry = remember { GroupGeometry() }
+    val currentAlbums by rememberUpdatedState(albums)
+    var heldId by remember { mutableStateOf<Long?>(null) }
+    var heldOffset by remember { mutableStateOf(Offset.Zero) }
+    val haptic = LocalHapticFeedback.current
+
+    // Card `index` of `slots` (the albums, then the closing card): the deeper ones leave a little later and come back a little sooner, and opening overshoots slightly.
+    fun progressOf(index: Int): Float {
+        val start = index.toFloat() / count * STAGGER_SPAN
+        val local = ((time.value - start) / (1f - STAGGER_SPAN)).coerceIn(0f, 1f)
+        return if (isOpen) Motion.backOut.transform(local) else Motion.powerThreeInOut.transform(local)
+    }
+
+    val openGroup = { if (isPicking) onToggle(albums) else onOpenChange(true) }
+    val slotStates = albums.mapIndexed { index, album ->
+        key(album.id) { animateFloatAsState(index.toFloat(), tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "slot") }
+    }
+
+    Layout(
+        modifier = modifier.jiggle(stack.key, isMovable, pivot = LIST_COVER / 2),
+        content = {
+            Column(Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = { if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress() })) {
+                BasicText(stack.name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BasicText(albums.sumOf { it.items.size }.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
+            }
+            albums.forEachIndexed { index, album ->
+                key(album.id) {
+                    val isSelected = if (isShut) index == 0 && albums.all { it.relativePath in selectedPaths } else album.relativePath in selectedPaths
+                    CoverCard(
+                        album.name,
+                        album.cover,
+                        album.items.size,
+                        onClick = {
+                            when {
+                                isShut -> openGroup()
+                                isPicking -> onToggle(listOf(album))
+                                !isRearranging -> onOpenAlbum(album)
+                            }
+                        },
+                        onLongClick = {
+                            when {
+                                isShut -> if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress()
+                                isPicking -> onToggle(listOf(album))
+                                !isRearranging -> onLongPress(album)
+                            }
+                        },
+                        isSelected = isSelected,
+                        isList = false,
+                        // The name waits until the card is well clear of the stack, so names never print over each other.
+                        labelAlpha = { ((progressOf(index) - 0.5f) * 2f).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .then(
+                                if (!isArranging) {
+                                    Modifier
+                                } else {
+                                    Modifier.pointerInput(album.id) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                                heldId = album.id
+                                                heldOffset = Offset.Zero
+                                            },
+                                            onDragEnd = { heldId = null },
+                                            onDragCancel = { heldId = null },
+                                        ) { change, amount ->
+                                            change.consume()
+                                            heldOffset += amount
+                                            val list = currentAlbums
+                                            val from = list.indexOfFirst { it.id == album.id }
+                                            if (from < 0) return@detectDragGestures
+                                            val centre = geometry.slot(from) + heldOffset + Offset(geometry.cell / 2f, geometry.cell / 2f)
+                                            val to = geometry.slotAt(centre, list.size)
+                                            if (to != from) {
+                                                onArrangeGroup(list.toMutableList().apply { add(to, removeAt(from)) })
+                                                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                                // The card takes the new slot, so the offset is rebased onto it to stay under the finger.
+                                                heldOffset += geometry.slot(from) - geometry.slot(to)
+                                            }
+                                        }
+                                    }
+                                },
+                            )
+                            .jiggle(album.id, isArranging) { heldId == album.id },
+                    )
+                }
+            }
+            CollapseCard(stack.name, onClick = { onOpenChange(false) }, isList = false)
+        },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val gap = COVER_GAP.roundToPx()
+        val cell = (width - gap * (GROUP_COLUMNS - 1)) / GROUP_COLUMNS
+        val small = LIST_COVER.roundToPx()
+        val labelStart = small + GROUP_LABEL_GAP.roundToPx() + stackShift(GROUP_COLUMNS).roundToPx()
+        val header = measurables.first().measure(Constraints(maxWidth = (width - labelStart).coerceAtLeast(0)))
+        val cards = measurables.drop(1).map { it.measure(Constraints.fixedWidth(cell)) }
+        val rowHeight = cards.maxOf { it.height }
+        val rowGap = GROUP_ROW_GAP.roundToPx()
+        geometry.cell = cell.toFloat()
+        geometry.gap = gap.toFloat()
+        geometry.rowHeight = rowHeight.toFloat()
+        geometry.rowGap = rowGap.toFloat()
+        val rows = (cards.size + GROUP_COLUMNS - 1) / GROUP_COLUMNS
+        val openHeight = rows * rowHeight + (rows - 1) * rowGap
+        val openness = Motion.powerThreeInOut.transform(time.value)
+        val height = (small + (openHeight - small) * openness).roundToInt()
+        layout(width, height) {
+            header.placeWithLayer(labelStart, (small - header.height) / 2) { alpha = (1f - openness * 2f).coerceIn(0f, 1f) }
+            cards.forEachIndexed { index, card ->
+                val isCloser = index == count
+                val p = progressOf(index)
+                val depth = min(index, STACK_DEPTH)
+                val isHeld = !isCloser && albums[index].id == heldId
+                val open = when {
+                    isCloser -> geometry.slot(count)
+                    isHeld -> geometry.slot(index) + heldOffset
+                    else -> geometry.slot(slotStates[index].value)
+                }
+                // Lying in the stack, the card's picture is centred on the stack's own, shifted by its depth.
+                val shut = Offset(small / 2f + stackShift(depth).toPx() - cell / 2f, small / 2f - cell / 2f)
+                val x = shut.x + (open.x - shut.x) * p
+                val y = shut.y + (open.y - shut.y) * p
+                card.placeWithLayer(x.roundToInt(), y.roundToInt(), zIndex = if (isHeld) 100f else (count - index).toFloat()) {
+                    transformOrigin = TransformOrigin(0.5f, cell / 2f / card.height)
+                    val shutScale = small.toFloat() / cell * stackScale(depth)
+                    val scale = shutScale + (1f - shutScale) * p
+                    scaleX = scale
+                    scaleY = scale
+                    rotationZ = stackTilt(depth) * (1f - p)
+                    // Deeper cards lie darker, as in the stack; the ground is near black, so fading darkens. Past the visible layers, and the closing card, they are hidden until they leave.
+                    val shade = if (isCloser || index > STACK_DEPTH) 0f else stackShade(depth)
+                    alpha = shade + (1f - shade) * p.coerceIn(0f, 1f)
+                }
+            }
+        }
+    }
+}
+
+// How many cards show under the top one while a group lies shut.
+private const val STACK_DEPTH = 3
 
 // The header (back and the album's name) floats over the grid in the app's top layer, so it can blur what scrolls under it.
 @Composable

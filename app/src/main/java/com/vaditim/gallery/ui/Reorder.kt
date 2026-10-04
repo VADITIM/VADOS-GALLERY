@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
 import androidx.compose.animation.core.animateFloat
@@ -117,9 +119,9 @@ fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean
         }
 }
 
-// On the card, not the grid item, so a card in a wider cell still swings about its own centre. Each cover waiting to be moved jiggles a little, out of step with its neighbours so the grid shivers rather than sways; the one held is lifted instead.
+// On the card, not the grid item, so a card in a wider cell still swings about its own centre (or `pivot`, measured from its top-left corner, for a card drawn inside a wider box). Each cover waiting to be moved jiggles a little, out of step with its neighbours so the grid shivers rather than sways; the one held is lifted instead.
 @Composable
-fun Modifier.jiggle(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier {
+fun Modifier.jiggle(key: Any, isEnabled: Boolean, pivot: Dp? = null, isHeld: () -> Boolean = { false }): Modifier {
     if (!isEnabled) return this
     val seed = key.hashCode()
     val swing by rememberInfiniteTransition(label = "jiggle").animateFloat(
@@ -133,7 +135,8 @@ fun Modifier.jiggle(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier {
         label = "jiggle",
     )
     return graphicsLayer {
-        if (key == reorder.draggedKey) {
+        if (pivot != null && size.width > 0f && size.height > 0f) transformOrigin = TransformOrigin(pivot.toPx() / size.width, pivot.toPx() / size.height)
+        if (isHeld()) {
             scaleX = 1.05f
             scaleY = 1.05f
         } else {
@@ -141,3 +144,6 @@ fun Modifier.jiggle(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier {
         }
     }
 }
+
+@Composable
+fun Modifier.jiggle(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier = jiggle(key, isEnabled) { key == reorder.draggedKey }
