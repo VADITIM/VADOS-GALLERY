@@ -307,6 +307,17 @@ fun CheckIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, s
     drawPath(path(unit) { u -> moveTo(5f * u, 12.5f * u); lineTo(10f * u, 17.5f * u); lineTo(19f * u, 7f * u) }, color, style = stroke)
 }
 
+// A motion photo: a dot inside a ring inside a ring of dots, the mark both Samsung and Apple use for a moving still.
+@Composable
+fun MotionIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawCircle(color, 2.4f * unit, Offset(12f * unit, 12f * unit))
+    drawCircle(color, 5.6f * unit, Offset(12f * unit, 12f * unit), style = stroke)
+    repeat(12) { step ->
+        val angle = step * Math.PI / 6
+        drawCircle(color, 0.9f * unit, Offset((12f + 9.2f * kotlin.math.cos(angle).toFloat()) * unit, (12f + 9.2f * kotlin.math.sin(angle).toFloat()) * unit))
+    }
+}
+
 // An eye, struck through when the thing it marks is kept out of sight.
 @Composable
 fun EyeIcon(color: Color, isCrossed: Boolean = false, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->

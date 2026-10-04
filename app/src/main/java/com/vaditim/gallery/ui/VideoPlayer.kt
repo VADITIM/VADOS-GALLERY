@@ -47,6 +47,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import android.content.Context
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import com.vaditim.gallery.media.ClipDataSource
+import com.vaditim.gallery.media.MotionPhoto
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.MicroLabel
@@ -126,6 +132,21 @@ fun rememberVideoState(item: MediaItem?): VideoState? {
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { state.player.pause() }
     return state
+}
+
+// A motion photo's clip, read straight out of the photo's file and looped for as long as the photo is held.
+@androidx.annotation.OptIn(UnstableApi::class)
+fun motionPlayer(context: Context, item: MediaItem, clip: MotionPhoto.Clip): ExoPlayer {
+    val source = ProgressiveMediaSource.Factory { ClipDataSource(DefaultDataSource(context, false), clip) }
+        .createMediaSource(PlayerMediaItem.fromUri(item.uri))
+    return ExoPlayer.Builder(context).build().apply {
+        setAudioAttributes(AudioAttributes.DEFAULT, true)
+        setMediaSource(source)
+        repeatMode = Player.REPEAT_MODE_ONE
+        volume = if (isSoundOff) 0f else 1f
+        prepare()
+        playWhenReady = true
+    }
 }
 
 // A TextureView rather than a SurfaceView, so the video takes the rounded frame and the zoom like a photo does.

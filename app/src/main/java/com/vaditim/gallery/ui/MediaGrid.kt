@@ -59,6 +59,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.video.VideoFrameDecoder
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.media.MotionPhoto
 import com.vaditim.gallery.media.Thumbnail
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
@@ -357,6 +358,11 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelecte
     } else {
         null
     }
+    // Whether the photo carries a clip is read off the file once it has stood on screen, then remembered for the session.
+    var isMotion by remember(item.id) { mutableStateOf(MotionPhoto.knownFor(item) == true) }
+    LaunchedEffect(item.id, isSettled) {
+        if (isSettled && !item.isVideo && MotionPhoto.knownFor(item) == null) isMotion = MotionPhoto.isMotion(context, item)
+    }
     val selectedScale by animateFloatAsState(if (isSelected) 0.86f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
     DisposableEffect(item.id) { onDispose { TileBounds.forget(item.id) } }
     Box(
@@ -382,13 +388,18 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelecte
                     .padding(horizontal = 6.dp, vertical = 1.dp),
             )
         }
-        // Bottom right: the heart of a favourite, then a video's length beside it.
-        if (item.isFavorite || item.isVideo) {
+        // Bottom right: the mark of a motion photo, the heart of a favourite, then a video's length beside it.
+        if (item.isFavorite || item.isVideo || isMotion) {
             Row(
                 Modifier.align(Alignment.BottomEnd).padding(5.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (isMotion) {
+                    Box(Modifier.clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 3.dp, vertical = 2.dp)) {
+                        MotionIcon(Palette.textBright, size = TILE_HEART + 2.dp)
+                    }
+                }
                 if (item.isFavorite) {
                     Box(Modifier.clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 4.dp, vertical = 3.dp)) {
                         HeartIcon(isFilled = true, color = Palette.favorite, size = TILE_HEART)

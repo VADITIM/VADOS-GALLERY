@@ -51,6 +51,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.produceState
+import com.vaditim.gallery.media.MotionPhoto
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -132,6 +135,8 @@ fun ViewerScreen(
     val isChromeShown = isChromeVisible && isChromeAllowed && !isPulled
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
+    val context = LocalContext.current
+    val isCurrentMotion by produceState(MotionPhoto.knownFor(current) == true, current.id) { value = MotionPhoto.isMotion(context, current) }
     LaunchedEffect(current.id) {
         isDeleteArmed = false
         onCurrentChanged(current.id)
@@ -177,7 +182,12 @@ fun ViewerScreen(
                     }
                 }
                 ChromePiece(isChromeShown, isFromTop = true, order = 1) {
-                    Box(Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Row(
+                        Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (isCurrentMotion) MotionIcon(Palette.textBright, size = 14.dp)
                         MicroLabel(formatStamp(current))
                     }
                 }
@@ -345,6 +355,9 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
     var swipeOffset by remember { mutableFloatStateOf(0f) }
     // The picture's own proportions, so the rounded frame hugs the photo rather than the screen; read off the decoded image because the stored width and height ignore rotation.
     var ratio by remember(item.id) { mutableStateOf(if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else null) }
+    // A motion photo's clip, playing while the photo is held.
+    var motion by remember(item.id) { mutableStateOf<VideoState?>(null) }
+    DisposableEffect(item.id) { onDispose { motion?.player?.release() } }
 
     LaunchedEffect(ratio) { ratio?.let(onRatio) }
 
@@ -431,6 +444,35 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                         // Rewinding leaves the video paused; a video that was playing carries on from where the rewind stopped.
                         if (isReverse && wasPlaying) video.player.play()
                         if (!isReverse && !wasPlaying) video.player.pause()
+                    }
+                },
+            )
+            // Holding a motion photo plays its clip on a loop until the finger lifts.
+            .then(
+                if (item.isVideo) Modifier else Modifier.pointerInput(item.id) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (scale > 1.01f) return@awaitEachGesture
+                        val held = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                        val start = scope.launch {
+                            if (!MotionPhoto.isMotion(context, item)) return@launch
+                            val clip = MotionPhoto.findClip(context, item) ?: return@launch
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            motion = VideoState(motionPlayer(context, item, clip))
+                        }
+                        held.consume()
+                        do {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { it.consume() }
+                        } while (event.changes.any { it.pressed })
+                        start.cancel()
+                        val playing = motion ?: return@awaitEachGesture
+                        motion = null
+                        // Released a moment later, once the surface showing it has left the screen.
+                        scope.launch {
+                            delay(Motion.STATE_MS.toLong())
+                            playing.player.release()
+                        }
                     }
                 },
             )
@@ -521,6 +563,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
             )
             // The still frame shows until the video has its first picture, then the video draws over it.
             if (video != null) VideoSurface(video, Modifier.fillMaxSize())
+            motion?.let { VideoSurface(it, Modifier.fillMaxSize()) }
         }
     }
 }
