@@ -90,12 +90,8 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
 
 @Composable
 private fun SettingsToggle(label: String, isOn: Boolean, onChange: (Boolean) -> Unit) {
-    val haptic = LocalHapticFeedback.current
     Row(
-        Modifier.fillMaxWidth().pressable(onClick = {
-            haptic.performHapticFeedback(if (isOn) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
-            onChange(!isOn)
-        }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
+        Modifier.fillMaxWidth().pressable(onClick = { onChange(!isOn) }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

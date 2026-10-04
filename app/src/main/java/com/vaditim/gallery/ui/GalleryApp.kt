@@ -537,14 +537,6 @@ private fun Library(viewModel: GalleryViewModel) {
             Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.8f).fadingGlass())
 
             TopRow(
-                backLabel = when {
-                    openAlbum != null -> openAlbum.name
-                    openPrivateGroup != null -> "Private · ${openPrivateGroup.name}"
-                    place is AlbumsPlace.PrivateFavorites -> "Private · Favorites"
-                    openLocation != null -> openLocation.city
-                    place is AlbumsPlace.Trash -> "Trash"
-                    else -> null
-                },
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onReview = when {
@@ -554,26 +546,13 @@ private fun Library(viewModel: GalleryViewModel) {
                     openLocation != null -> { { review = ViewerSource.InLocation(openLocation.key) } }
                     else -> null
                 },
-                onAdd = when {
-                    openAlbum != null -> { { picker = PickerTarget.IntoAlbum(openAlbum.relativePath, openAlbum.name) } }
-                    openPrivateGroup != null -> { { picker = PickerTarget.IntoGroup(openPrivateGroup.name) } }
-                    else -> null
-                },
-                onBack = {
-                    albumsPlace = when (place) {
-                        is AlbumsPlace.Folder -> AlbumsPlace.Folders
-                        is AlbumsPlace.Location -> AlbumsPlace.Locations
-                        is AlbumsPlace.Trash -> AlbumsPlace.Folders
-                        else -> AlbumsPlace.PrivateGroups
-                    }
-                },
                 onCancelSelection = clearSelection,
                 onSettings = { sheet = AppSheet.SETTINGS },
             )
 
             val barModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp)
             if (isRearranging) {
-                Box(barModifier.pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.Confirm); isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
+                Box(barModifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
                     CheckIcon(accent)
                 }
             } else if (isSelectingCovers) {
@@ -1015,6 +994,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     ReviewScreen(
                         items = itemsFor(source),
                         isPrivate = source.isPrivateSource(),
+                        progressKey = source.reviewKey(),
                         onDelete = { picked -> if (source.isPrivateSource()) actions.deletePrivate(picked) else actions.trash(picked) },
                         onClose = { review = null },
                     )
@@ -1095,48 +1075,44 @@ private fun Library(viewModel: GalleryViewModel) {
 
 private data class PendingPrivate(val items: List<MediaItem>, val groupName: String, val isSelection: Boolean)
 
+// What a folder's review progress is saved under; stable across launches, unlike the source object itself.
+private fun ViewerSource.reviewKey(): String = when (this) {
+    is ViewerSource.InAlbum -> "album:$albumId"
+    is ViewerSource.InPrivateGroup -> "group:$name"
+    is ViewerSource.InLocation -> "location:$key"
+    ViewerSource.PrivateFavorites -> "private-favorites"
+    ViewerSource.Recent -> "recent"
+    ViewerSource.Favorites -> "favorites"
+    ViewerSource.Trash -> "trash"
+}
+
 private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites
 
-// The top layer: the month you are looking at, the way back out of a folder, or — while selecting — the count and the way out of the selection.
-// Everything right of the back button has a fixed width, so a month with a longer name never shifts or resizes the buttons.
+// The top layer: the month you are looking at, or — while selecting — the count and the way out of the selection. Leaving a folder is the system back gesture.
+// The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    val click = { haptic.performHapticFeedback(HapticFeedbackType.ContextClick) }
+private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (selectedCount > 0) {
-            Box(Modifier.pressable(onClick = { click(); onCancelSelection() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                CloseIcon(LocalAccent.current)
-            }
+            TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
             Box(Modifier.weight(1f))
             Chip("$selectedCount selected")
         } else {
-            if (backLabel != null) {
-                Box(Modifier.weight(1f, fill = false).pressable(onClick = onBack).glass(Shapes.capsule).padding(horizontal = 16.dp, vertical = 11.dp)) {
-                    BasicText("‹  $backLabel", style = Type.cardTitle.copy(color = LocalAccent.current), maxLines = 1)
-                }
-            }
-            Box(Modifier.weight(if (backLabel != null) 0.001f else 1f))
+            Box(Modifier.weight(1f))
             if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
-            if (onReview != null) {
-                Box(Modifier.pressable(onClick = { click(); onReview() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    ReviewIcon(LocalAccent.current)
-                }
-            }
-            if (onAdd != null) {
-                Box(Modifier.pressable(onClick = { click(); onAdd() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                    PlusIcon(LocalAccent.current)
-                }
-            }
-            Box(Modifier.pressable(onClick = { click(); onSettings() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                SettingsIcon(Palette.textBright)
-            }
+            if (onReview != null) TopButton(onReview) { ReviewIcon(LocalAccent.current) }
+            TopButton(onSettings) { SettingsIcon(Palette.textBright) }
         }
     }
+}
+
+@Composable
+private fun TopButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Box(Modifier.pressable(onClick = onClick).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) { icon() }
 }
 
 @Composable

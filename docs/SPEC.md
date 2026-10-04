@@ -58,8 +58,7 @@ the Apple order. The thumb is at the bottom of the screen and so is the photo ju
 - **Creating albums, anywhere:** a *New album* card at the end of the albums grid (name it, then pick
   its photos), and *+ New album* at the end of every "move to" list — from the viewer, a selection, or
   a private group being moved out. A new album is a folder under `Pictures/`.
-- **+ Add** at the top of every open album and private group opens the photo picker (the whole
-  library, every tap picks) and moves the picked photos in.
+- *Removed:* the **+ Add** button at the top of albums and private groups; photos go in with Move. *Add photos* stays in the long-press menu.
 - **Long-press an album:** *Add photos*, *Move album to private*, *Delete album* (second tap confirms;
   the photos go to the system trash).
 - *Planned:* a *Recently deleted* row at the very end of the list as the one way into the trash.
@@ -78,7 +77,6 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
   not need the fingerprint; looking does.
 - **Long-press a group:** *Add photos*, *Move group out to album* (an existing album or a new one, named
   after the group by default; the emptied group is removed), *Delete group* (second tap confirms — final).
-- **+ Add** at the top of an open group picks photos from the library straight into it.
 - **Inside a private photo:** SHARE, DELETE (a second tap to confirm — private photos are outside the
   system trash, so this one is final), and ••• → *Move to group*, *Move out to album*, *Details*.
 - **Private favourites.** A favourite that goes into Private stays a favourite — but only as a
@@ -112,7 +110,7 @@ Tapping a thumbnail opens it full screen, on black.
 
 - Swipe sideways through the neighbours of the list it was opened from.
 - Tap toggles the chrome.
-- Back, or the system back gesture, closes it.
+- The system back gesture (or a swipe down) closes it; there is no back button.
 - *Planned:*
   - **Shared-element zoom** (done): the photo's own frame (no black around it) is cropped to the tile's square and moved onto the tile of whichever photo you ended on, scrolling the grid to it first when needed; a quiet fade when no tile applies.
   - Pinch and double-tap to zoom (done); photos sit in a rounded frame with a gap between pages when swiping.
@@ -244,3 +242,6 @@ review, which is not a goal.
 - **Save frame.** A video's ••• menu offers Save frame: the frame on screen (paused there) is saved as a full-size JPEG in the video's folder, private groups included, dated at the video's time plus the position, so it sorts beside the video.
 - **Review.** Every open album, private group, Private Favorites and location has a review button at the top. It shows the folder's photos one at a time, newest first, on black: swipe left (or the trash button) to let one go, right (or the check) to keep it; the photo leans and tints red or in the accent as it goes. The middle button takes back the last decision. Nothing is deleted while reviewing: closing (or reaching the end) shows the count and one step that moves the let-go photos to the trash (with undo), or deletes them for good inside Private.
 - **Similar shots.** Neighbouring photos at most 8 seconds apart that look alike (a 64-bit difference hash of their thumbnails, at most 12 bits apart) fold into one tile: the newest shot, with a stack mark and the count at the top right. Every photo grid does this except the trash. Tapping a folded stack lays its shots out in place, each marked with its place (2/5); tapping that mark folds it back. Selecting a folded stack (tap or drag) selects every shot in it. Hashes are worked out once in the background and kept on disk; private photos are not hashed. Settings → Stack similar shots turns it off.
+- **No back buttons.** Folders and the viewer are left with the system back gesture; the top row holds only the month, review and settings, evenly spaced.
+- **Every press vibrates.** Every pressable gives a tick from the vibrator itself (not view haptics, which One UI can mute), on tap and on long press.
+- **Review progress.** Each folder's review remembers the furthest photo reached and the photos let go but not yet deleted. Opening review again offers Continue from that point (with the marked count) or Start fresh; the furthest count never goes down. Closing mid-way can keep the marks for later or unmark them. Every review card fills the screen on black.

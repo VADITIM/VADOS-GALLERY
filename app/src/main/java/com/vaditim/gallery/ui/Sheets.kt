@@ -83,9 +83,8 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
 
 @Composable
 fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, icon: (@Composable (Color) -> Unit)? = null, onClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
     Row(
-        Modifier.fillMaxWidth().pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
+        Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

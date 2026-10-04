@@ -1,4 +1,5 @@
-- Similar shots taken seconds apart (bursts, several tries at the same picture) fold into one tile with a count, in every photo grid except the trash.
-- Tap a stack to lay its shots out in place; each shows its place in the stack, and tapping that folds the stack back.
-- Selecting a folded stack selects all its shots. Settings → Stack similar shots turns it off.
-- The photos are compared once in the background after the update, so stacks appear gradually the first time.
+- Review remembers where you stopped in each folder: open it again to continue from the furthest photo or start fresh. The furthest count never goes back.
+- Photos marked in review can be kept marked when you close, and are still there next time.
+- Review photos fill the whole screen on black, so the next photo no longer shows around a photo of another shape.
+- The back buttons are gone (folders and the viewer close with the back gesture), and so is the + button in albums and groups; the top buttons are evenly spaced.
+- Every button now vibrates when pressed.

@@ -16,6 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.vaditim.gallery.ui.Haptics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -44,6 +46,8 @@ fun MicroLabel(text: String, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.pressable(onClick: () -> Unit, pressedScale: Float = 0.95f, onLongClick: (() -> Unit)? = null): Modifier {
+    // Every press answers with a tick from the vibrator itself, so no button is ever silent under One UI's haptic settings.
+    val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -53,5 +57,10 @@ fun Modifier.pressable(onClick: () -> Unit, pressedScale: Float = 0.95f, onLongC
     )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .combinedClickable(interactionSource = interactionSource, indication = null, onLongClick = onLongClick, onClick = onClick)
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onLongClick = onLongClick?.let { longClick -> { Haptics.tick(context); longClick() } },
+            onClick = { Haptics.tick(context); onClick() },
+        )
 }

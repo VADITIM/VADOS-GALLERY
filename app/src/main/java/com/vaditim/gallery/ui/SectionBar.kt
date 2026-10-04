@@ -40,7 +40,6 @@ private const val ACTIVE_LABEL_SCALE = 1.06f
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
 fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier) {
-    val haptic = LocalHapticFeedback.current
     // Where each section's pill sits in the bar, left edge and right edge, so the highlight knows where to slide.
     val spans = remember { mutableStateMapOf<Section, Pair<Float, Float>>() }
     val left = remember { Animatable(Float.NaN) }
@@ -80,7 +79,7 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
             Box(
                 Modifier
                     .onPlaced { placed -> spans[section] = placed.positionInParent().x.let { it to it + placed.size.width } }
-                    .pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick); onSelect(section) })
+                    .pressable(onClick = { onSelect(section) })
                     .padding(horizontal = 18.dp, vertical = 13.dp),
             ) {
                 BasicText(

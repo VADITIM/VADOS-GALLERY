@@ -30,8 +30,7 @@ import com.vaditim.gallery.vas.pressable
 @Composable
 fun IconButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     // Every icon button is an action (share, move, delete, favourite…), so each one answers with a short click.
-    val haptic = LocalHapticFeedback.current
-    Box(modifier.pressable(onClick = { haptic.performHapticFeedback(HapticFeedbackType.ContextClick); onClick() }).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
+    Box(modifier.pressable(onClick = onClick).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
 }
 
 @Composable

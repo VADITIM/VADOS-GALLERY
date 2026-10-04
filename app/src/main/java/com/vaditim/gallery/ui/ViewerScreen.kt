@@ -174,14 +174,10 @@ fun ViewerScreen(
             Row(
                 Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                // No back button: the system back gesture or a swipe down closes the viewer.
+                horizontalArrangement = Arrangement.End,
             ) {
                 ChromePiece(isChromeShown, isFromTop = true, order = 0) {
-                    Box(Modifier.pressable(onClick = onClose).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
-                        BasicText("‹", style = Type.cardTitle.copy(color = LocalAccent.current))
-                    }
-                }
-                ChromePiece(isChromeShown, isFromTop = true, order = 1) {
                     Row(
                         Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
