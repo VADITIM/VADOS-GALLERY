@@ -307,6 +307,21 @@ fun CheckIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, s
     drawPath(path(unit) { u -> moveTo(5f * u, 12.5f * u); lineTo(10f * u, 17.5f * u); lineTo(19f * u, 7f * u) }, color, style = stroke)
 }
 
+// An eye, struck through when the thing it marks is kept out of sight.
+@Composable
+fun EyeIcon(color: Color, isCrossed: Boolean = false, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(2.5f * u, 12f * u)
+        cubicTo(5f * u, 7f * u, 8.5f * u, 5f * u, 12f * u, 5f * u)
+        cubicTo(15.5f * u, 5f * u, 19f * u, 7f * u, 21.5f * u, 12f * u)
+        cubicTo(19f * u, 17f * u, 15.5f * u, 19f * u, 12f * u, 19f * u)
+        cubicTo(8.5f * u, 19f * u, 5f * u, 17f * u, 2.5f * u, 12f * u)
+        close()
+        if (isCrossed) { moveTo(4f * u, 3.5f * u); lineTo(20f * u, 20.5f * u) }
+    }, color, style = stroke)
+    drawCircle(color, 3f * unit, Offset(12f * unit, 12f * unit), style = stroke)
+}
+
 @Composable
 fun GripIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, _ ->
     listOf(9f, 15f).forEach { x -> listOf(6f, 12f, 18f).forEach { y -> drawCircle(color, 1.6f * unit, Offset(x * unit, y * unit)) } }

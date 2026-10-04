@@ -1,1 +1,1 @@
-- After a delete or a move, a small pill above the bar offers to undo it for a few seconds — in every grid and in the viewer.
+- Long-press an album (or an album group) → Hide from Recent: its photos leave the Recent grid but the album still opens as before. Show in Recent brings them back.

@@ -46,6 +46,10 @@ object Settings {
     var albumStacks by mutableStateOf<List<AlbumStack>>(emptyList())
         private set
 
+    // Album folders kept out of Recent; they still open as albums.
+    var hiddenFromRecent by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     fun init(context: Context) {
         preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         blurDp = preferences.getFloat("blur", DEFAULT_BLUR_DP)
@@ -57,6 +61,7 @@ object Settings {
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupedAlbums = preferences.getBoolean("groupedAlbums", false)
+        hiddenFromRecent = preferences.getString("hiddenFromRecent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty().toSet()
         albumStacks = preferences.getString("albumStacks", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
             val parts = line.split('\t')
             AlbumStack(parts.first(), parts.drop(1).filter { it.isNotEmpty() })
@@ -98,6 +103,11 @@ object Settings {
         preferences.edit().putString("albumOrder", paths.joinToString("\n")).apply()
     }
 
+    fun updateHiddenFromRecent(paths: Set<String>) {
+        hiddenFromRecent = paths
+        preferences.edit().putString("hiddenFromRecent", paths.joinToString("\n")).apply()
+    }
+
     fun updateGroupedAlbums(value: Boolean) {
         groupedAlbums = value
         preferences.edit().putBoolean("groupedAlbums", value).apply()
@@ -110,6 +120,7 @@ object Settings {
 
     // An album renamed is a folder moved: its place in the order and in its group follow it.
     fun replaceAlbumPath(old: String, new: String) {
+        if (old in hiddenFromRecent) updateHiddenFromRecent(hiddenFromRecent - old + new)
         if (old in albumOrder) updateAlbumOrder(albumOrder.map { if (it == old) new else it })
         if (albumStacks.any { old in it.paths }) updateAlbumStacks(albumStacks.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }) })
     }

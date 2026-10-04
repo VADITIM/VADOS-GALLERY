@@ -180,6 +180,11 @@ private fun Library(viewModel: GalleryViewModel) {
     // GPS in photos is stripped by the system unless this is granted; it is asked once, the first time the library shows.
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refreshLocationPermission() }
     LaunchedEffect(Unit) { locationPermission.launch(Manifest.permission.ACCESS_MEDIA_LOCATION) }
+    // Recent without the folders kept out of it; everything else (albums, the picker, locations) still sees the whole library.
+    val recent = remember(library, Settings.hiddenFromRecent) {
+        val hidden = Settings.hiddenFromRecent
+        if (hidden.isEmpty()) library else library.filter { it.relativePath !in hidden }
+    }
     val actions = rememberMediaActions(viewModel.repository, viewModel.vault, onPrivateChanged = { viewModel.refreshPrivate() }, samsungTrash = viewModel.samsungTrash, onTrashChanged = { viewModel.refreshTrash() })
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -262,7 +267,7 @@ private fun Library(viewModel: GalleryViewModel) {
 
     // The items of the grid on screen, which is what a selection is made of.
     val gridItems: List<MediaItem> = when {
-        section == Section.RECENT -> library
+        section == Section.RECENT -> recent
         section == Section.FAVORITES -> favorites
         openAlbum != null -> openAlbum.items
         openPrivateGroup != null -> openPrivateGroup.items
@@ -324,7 +329,7 @@ private fun Library(viewModel: GalleryViewModel) {
     }
 
     fun itemsFor(source: ViewerSource): List<MediaItem> = when (source) {
-        ViewerSource.Recent -> library
+        ViewerSource.Recent -> recent
         ViewerSource.Favorites -> favorites
         is ViewerSource.InAlbum -> albums.firstOrNull { it.id == source.albumId }?.items.orEmpty()
         is ViewerSource.InPrivateGroup -> if (isPrivateUnlocked) privateContents.groups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
@@ -389,7 +394,7 @@ private fun Library(viewModel: GalleryViewModel) {
             ) { shown ->
                 when (shown) {
                     Section.RECENT -> MediaGrid(
-                        items = library,
+                        items = recent,
                         memory = recentMemory,
                         onOpen = { viewer = ViewerRequest(ViewerSource.Recent, it) },
                         contentPadding = insetPadding,
@@ -707,6 +712,11 @@ private fun Library(viewModel: GalleryViewModel) {
                         }
                     }
                 }
+                val isHiddenFromRecent = sheetAlbum?.relativePath in Settings.hiddenFromRecent
+                SheetRow(if (isHiddenFromRecent) "Show in Recent" else "Hide from Recent", icon = { EyeIcon(it, isCrossed = !isHiddenFromRecent) }) {
+                    sheetAlbum?.let { album -> Settings.updateHiddenFromRecent(if (isHiddenFromRecent) Settings.hiddenFromRecent - album.relativePath else Settings.hiddenFromRecent + album.relativePath) }
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
                     sheet = AppSheet.NONE
@@ -735,6 +745,12 @@ private fun Library(viewModel: GalleryViewModel) {
                 }
                 SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
                     isRearranging = true
+                    sheet = AppSheet.NONE
+                }
+                val stackPaths = Settings.albumStacks.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
+                val isStackHidden = stackPaths.isNotEmpty() && stackPaths.all { it in Settings.hiddenFromRecent }
+                SheetRow(if (isStackHidden) "Show in Recent" else "Hide from Recent", icon = { EyeIcon(it, isCrossed = !isStackHidden) }) {
+                    Settings.updateHiddenFromRecent(if (isStackHidden) Settings.hiddenFromRecent - stackPaths.toSet() else Settings.hiddenFromRecent + stackPaths)
                     sheet = AppSheet.NONE
                 }
                 SheetRow("Ungroup", trailing = Settings.albumStacks.firstOrNull { it.name == sheetStack }?.paths?.size?.toString(), icon = { CloseIcon(it) }) {
