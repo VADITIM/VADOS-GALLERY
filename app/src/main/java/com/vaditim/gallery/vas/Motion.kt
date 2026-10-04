@@ -46,4 +46,7 @@ object Motion {
     const val ENTRANCE_MS = 240
     const val ENTRANCE_STAGGER_MS = 12
     const val ENTRANCE_WINDOW_MS = 350
+
+    // The grid timeline: months fading in beside the years when a finger takes hold of it, and the jump to where it points.
+    const val TIMELINE_REVEAL_MS = 180
 }

@@ -156,6 +156,7 @@ fun MediaGrid(
     val currentSelection by rememberUpdatedState(selection)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
+    Box(modifier.fillMaxSize()) {
     ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -163,7 +164,7 @@ fun MediaGrid(
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope),
+        modifier = Modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope),
     ) {
         items(
             entries,
@@ -190,6 +191,8 @@ fun MediaGrid(
             }
         }
     }
+    }
+    GridTimeline(entries, state, contentPadding, Modifier.align(Alignment.TopEnd))
     }
 }
 

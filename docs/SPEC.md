@@ -237,3 +237,4 @@ review, which is not a goal.
 - The section bar's highlight slides from section to section, its leading edge first, and the chosen label grows slightly.
 - Every photo grid and cover grid opens with a short cascade: its first screenful fades and rises into place, item after item. Items reached later by scrolling are simply there.
 - Favourites carry a small red heart at the bottom right of their tile in every grid (left of a video's length). Every favourite heart is red, never the section colour.
+- **Timeline.** Every photo grid with more than 90 photos has a timeline along its right edge, top to bottom, oldest to newest: years at rest, a marker for where the grid is. Holding and sliding on it scrolls the grid with the finger, shows the months between the years and the month under the finger, and ticks on each new month.

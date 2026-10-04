@@ -1,2 +1,2 @@
-- Favourited photos and videos show a small red heart in the bottom-right corner of their tile, in every grid.
-- Every favourite heart is red, whatever section you are in.
+- A timeline along the right edge of Recent and every other long photo grid: the years at rest, oldest at the top.
+- Slide a finger along it to fly through the grid: the months appear beside the years, the month under the finger shows beside it, and a light tick marks each new month.
