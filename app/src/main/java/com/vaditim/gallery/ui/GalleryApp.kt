@@ -213,6 +213,10 @@ private fun Library(viewModel: GalleryViewModel) {
         val order = Settings.albumOrder
         albums.sortedBy { album -> order.indexOf(album.relativePath).let { if (it < 0) Int.MAX_VALUE else it } }
     }
+    val arrangedGroups = remember(privateContents.groups, Settings.groupOrder) {
+        val order = Settings.groupOrder
+        privateContents.groups.sortedBy { group -> order.indexOf(group.name).let { if (it < 0) Int.MAX_VALUE else it } }
+    }
     val albumMemories = remember { mutableMapOf<Long, GridMemory>() }
     val locationMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateMemories = remember { mutableMapOf<String, GridMemory>() }
@@ -433,7 +437,13 @@ private fun Library(viewModel: GalleryViewModel) {
                             )
                         }
                         AlbumsPlace.PrivateGroups -> PrivateGroupsScreen(
-                            groups = privateContents.groups,
+                            groups = arrangedGroups,
+                            isRearranging = isRearranging,
+                            onMove = { from, to ->
+                                val names = arrangedGroups.map { it.name }.toMutableList()
+                                names.add(to, names.removeAt(from))
+                                Settings.updateGroupOrder(names)
+                            },
                             favorites = privateContents.favorites,
                             onOpen = { albumsPlace = AlbumsPlace.PrivateFolder(it.name) },
                             onLongPress = { group ->
@@ -650,6 +660,10 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
             OverlaySheet(visible = sheet == AppSheet.GROUP_MENU, label = sheetGroup?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.GROUP_RENAME }
+                SheetRow("Rearrange groups", icon = { GripIcon(it) }) {
+                    isRearranging = true
+                    sheet = AppSheet.NONE
+                }
                 SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheetGroup?.let { picker = PickerTarget.IntoGroup(it.name) }
                     sheet = AppSheet.NONE

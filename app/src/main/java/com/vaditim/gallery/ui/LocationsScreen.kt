@@ -66,19 +66,7 @@ fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onBack: () -> Unit, 
 @Composable
 fun LocationsScreen(groups: List<LocationGroup>, onOpen: (LocationGroup) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, state: LazyGridState) {
     BackHandler(onBack = onBack)
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        state = state,
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            bottom = contentPadding.calculateBottomPadding() + 12.dp,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
+    CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Locations", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }

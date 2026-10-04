@@ -37,6 +37,9 @@ object Settings {
     // Albums in the order the user arranged them, by folder path; albums not in it keep the default order after these.
     var albumOrder by mutableStateOf<List<String>>(emptyList())
         private set
+    // The same for private groups, by name.
+    var groupOrder by mutableStateOf<List<String>>(emptyList())
+        private set
 
     fun init(context: Context) {
         preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -47,6 +50,7 @@ object Settings {
         autoplayVideos = preferences.getBoolean("autoplay", true)
         albumColumns = preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
+        groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
     }
 
     fun updateBlur(value: Float) {
@@ -72,6 +76,11 @@ object Settings {
     fun updateAlbumColumns(value: Int) {
         albumColumns = value.coerceIn(MIN_COLUMNS, MAX_ALBUM_COLUMNS)
         preferences.edit().putInt("albumColumns", albumColumns).apply()
+    }
+
+    fun updateGroupOrder(names: List<String>) {
+        groupOrder = names
+        preferences.edit().putString("groupOrder", names.joinToString("\n")).apply()
     }
 
     fun updateAlbumOrder(paths: List<String>) {

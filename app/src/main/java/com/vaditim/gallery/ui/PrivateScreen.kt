@@ -81,23 +81,14 @@ fun PrivateGroupsScreen(
     contentPadding: PaddingValues,
     state: LazyGridState,
     isViewerOpen: Boolean = false,
+    isRearranging: Boolean = false,
+    onMove: (from: Int, to: Int) -> Unit = { _, _ -> },
 ) {
     BackHandler(onBack = onBack)
+    val reorder = rememberReorder(state, groups.map { it.name }, onMove)
     // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
     val selectionSeed = remember { Random.nextInt(Int.MAX_VALUE) }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        state = state,
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            bottom = contentPadding.calculateBottomPadding() + 12.dp,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-        modifier = Modifier.fillMaxSize(),
-    ) {
+    CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Private", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
@@ -107,8 +98,15 @@ fun PrivateGroupsScreen(
                 TodaysSelection(favorites[todaysIndex], isCovered = isViewerOpen, onClick = { onOpenSelection(todaysIndex) })
             }
         }
-        items(groups, key = { it.directory.absolutePath }, contentType = { "group" }) { group ->
-            CoverCard(group.name, group.cover, group.items.size, onClick = { onOpen(group) }, onLongClick = { onLongPress(group) })
+        items(groups, key = { it.name }, contentType = { "group" }) { group ->
+            CoverCard(
+                group.name,
+                group.cover,
+                group.items.size,
+                onClick = { if (!isRearranging) onOpen(group) },
+                onLongClick = { if (!isRearranging) onLongPress(group) },
+                modifier = reorderable(reorder, group.name, isRearranging),
+            )
         }
         item(contentType = "new-group") { AddCard("New group", onClick = onNewGroup) }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "favorites") {
@@ -211,35 +209,6 @@ private fun FavoritesFolder(cover: MediaItem?, count: Int, onClick: () -> Unit) 
             BasicText("Favorites", style = Type.cardTitle.copy(color = LocalAccent.current))
             BasicText(count.toString(), style = Type.value, modifier = Modifier.padding(top = 2.dp))
         }
-    }
-}
-
-@Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
-    val context = LocalContext.current
-    val request = remember(cover?.uri) { cover?.let { ImageRequest.Builder(context).data(it.uri).size(COVER_PIXELS).build() } }
-    Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.sunken)) {
-            if (request != null) {
-                AsyncImage(model = request, contentDescription = name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            }
-        }
-        BasicText(name, style = Type.cardTitle, maxLines = 1, modifier = Modifier.padding(start = 4.dp, top = 10.dp))
-        BasicText(count.toString(), style = Type.value, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
-    }
-}
-
-// The "make a new one" card at the end of a grid of covers: albums and private groups both end with one.
-@Composable
-fun AddCard(label: String, onClick: () -> Unit) {
-    Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.surface),
-            contentAlignment = Alignment.Center,
-        ) {
-            BasicText("+", style = Type.title.copy(color = LocalAccent.current))
-        }
-        BasicText(label, style = Type.cardTitle.copy(color = Palette.textMuted), modifier = Modifier.padding(start = 4.dp, top = 10.dp))
     }
 }
 

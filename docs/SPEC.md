@@ -219,3 +219,4 @@ review, which is not a goal.
 - **Haptics.** Every action answers with a vibration: a click on icon buttons and menu rows, toggle on/off in Settings, ticks on sliders, column changes, each tile reached by drag-select and each album swap while rearranging, a threshold buzz when a rearrange drag starts, a confirm when rearranging ends. Opening and closing photos stay silent.
 - **Album names fit:** at three or four per row the name and count shrink until they fit (down to 9sp), then cut. One per row is a list: small cover at the start, large name and count beside it.
 - **Month chip** reads "September 25" (two-digit year) and never wraps.
+- **One cover grid.** Albums, private groups and locations share `CoverGrid`/`CoverCard`: the same columns (pinch or Settings), list layout at one column, shrinking names. Albums and private groups can be rearranged (long-press → Rearrange), by dragging a card onto another.
