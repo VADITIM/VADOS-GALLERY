@@ -1,1 +1,1 @@
-- At rest the timeline colours the year you are looking at and shows the month you are in right beneath it; both follow as you scroll.
+- After a delete or a move, a small pill above the bar offers to undo it for a few seconds — in every grid and in the viewer.

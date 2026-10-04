@@ -20,6 +20,8 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +48,20 @@ class MediaActions(
     private val startRequest: (PendingIntent, (Boolean) -> Unit) -> Unit,
 ) {
     private val editor = MediaEditor(context)
+
+    // The last delete or move, while it can still be reversed; a newer one replaces it.
+    var undoOffer by mutableStateOf<UndoOffer?>(null)
+        private set
+
+    fun undo(offer: UndoOffer) {
+        if (undoOffer !== offer) return
+        undoOffer = null
+        offer.revert()
+    }
+
+    fun expireUndo(offer: UndoOffer) {
+        if (undoOffer === offer) undoOffer = null
+    }
 
     fun share(items: List<MediaItem>) {
         if (items.isEmpty()) return
@@ -103,9 +119,16 @@ class MediaActions(
 
     fun trash(items: List<MediaItem>) {
         if (items.isEmpty()) return
-        startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, true)) { isDone ->
-            if (isDone) Haptics.confirm(context)
-            notify(if (isDone) summary(items.size, items.size, "Moved to trash") else "Delete was not allowed")
+        val uris = items.map { it.uri }
+        startRequest(MediaStore.createTrashRequest(context.contentResolver, uris, true)) { isDone ->
+            if (isDone) {
+                Haptics.confirm(context)
+                undoOffer = UndoOffer(summary(items.size, items.size, "Moved to trash")) {
+                    startRequest(MediaStore.createTrashRequest(context.contentResolver, uris, false)) { isRestored -> if (isRestored) Haptics.confirm(context) }
+                }
+            } else {
+                notify("Delete was not allowed")
+            }
         }
     }
 
@@ -167,9 +190,13 @@ class MediaActions(
         if (items.isEmpty()) return
         val moveAll = {
             scope.launch {
-                val moved = items.count { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
-                if (moved > 0) Haptics.confirm(context)
-                notify(summary(moved, items.size, "Moved to $albumName"))
+                val moved = items.filter { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
+                if (moved.isEmpty()) {
+                    notify(summary(0, items.size, "Moved to $albumName"))
+                    return@launch
+                }
+                Haptics.confirm(context)
+                undoOffer = UndoOffer(summary(moved.size, items.size, "Moved to $albumName")) { moveBack(moved, relativePath) }
             }
         }
         // With All files access the move needs nobody's permission, so it skips the request — and the popup a request can bring with it.
@@ -179,6 +206,18 @@ class MediaActions(
             startRequest(MediaStore.createWriteRequest(context.contentResolver, items.map { it.uri })) { isGranted ->
                 if (isGranted) moveAll() else notify("Move was not allowed")
             }
+        }
+    }
+
+    // Each photo goes back to the folder it came from; the row is the same, only where its file now lies has changed.
+    private fun moveBack(moved: List<MediaItem>, movedTo: String) {
+        scope.launch {
+            val folder = File(Environment.getExternalStorageDirectory(), movedTo)
+            val returned = moved.count { item ->
+                val there = item.copy(relativePath = movedTo, absolutePath = File(folder, File(item.absolutePath).name).path)
+                runCatching { repository.moveTo(there, item.relativePath) }.getOrDefault(false)
+            }
+            if (returned > 0) Haptics.confirm(context)
         }
     }
 

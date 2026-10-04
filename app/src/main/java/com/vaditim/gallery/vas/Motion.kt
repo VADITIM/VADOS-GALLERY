@@ -49,4 +49,7 @@ object Motion {
 
     // The grid timeline: months fading in beside the years when a finger takes hold of it, and the jump to where it points.
     const val TIMELINE_REVEAL_MS = 180
+
+    // How long a delete or a move can still be taken back from the pill above the bar.
+    const val UNDO_MS = 4500
 }

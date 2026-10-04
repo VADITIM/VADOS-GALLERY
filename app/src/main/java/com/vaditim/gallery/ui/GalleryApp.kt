@@ -1042,6 +1042,14 @@ private fun Library(viewModel: GalleryViewModel) {
                     places = places,
                 )
             }
+
+            // Above the viewer too, since a photo can be deleted or moved from there.
+            UndoPill(
+                offer = actions.undoOffer,
+                onUndo = actions::undo,
+                onExpired = actions::expireUndo,
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = BAR_ROOM),
+            )
         }
     }
 }
