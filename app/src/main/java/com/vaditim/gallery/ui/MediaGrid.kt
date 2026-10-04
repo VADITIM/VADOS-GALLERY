@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -378,17 +379,29 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelecte
                     .padding(horizontal = 6.dp, vertical = 1.dp),
             )
         }
-        if (item.isVideo) {
-            BasicText(
-                if (item.durationMillis > 0) formatDuration(item.durationMillis) else "VIDEO",
-                style = Type.value.copy(color = Palette.textBright),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(5.dp)
-                    .clip(Shapes.capsule)
-                    .background(Palette.panel)
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
-            )
+        // Bottom right: the heart of a favourite, then a video's length beside it.
+        if (item.isFavorite || item.isVideo) {
+            Row(
+                Modifier.align(Alignment.BottomEnd).padding(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (item.isFavorite) {
+                    Box(Modifier.clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 4.dp, vertical = 3.dp)) {
+                        HeartIcon(isFilled = true, color = Palette.favorite, size = TILE_HEART)
+                    }
+                }
+                if (item.isVideo) {
+                    BasicText(
+                        if (item.durationMillis > 0) formatDuration(item.durationMillis) else "VIDEO",
+                        style = Type.value.copy(color = Palette.textBright),
+                        modifier = Modifier
+                            .clip(Shapes.capsule)
+                            .background(Palette.panel)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
         }
         if (isSelected) Box(Modifier.fillMaxSize().border(3.dp, LocalAccent.current, Shapes.tile))
     }
@@ -396,6 +409,7 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelecte
 
 // Above this a tile outgrows the system's cached thumbnail and loads the photo itself.
 private const val SYSTEM_THUMBNAIL_PIXELS = 320
+private val TILE_HEART = 11.dp
 private const val SHARP_DELAY_MS = 120L
 
 @Composable

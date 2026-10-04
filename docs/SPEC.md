@@ -236,3 +236,4 @@ review, which is not a goal.
 - The viewer's buttons are not part of the photo: on a swipe down, on closing, or on a tap they slide off their own edge one after another, and come back the same way once the photo has settled.
 - The section bar's highlight slides from section to section, its leading edge first, and the chosen label grows slightly.
 - Every photo grid and cover grid opens with a short cascade: its first screenful fades and rises into place, item after item. Items reached later by scrolling are simply there.
+- Favourites carry a small red heart at the bottom right of their tile in every grid (left of a video's length). Every favourite heart is red, never the section colour.

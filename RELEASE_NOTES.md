@@ -1,5 +1,2 @@
-- Swiping a photo down no longer drags its buttons along: they slide off the edges one after another, and come back the same way.
-- The section bar's highlight slides from section to section instead of fading.
-- Opening a folder, a group's album or a section lands its photos as a short cascade.
-- A short double vibration when something is moved, deleted, restored or favourited.
-- A light tick for every photo or album added to or removed from a selection.
+- Favourited photos and videos show a small red heart in the bottom-right corner of their tile, in every grid.
+- Every favourite heart is red, whatever section you are in.

@@ -26,6 +26,8 @@ object Palette {
     val textFaint = Color(0xFF4A4A4A)
 
     val danger = Color(0xFFFF6B6B)
+    // Every heart is this red, whatever section it is in: a favourite reads the same everywhere.
+    val favorite = Color(0xFFFF3B4E)
 
     val terminalGreen = Color(0xFF5BFD5B)
     val amber = Color(0xFFF09B3A)
