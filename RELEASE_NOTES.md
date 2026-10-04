@@ -1,2 +1,3 @@
-- A timeline along the right edge of Recent and every other long photo grid: the years at rest, oldest at the top.
-- Slide a finger along it to fly through the grid: the months appear beside the years, the month under the finger shows beside it, and a light tick marks each new month.
+- The timeline is always half the screen tall and centred, with every label the same distance apart.
+- Holding it opens the year under your finger into its months; the labels respace evenly as you slide from year to year.
+- Only the timeline's own stretch of the edge takes a finger; above and below it the grid scrolls as usual.

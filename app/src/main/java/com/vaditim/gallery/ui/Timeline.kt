@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,19 +52,18 @@ import kotlin.math.roundToInt
 
 // Fewer photos than this scroll by hand quickly enough; the timeline would only cover tiles.
 private const val MIN_PHOTOS = 90
+// The timeline is always this share of the grid's height, centred on it.
+private const val TRACK_SHARE = 0.5f
 // The strip a finger takes hold of, along the right edge; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
 private val LABEL_HEIGHT = 18.dp
-// Labels closer than this would overlap, so the later one is left out.
-private val YEAR_GAP = 22.dp
-private val MONTH_GAP = 18.dp
-private val THUMB_HEIGHT = 30.dp
+private val THUMB_HEIGHT = 22.dp
 private val YEAR_FORMAT = DateTimeFormatter.ofPattern("yyyy", Locale.ENGLISH)
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 private val BUBBLE_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
 // Where a month starts in the grid: the index of its header when there is one, so a jump lands with the header in view.
-private data class TimelineMark(val index: Int, val month: YearMonth, val isYear: Boolean)
+private data class TimelineMark(val index: Int, val month: YearMonth)
 
 private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
     val marks = ArrayList<TimelineMark>()
@@ -73,118 +73,105 @@ private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
         val month = YearMonth.from(Instant.ofEpochMilli(entry.item.timestampMillis).atZone(ZoneId.systemDefault()))
         if (month != last) {
             val start = if (index > 0 && entries[index - 1] is GridEntry.Header) index - 1 else index
-            marks += TimelineMark(start, month, last == null || last.year != month.year)
+            marks += TimelineMark(start, month)
             last = month
         }
     }
     return marks
 }
 
-// Years first, each kept only if it clears the one above; then, while held, every month that clears all of those.
-private fun visibleMarks(marks: List<TimelineMark>, lastIndex: Int, track: Float, yearGap: Float, monthGap: Float?): List<TimelineMark> {
-    val kept = ArrayList<Float>()
-    val shown = ArrayList<TimelineMark>()
-    var lastYear = -Float.MAX_VALUE
-    marks.filter { it.isYear }.forEach { mark ->
-        val y = mark.index.toFloat() / lastIndex * track
-        if (y - lastYear >= yearGap) {
-            shown += mark
-            kept += y
-            lastYear = y
-        }
-    }
-    if (monthGap != null) {
-        marks.filter { !it.isYear }.forEach { mark ->
-            val y = mark.index.toFloat() / lastIndex * track
-            if (kept.none { abs(it - y) < monthGap }) {
-                shown += mark
-                kept += y
-            }
-        }
-    }
-    return shown
-}
+// One label on the timeline: a year, or one of the months of the year under the finger.
+private data class TimelineLabel(val year: Int, val month: TimelineMark?)
 
-private fun monthAt(marks: List<TimelineMark>, index: Int): YearMonth? = marks.lastOrNull { it.index <= index }?.month ?: marks.firstOrNull()?.month
+// Every year, and right after the held one its months; all of them the same distance apart.
+private fun labelsOf(years: List<Int>, monthsByYear: Map<Int, List<TimelineMark>>, heldYear: Int?): List<TimelineLabel> =
+    years.flatMap { year ->
+        listOf(TimelineLabel(year, null)) + if (year == heldYear) monthsByYear[year].orEmpty().map { TimelineLabel(year, it) } else emptyList()
+    }
 
-// Top to bottom along the right edge, oldest to newest like the grid: the years at rest, and the months too while a finger slides on it, the grid following the finger.
+// Half the screen tall and centred, oldest at the top like the grid: the years at rest, evenly apart. Held, the year under the finger opens into its months and everything respaces evenly; the grid follows the finger month by month.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
     val photoCount = remember(entries) { entries.count { it is GridEntry.Photo } }
     if (photoCount < MIN_PHOTOS || marks.isEmpty()) return
-    val lastIndex = entries.lastIndex.coerceAtLeast(1)
+    val monthsByYear = remember(marks) { marks.groupBy { it.month.year } }
+    val years = remember(marks) { monthsByYear.keys.sorted() }
     val haptic = LocalHapticFeedback.current
     val accent = LocalAccent.current
-    var heldFraction by remember { mutableStateOf<Float?>(null) }
-    var heldMonth by remember { mutableStateOf<YearMonth?>(null) }
-    val isHeld = heldFraction != null
+    var heldYear by remember { mutableStateOf<Int?>(null) }
+    var heldMark by remember { mutableStateOf<TimelineMark?>(null) }
+    var fingerY by remember { mutableStateOf<Float?>(null) }
+    val isHeld = heldMark != null
     val reveal by animateFloatAsState(if (isHeld) 1f else 0f, tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline")
     // The newest index asked for; scrolls are conflated, so a fast slide never queues up jumps.
     val target = remember { mutableIntStateOf(-1) }
     LaunchedEffect(state) { snapshotFlow { target.intValue }.collect { if (it >= 0) state.scrollToItem(it) } }
-    val viewFraction by remember(state, lastIndex) {
+    // The month the grid is showing, for the marker at rest.
+    val viewMark by remember(state, marks) {
         derivedStateOf {
             val visible = state.layoutInfo.visibleItemsInfo
-            if (visible.isEmpty()) 0f else ((visible.first().index + visible.last().index) / 2f / lastIndex).coerceIn(0f, 1f)
+            val middle = if (visible.isEmpty()) 0 else (visible.first().index + visible.last().index) / 2
+            marks.lastOrNull { it.index <= middle } ?: marks.first()
         }
     }
+    val labels = labelsOf(years, monthsByYear, heldYear)
 
-    BoxWithConstraints(
-        modifier
-            .fillMaxHeight()
-            .padding(top = contentPadding.calculateTopPadding() + 8.dp, bottom = contentPadding.calculateBottomPadding() + 8.dp),
-    ) {
-        val track = constraints.maxHeight.toFloat()
+    BoxWithConstraints(modifier.fillMaxHeight()) {
+        val height = constraints.maxHeight.toFloat()
+        val track = height * TRACK_SHARE
+        val top = (height - track) / 2f
         val density = LocalDensity.current
         val labelHalf = with(density) { LABEL_HEIGHT.toPx() } / 2f
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
-        val yearGap = with(density) { YEAR_GAP.toPx() }
-        val monthGap = with(density) { MONTH_GAP.toPx() }
-        val shownYears = remember(marks, track) { visibleMarks(marks, lastIndex, track, yearGap, null) }
-        val shownAll = remember(marks, track) { visibleMarks(marks, lastIndex, track, yearGap, monthGap) }
-        val position = (heldFraction ?: viewFraction) * track
+        fun slotY(slot: Int, count: Int): Float = if (count <= 1) track / 2f else track * slot / (count - 1)
+        fun yOf(label: TimelineLabel, within: List<TimelineLabel>): Float = top + slotY(within.indexOf(label), within.size)
 
-        (if (reveal > 0f) shownAll else shownYears).forEach { mark ->
-            val y = mark.index.toFloat() / lastIndex * track
-            val isCurrent = isHeld && heldMonth?.let { if (mark.isYear) it.year == mark.month.year else it == mark.month } == true
-            BasicText(
-                if (mark.isYear) YEAR_FORMAT.format(mark.month) else MONTH_FORMAT.format(mark.month).uppercase(Locale.ENGLISH),
-                style = Type.value.copy(
-                    fontSize = if (mark.isYear) 11.sp else 10.sp,
-                    color = if (isCurrent) accent else if (mark.isYear) Palette.textBright else Palette.textMuted,
-                ),
-                maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, (y - labelHalf).roundToInt()) }
-                    .padding(end = STRIP_WIDTH - 4.dp)
-                    .graphicsLayer { alpha = if (mark.isYear) 1f else reveal }
-                    .clip(Shapes.capsule)
-                    .background(Palette.panel)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            )
+        labels.forEach { label ->
+            key(label) {
+                val y by animateFloatAsState(yOf(label, labels), tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline-label")
+                val isMonth = label.month != null
+                val isCurrent = isHeld && if (isMonth) label.month == heldMark else heldYear == label.year
+                BasicText(
+                    if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString(),
+                    style = Type.value.copy(
+                        fontSize = if (isMonth) 10.sp else 11.sp,
+                        color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
+                    ),
+                    maxLines = 1,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset { IntOffset(0, (y - labelHalf).roundToInt()) }
+                        .padding(end = STRIP_WIDTH - 4.dp)
+                        .graphicsLayer { alpha = if (isMonth) reveal else 1f }
+                        .clip(Shapes.capsule)
+                        .background(Palette.panel)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
         }
 
-        // Where the grid is now, or where the finger is.
+        // Where the grid is now: on its year at rest, on the finger while held.
+        val restY = labels.indexOfFirst { it.year == viewMark.month.year && it.month == null }.let { top + slotY(it.coerceAtLeast(0), labels.size) }
+        val markerY by animateFloatAsState(fingerY ?: restY, tween(Motion.PRESS_MS), label = "timeline-marker")
         Box(
             Modifier
                 .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (position - thumbHalf).roundToInt().coerceIn(0, (track - 2 * thumbHalf).roundToInt().coerceAtLeast(0))) }
+                .offset { IntOffset(0, (markerY - thumbHalf).roundToInt()) }
                 .padding(end = 6.dp)
                 .size(width = 4.dp, height = THUMB_HEIGHT)
                 .clip(Shapes.capsule)
                 .background(if (isHeld) accent else Palette.textMuted),
         )
 
-        heldMonth?.let { month ->
+        heldMark?.let { mark ->
             BasicText(
-                BUBBLE_FORMAT.format(month).uppercase(Locale.ENGLISH),
+                BUBBLE_FORMAT.format(mark.month).uppercase(Locale.ENGLISH),
                 style = Type.microLabel.copy(color = Palette.textBright),
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, (position - labelHalf * 1.6f).roundToInt()) }
+                    .offset { IntOffset(0, (markerY - labelHalf * 1.6f).roundToInt()) }
                     .padding(end = 76.dp)
                     .graphicsLayer { alpha = reveal }
                     .glass(Shapes.capsule)
@@ -192,25 +179,41 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             )
         }
 
+        // Only the timeline's own half of the edge takes a finger; above and below it the grid scrolls as usual.
         Box(
             Modifier
                 .align(Alignment.TopEnd)
-                .fillMaxHeight()
-                .width(STRIP_WIDTH)
-                .pointerInput(marks, lastIndex, track) {
+                .offset { IntOffset(0, top.roundToInt()) }
+                .size(width = STRIP_WIDTH, height = with(density) { track.toDp() })
+                .pointerInput(marks, track) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         down.consume()
+                        // A year opening or closing respaces the labels under a still finger, so after a switch the finger has to travel a little before another one counts.
+                        var switchedAt = Float.NaN
                         fun follow(y: Float) {
-                            val fraction = (y / track).coerceIn(0f, 1f)
-                            val index = (fraction * lastIndex).roundToInt()
-                            val month = monthAt(marks, index)
-                            if (month != heldMonth) {
-                                if (heldMonth != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                                heldMonth = month
+                            val clamped = y.coerceIn(0f, track)
+                            fingerY = top + clamped
+                            val shown = labelsOf(years, monthsByYear, heldYear)
+                            val slot = if (shown.size <= 1) 0 else (clamped / track * (shown.size - 1)).roundToInt()
+                            val label = shown[slot]
+                            val canSwitch = switchedAt.isNaN() || abs(clamped - switchedAt) > track / (shown.size.coerceAtLeast(2) - 1)
+                            val mark = when {
+                                label.month != null -> label.month
+                                label.year == heldYear -> heldMark ?: monthsByYear[label.year]?.first()
+                                heldYear == null || canSwitch -> {
+                                    val isGoingDown = heldYear?.let { label.year > it } ?: false
+                                    heldYear = label.year
+                                    switchedAt = clamped
+                                    monthsByYear[label.year]?.let { if (isGoingDown) it.first() else it.last() }
+                                }
+                                else -> heldMark
+                            } ?: return
+                            if (mark != heldMark) {
+                                if (heldMark != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                                heldMark = mark
+                                target.intValue = mark.index
                             }
-                            heldFraction = fraction
-                            target.intValue = index
                         }
                         follow(down.position.y)
                         do {
@@ -219,8 +222,9 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                             follow(change.position.y)
                             change.consume()
                         } while (change.pressed)
-                        heldFraction = null
-                        heldMonth = null
+                        heldMark = null
+                        heldYear = null
+                        fingerY = null
                         target.intValue = -1
                     }
                 },
