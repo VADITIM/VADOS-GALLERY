@@ -1,2 +1,1 @@
-- Motion photos: tiles with a clip carry a small motion mark, and the viewer shows it beside the date.
-- Hold a motion photo in the viewer to play its clip on a loop; let go to return to the still.
+- Videos: ••• → Save frame saves the frame on screen as a full-size photo beside the video, dated at that moment so it sorts next to it.

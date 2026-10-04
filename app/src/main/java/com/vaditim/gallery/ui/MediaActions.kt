@@ -105,6 +105,25 @@ class MediaActions(
         onFinished(result.isSuccess)
     }
 
+    // A still taken out of a video, dated at the moment it shows, so it sorts beside the video.
+    fun saveFrame(item: MediaItem, positionMs: Long) {
+        scope.launch {
+            val result = runCatching { editor.saveFrame(item, positionMs) }
+            result.onSuccess { file ->
+                if (isPrivate(item)) {
+                    onPrivateChanged()
+                } else {
+                    MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { _, uri ->
+                        if (uri != null) runCatching { context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.DATE_TAKEN, item.timestampMillis + positionMs) }, null, null) }
+                    }
+                }
+                Haptics.confirm(context)
+                notify("Frame saved")
+            }
+            result.exceptionOrNull()?.let { notify("Could not save the frame") }
+        }
+    }
+
     fun toggleFavorite(item: MediaItem) {
         if (isPrivate(item)) {
             runVault(if (item.isFavorite) "Removed from private favorites" else "Added to private favorites", "Could not change favorite") {

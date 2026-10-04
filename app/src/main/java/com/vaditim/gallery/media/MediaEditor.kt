@@ -6,6 +6,7 @@ import android.graphics.ImageDecoder
 import android.graphics.Rect
 import android.graphics.RectF
 import android.media.ExifInterface
+import android.media.MediaMetadataRetriever
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -55,6 +56,22 @@ class MediaEditor(private val context: Context) {
         if (!isPng) copyExif(item, output)
         output.setLastModified(item.timestampMillis)
         output
+    }
+
+    // The frame nearest to `positionMs`, as a full-size JPEG beside the video.
+    suspend fun saveFrame(item: MediaItem, positionMs: Long): File = withContext(Dispatchers.IO) {
+        val retriever = MediaMetadataRetriever()
+        try {
+            if (item.uri.scheme == "content") retriever.setDataSource(context, item.uri) else retriever.setDataSource(item.uri.path)
+            val bitmap = retriever.getFrameAtTime(positionMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST) ?: error("No frame at that time")
+            val output = uniqueFile(outputFolder(item), item.name, "frame", "jpg")
+            output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+            bitmap.recycle()
+            output.setLastModified(item.timestampMillis + positionMs)
+            output
+        } finally {
+            retriever.release()
+        }
     }
 
     // `endMs` is C.TIME_END_OF_SOURCE to keep the video to its end.

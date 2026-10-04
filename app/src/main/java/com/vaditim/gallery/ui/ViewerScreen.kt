@@ -239,6 +239,13 @@ fun ViewerScreen(
                     SheetRow("Move to private", icon = { LockIcon(it) }) { overlay = Overlay.HIDE }
                     SheetRow("Edit", icon = { SlidersIcon(it) }) { overlay = Overlay.NONE; actions.edit(current) }
                 }
+                if (video != null) {
+                    SheetRow("Save frame", icon = { ImageIcon(it) }) {
+                        overlay = Overlay.NONE
+                        video.player.pause()
+                        actions.saveFrame(current, video.player.currentPosition)
+                    }
+                }
                 SheetRow("Crop", icon = { CropIcon(it) }) {
                     overlay = Overlay.NONE
                     video?.player?.pause()
