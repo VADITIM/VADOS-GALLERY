@@ -221,3 +221,5 @@ review, which is not a goal.
 - **Month chip** reads "September 25" (two-digit year) and never wraps.
 - **One cover grid.** Albums, private groups and locations share `CoverGrid`/`CoverCard`: the same columns (pinch or Settings), list layout at one column, shrinking names. Albums and private groups can be rearranged (long-press → Rearrange), by dragging a card onto another.
 - **Trash photos open** in the viewer on a tap (long press selects); the viewer there offers share, restore and delete forever (second tap).
+
+- The blur along the top edge fades evenly: strongest at the screen edge, easing out steadily the further down it goes.

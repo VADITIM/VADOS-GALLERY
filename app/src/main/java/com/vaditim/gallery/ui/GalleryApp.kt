@@ -493,7 +493,7 @@ private fun Library(viewModel: GalleryViewModel) {
             }
 
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
-            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) / 2).fadingGlass())
+            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.8f).fadingGlass())
 
             TopRow(
                 backLabel = when {

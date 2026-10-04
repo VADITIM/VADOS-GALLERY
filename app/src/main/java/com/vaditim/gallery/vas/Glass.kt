@@ -1,5 +1,6 @@
 package com.vaditim.gallery.vas
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -39,6 +40,6 @@ fun Modifier.glass(shape: Shape, ground: Color = Palette.ground): Modifier {
 fun Modifier.fadingGlass(): Modifier {
     val state = LocalHazeState.current ?: return this
     return this.hazeEffect(state, Glass.edgeStyle) {
-        progressive = HazeProgressive.verticalGradient(startIntensity = 1f, endIntensity = 0f)
+        progressive = HazeProgressive.verticalGradient(easing = LinearEasing, startIntensity = 1f, endIntensity = 0f)
     }
 }
