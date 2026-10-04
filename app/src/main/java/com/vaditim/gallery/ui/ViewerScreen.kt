@@ -104,6 +104,7 @@ fun ViewerScreen(
     albums: List<Album>,
     privateGroups: List<PrivateGroup>,
     isPrivate: Boolean,
+    isTrash: Boolean = false,
     actions: MediaActions,
     onClose: () -> Unit,
     onCurrentChanged: (Long) -> Unit = {},
@@ -189,6 +190,14 @@ fun ViewerScreen(
                         .padding(5.dp),
                 ) {
                     IconButton(onClick = { actions.share(listOf(current)) }) { ShareIcon(Palette.textBody) }
+                    if (isTrash) {
+                        IconButton(onClick = { actions.restore(listOf(current)) }) { RestoreIcon(LocalAccent.current) }
+                        // Out of the trash there is no coming back, so it takes a second tap.
+                        IconButton(
+                            onClick = { if (isDeleteArmed) actions.deleteForever(listOf(current)) else isDeleteArmed = true },
+                            modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                        ) { TrashIcon(Palette.danger) }
+                    } else {
                     IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) LocalAccent.current else Palette.textBody) }
                     if (isPrivate) {
                         // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
@@ -200,6 +209,7 @@ fun ViewerScreen(
                         IconButton(onClick = { actions.trash(listOf(current)) }) { TrashIcon(Palette.danger) }
                     }
                     IconButton(onClick = { overlay = Overlay.MORE }) { MoreIcon(Palette.textBody) }
+                    }
                 }
                 }
             }

@@ -46,14 +46,14 @@ fun FolderEntry(title: String, icon: @Composable (Color) -> Unit, onClick: () ->
     }
 }
 
-// Trashed photos, kept by Android for 30 days. Everything here is picked rather than opened, so a tap selects.
+// Trashed photos, kept by Android for 30 days. A tap opens one like anywhere else; a long press selects.
 @Composable
-fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
+fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onOpen: (Int) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
     BackHandler(enabled = selection.selectedIds.isEmpty(), onBack = onBack)
     MediaGrid(
         items = items,
         memory = memory,
-        onOpen = {},
+        onOpen = onOpen,
         contentPadding = contentPadding,
         selection = selection,
         emptyCaption = "Trash is empty.",

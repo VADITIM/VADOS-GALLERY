@@ -105,6 +105,7 @@ sealed interface ViewerSource {
     data class InAlbum(val albumId: Long) : ViewerSource
     data class InPrivateGroup(val name: String) : ViewerSource
     data object PrivateFavorites : ViewerSource
+    data object Trash : ViewerSource
     data class InLocation(val key: String) : ViewerSource
 }
 
@@ -252,7 +253,7 @@ private fun Library(viewModel: GalleryViewModel) {
     }
     val selectedItems = gridItems.filter { it.id in selectedIds }
     val isSelecting = selectedItems.isNotEmpty()
-    val selection = Selection(selectedIds, isAlwaysActive = place is AlbumsPlace.Trash) { item ->
+    val selection = Selection(selectedIds) { item ->
         selectedIds = if (item.id in selectedIds) selectedIds - item.id else selectedIds + item.id
         isDeleteArmed = false
     }
@@ -302,6 +303,7 @@ private fun Library(viewModel: GalleryViewModel) {
         is ViewerSource.InPrivateGroup -> if (isPrivateUnlocked) privateContents.groups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
         ViewerSource.PrivateFavorites -> if (isPrivateUnlocked) privateContents.favorites else emptyList()
         is ViewerSource.InLocation -> locations.firstOrNull { it.key == source.key }?.items.orEmpty()
+        ViewerSource.Trash -> trash
     }
 
     val folderMemory = when {
@@ -415,6 +417,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         AlbumsPlace.Trash -> TrashScreen(
                             items = trash,
                             memory = trashMemory,
+                            onOpen = { viewer = ViewerRequest(ViewerSource.Trash, it) },
                             onBack = { albumsPlace = AlbumsPlace.Folders },
                             contentPadding = insetPadding,
                             selection = selection,
@@ -907,6 +910,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             albums = albums,
                             privateGroups = privateContents.groups,
                             isPrivate = request.source.isPrivateSource(),
+                            isTrash = request.source == ViewerSource.Trash,
                             actions = actions,
                             onClose = { viewer = null },
                             onCurrentChanged = { viewerCurrentId = it },
