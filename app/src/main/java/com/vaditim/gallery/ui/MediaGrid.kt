@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.runtime.mutableStateOf
 import com.vaditim.gallery.Settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -148,6 +149,8 @@ fun MediaGrid(
     }
 
     val tileSize = thumbnailPixels(columns, GAP)
+    // Sharp pictures are only fetched while the grid stands still, so a fling only ever decodes the small cached thumbnails.
+    val isSettled by remember(state) { derivedStateOf { !state.isScrollInProgress } }
     val photosById = remember(entries) { entries.filterIsInstance<GridEntry.Photo>().associate { it.item.id to it.item } }
     val currentSelection by rememberUpdatedState(selection)
     val scope = rememberCoroutineScope()
@@ -173,6 +176,7 @@ fun MediaGrid(
                     Tile(
                         item = item,
                         sizePixels = tileSize,
+                        isSettled = isSettled,
                         isSelected = selection != null && item.id in selection.selectedIds,
                         badge = badge?.invoke(item),
                         onClick = {
@@ -324,13 +328,29 @@ class Selection(
 }
 
 @Composable
-private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick: () -> Unit, badge: String? = null) {
+private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelected: Boolean, onClick: () -> Unit, badge: String? = null) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
         val data: Any = if (item.uri.scheme == "content") Thumbnail(item.uri, sizePixels) else item.uri
         // A file without an extension gives the loader no type, so a video says so itself.
         ImageRequest.Builder(context).data(data).size(sizePixels).apply { if (item.isVideo && item.uri.scheme != "content") decoderFactory(VideoFrameDecoder.Factory()) }.build()
+    }
+    // The system's cached thumbnail is small; a tile bigger than it (few columns) is blurry from it, so it gets the photo itself on top once it has stood on screen a moment. Tiles off screen are not composed at all, so nothing far away is ever decoded.
+    val needsSharp = item.uri.scheme == "content" && sizePixels > SYSTEM_THUMBNAIL_PIXELS
+    var isSharpWanted by remember(item.id, sizePixels) { mutableStateOf(needsSharp && isSettled) }
+    LaunchedEffect(needsSharp, isSettled) {
+        if (needsSharp && isSettled && !isSharpWanted) {
+            delay(SHARP_DELAY_MS)
+            isSharpWanted = true
+        }
+    }
+    val sharpRequest = if (isSharpWanted) {
+        remember(item.uri, sizePixels) {
+            ImageRequest.Builder(context).data(item.uri).size(sizePixels).apply { if (item.isVideo) decoderFactory(VideoFrameDecoder.Factory()) }.build()
+        }
+    } else {
+        null
     }
     val selectedScale by animateFloatAsState(if (isSelected) 0.86f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
     DisposableEffect(item.id) { onDispose { TileBounds.forget(item.id) } }
@@ -344,6 +364,7 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick:
             .background(Palette.sunken),
     ) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (sharpRequest != null) AsyncImage(model = sharpRequest, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         if (badge != null) {
             BasicText(
                 badge,
@@ -371,6 +392,10 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSelected: Boolean, onClick:
         if (isSelected) Box(Modifier.fillMaxSize().border(3.dp, LocalAccent.current, Shapes.tile))
     }
 }
+
+// Above this a tile outgrows the system's cached thumbnail and loads the photo itself.
+private const val SYSTEM_THUMBNAIL_PIXELS = 320
+private const val SHARP_DELAY_MS = 120L
 
 @Composable
 private fun thumbnailPixels(columns: Int, gap: Dp): Int {
