@@ -222,7 +222,8 @@ private fun Library(viewModel: GalleryViewModel) {
     val recentMemory = remember { GridMemory() }
     val favoritesMemory = remember { GridMemory() }
     val privateFavoritesMemory = remember { GridMemory() }
-    val trashMemory = remember { GridMemory() }
+    // The trash keeps every shot on its own, since each one there is about to go.
+    val trashMemory = remember { GridMemory(isStacking = false) }
     // Photos about to go into Private, held while the confirmation is open.
     var pendingPrivate by remember { mutableStateOf<PendingPrivate?>(null) }
     var isRearranging by remember { mutableStateOf(false) }

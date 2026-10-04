@@ -11,6 +11,7 @@ import com.vaditim.gallery.media.LocationGroup
 import com.vaditim.gallery.media.LocationIndex
 import com.vaditim.gallery.media.Place
 import com.vaditim.gallery.media.SamsungTrash
+import com.vaditim.gallery.media.SimilarIndex
 import com.vaditim.gallery.media.groupByCity
 import android.Manifest
 import android.content.pm.PackageManager
@@ -92,7 +93,13 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val similarIndex = SimilarIndex(application)
+
     init {
+        // Hashes only what is new since the last run; the rest is read back from disk.
+        viewModelScope.launch {
+            library.collectLatest { items -> if (items.isNotEmpty()) similarIndex.index(items) }
+        }
         // Re-run whenever the library changes or the location permission arrives; only photos not read before cost anything.
         viewModelScope.launch {
             combine(library, canReadLocation) { items, canRead -> items to canRead }.collectLatest { (items, canRead) ->

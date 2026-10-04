@@ -46,6 +46,9 @@ object Settings {
     var albumStacks by mutableStateOf<List<AlbumStack>>(emptyList())
         private set
 
+    var stackSimilar by mutableStateOf(true)
+        private set
+
     // Album folders kept out of Recent; they still open as albums.
     var hiddenFromRecent by mutableStateOf<Set<String>>(emptySet())
         private set
@@ -61,6 +64,7 @@ object Settings {
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupedAlbums = preferences.getBoolean("groupedAlbums", false)
+        stackSimilar = preferences.getBoolean("stackSimilar", true)
         hiddenFromRecent = preferences.getString("hiddenFromRecent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty().toSet()
         albumStacks = preferences.getString("albumStacks", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
             val parts = line.split('\t')
@@ -106,6 +110,11 @@ object Settings {
     fun updateHiddenFromRecent(paths: Set<String>) {
         hiddenFromRecent = paths
         preferences.edit().putString("hiddenFromRecent", paths.joinToString("\n")).apply()
+    }
+
+    fun updateStackSimilar(value: Boolean) {
+        stackSimilar = value
+        preferences.edit().putBoolean("stackSimilar", value).apply()
     }
 
     fun updateGroupedAlbums(value: Boolean) {

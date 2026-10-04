@@ -1,3 +1,4 @@
-- Review mode: a new button at the top of every album, private group, Private Favorites and location goes through its photos one at a time, newest first.
-- Swipe left to let a photo go, right to keep it (or use the buttons below); the middle button takes back the last swipe.
-- Nothing is deleted until the end: one last step moves the ones you let go to the trash (deletes them for good inside Private), or closes without touching anything.
+- Similar shots taken seconds apart (bursts, several tries at the same picture) fold into one tile with a count, in every photo grid except the trash.
+- Tap a stack to lay its shots out in place; each shows its place in the stack, and tapping that folds the stack back.
+- Selecting a folded stack selects all its shots. Settings → Stack similar shots turns it off.
+- The photos are compared once in the background after the update, so stacks appear gradually the first time.

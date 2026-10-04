@@ -60,6 +60,7 @@ import coil3.request.ImageRequest
 import coil3.video.VideoFrameDecoder
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MotionPhoto
+import com.vaditim.gallery.media.SimilarShots
 import com.vaditim.gallery.media.Thumbnail
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
@@ -83,29 +84,43 @@ private val GAP = 3.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yy", Locale.ENGLISH)
 
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
-class GridMemory {
+class GridMemory(private val isStacking: Boolean = true) {
     val state = LazyGridState()
     var isPositioned = false
     var knownCount = 0
     var columns by mutableIntStateOf(Settings.defaultColumns)
+    // Stacks of similar shots opened out in this grid, by the id of their cover.
+    var openStacks by mutableStateOf<Set<Long>>(emptySet())
+
+    // Every reader of this grid's entries builds them the same way, so an entry index means the same tile everywhere.
+    fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilar)
 }
 
 // A grid is photos with a month header in front of each month's first photo. `index` is the photo's place in the original list, which is what the viewer opens at.
 sealed interface GridEntry {
     data class Header(val label: String, val key: String) : GridEntry
-    data class Photo(val item: MediaItem, val index: Int) : GridEntry
+    // `stack` holds every shot of a similar-shot stack the photo belongs to (the newest is its cover); `isStackOpen` says the stack is laid out tile by tile rather than folded into the cover.
+    data class Photo(val item: MediaItem, val index: Int, val stack: List<MediaItem> = emptyList(), val isStackOpen: Boolean = false) : GridEntry {
+        val isFoldedStack: Boolean get() = stack.isNotEmpty() && !isStackOpen
+    }
 }
 
-fun buildEntries(items: List<MediaItem>): List<GridEntry> {
+fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false): List<GridEntry> {
     val entries = ArrayList<GridEntry>(items.size + 24)
     var currentMonth: YearMonth? = null
+    val stackAt = arrayOfNulls<List<MediaItem>>(items.size)
+    if (isStacking) SimilarShots.runsOf(items).forEach { run -> val members = items.subList(run.first, run.last + 1); run.forEach { stackAt[it] = members } }
     items.forEachIndexed { index, item ->
+        val stack = stackAt[index]
+        val isOpen = stack != null && stack.last().id in openStacks
+        // A folded stack shows only its cover.
+        if (stack != null && !isOpen && item !== stack.last()) return@forEachIndexed
         val month = YearMonth.from(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault()))
         if (month != currentMonth && Settings.showMonthHeaders) {
             entries += GridEntry.Header(MONTH_FORMAT.format(month), "month-$month")
             currentMonth = month
         }
-        entries += GridEntry.Photo(item, index)
+        entries += GridEntry.Photo(item, index, stack.orEmpty(), isOpen)
     }
     return entries
 }
@@ -124,7 +139,7 @@ fun MediaGrid(
     badge: ((MediaItem) -> String?)? = null,
 ) {
     val state = memory.state
-    val entries = remember(items, Settings.showMonthHeaders) { buildEntries(items) }
+    val entries = remember(items, Settings.showMonthHeaders, Settings.stackSimilar, SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -153,7 +168,9 @@ fun MediaGrid(
     val tileSize = thumbnailPixels(columns, GAP)
     // Sharp pictures are only fetched while the grid stands still, so a fling only ever decodes the small cached thumbnails.
     val isSettled by remember(state) { derivedStateOf { !state.isScrollInProgress } }
-    val photosById = remember(entries) { entries.filterIsInstance<GridEntry.Photo>().associate { it.item.id to it.item } }
+    // What a tile stands for when selected: a folded stack is all its shots at once.
+    val photosById = remember(entries) { entries.filterIsInstance<GridEntry.Photo>().associate { it.item.id to if (it.isFoldedStack) it.stack else listOf(it.item) } }
+    val context = LocalContext.current
     val currentSelection by rememberUpdatedState(selection)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
@@ -184,8 +201,18 @@ fun MediaGrid(
                         isSettled = isSettled,
                         isSelected = selection != null && item.id in selection.selectedIds,
                         badge = badge?.invoke(item),
+                        stackSize = if (entry.isFoldedStack) entry.stack.size else 0,
+                        stackPlace = if (entry.isStackOpen) "${entry.stack.indexOf(item) + 1}/${entry.stack.size}" else null,
+                        onCloseStack = { memory.openStacks = memory.openStacks - entry.stack.last().id },
                         onClick = {
-                            if (selection != null && selection.isActive) selection.onToggle(item) else onOpen(entry.index)
+                            when {
+                                selection != null && selection.isActive -> selection.toggleAll(photosById[item.id] ?: listOf(item))
+                                entry.isFoldedStack -> {
+                                    memory.openStacks = memory.openStacks + item.id
+                                    Haptics.tick(context)
+                                }
+                                else -> onOpen(entry.index)
+                            }
                         },
                     )
                 }
@@ -199,7 +226,7 @@ fun MediaGrid(
 
 // Brings a photo's tile on screen, so the viewer has somewhere to shrink back to when it was paged away from where it opened.
 suspend fun GridMemory.revealItem(items: List<MediaItem>, mediaId: Long) {
-    val index = buildEntries(items).indexOfFirst { it is GridEntry.Photo && it.item.id == mediaId }
+    val index = entriesOf(items).indexOfFirst { it is GridEntry.Photo && (it.item.id == mediaId || (it.isFoldedStack && it.stack.any { shot -> shot.id == mediaId })) }
     if (index < 0 || state.layoutInfo.visibleItemsInfo.any { it.index == index }) return
     state.scrollToItem((index - columns * 2).coerceAtLeast(0))
 }
@@ -236,7 +263,7 @@ private fun Modifier.pinchColumns(memory: GridMemory, haptic: HapticFeedback): M
 // Hold a tile to start selecting, then slide across the others to select (or, if the first was already selected, deselect) them. It watches on the initial pass so the held finger never scrolls the list or taps a tile; near the top or bottom edge the grid scrolls on its own.
 private fun Modifier.dragSelect(
     state: LazyGridState,
-    photosById: Map<Long, MediaItem>,
+    photosById: Map<Long, List<MediaItem>>,
     selection: () -> Selection?,
     scope: CoroutineScope,
 ): Modifier = pointerInput(state, photosById) {
@@ -255,7 +282,7 @@ private fun Modifier.dragSelect(
         if (!isHeld || chosen == null) return@awaitEachGesture
 
         // Item offsets are measured from the end of the top content padding, so the finger is moved into that frame first.
-        fun itemAt(position: Offset): MediaItem? {
+        fun itemAt(position: Offset): List<MediaItem>? {
             val y = position.y + state.layoutInfo.viewportStartOffset
             return state.layoutInfo.visibleItemsInfo
                 .firstOrNull { info ->
@@ -266,14 +293,14 @@ private fun Modifier.dragSelect(
         }
 
         val first = itemAt(down.position) ?: return@awaitEachGesture
-        val isSelecting = first.id !in chosen.selectedIds
+        val isSelecting = first.first().id !in chosen.selectedIds
         val visited = HashSet<Long>()
         fun reach(position: Offset) {
-            val item = itemAt(position) ?: return
-            if (visited.add(item.id) && (item.id in (selection() ?: return).selectedIds) != isSelecting) {
-                // The toggle itself ticks, once per photo the finger reaches.
-                selection()?.onToggle(item)
-            }
+            val group = itemAt(position) ?: return
+            if (!visited.add(group.last().id)) return
+            val current = selection() ?: return
+            // The toggle itself ticks, once per photo the finger reaches; a folded stack brings all its shots along.
+            group.filter { (it.id in current.selectedIds) != isSelecting }.forEach { current.onToggle(it) }
         }
         reach(down.position)
         down.consume()
@@ -312,7 +339,7 @@ private fun Modifier.dragSelect(
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<String> {
-    val entries = remember(items, Settings.showMonthHeaders) { buildEntries(items) }
+    val entries = remember(items, Settings.showMonthHeaders, Settings.stackSimilar, SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     return remember(entries, memory) {
         derivedStateOf {
             when (val entry = entries.getOrNull(memory.state.firstVisibleItemIndex)) {
@@ -331,10 +358,27 @@ class Selection(
     val onToggle: (MediaItem) -> Unit,
 ) {
     val isActive: Boolean get() = isAlwaysActive || selectedIds.isNotEmpty()
+
+    // A group goes in or out as one, following its first shot.
+    fun toggleAll(group: List<MediaItem>) {
+        val isAdding = group.firstOrNull()?.id !in selectedIds
+        group.filter { (it.id in selectedIds) != isAdding }.forEach(onToggle)
+    }
 }
 
 @Composable
-private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelected: Boolean, onClick: () -> Unit, badge: String? = null, modifier: Modifier = Modifier) {
+private fun Tile(
+    item: MediaItem,
+    sizePixels: Int,
+    isSettled: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    badge: String? = null,
+    stackSize: Int = 0,
+    stackPlace: String? = null,
+    onCloseStack: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
@@ -416,6 +460,29 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelecte
                     )
                 }
             }
+        }
+        // Top right: a folded stack's count, or an opened stack's place in it, which folds it back when tapped.
+        if (stackSize > 0) {
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(5.dp).clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 5.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ReviewIcon(Palette.textBright, size = TILE_HEART)
+                BasicText("$stackSize", style = Type.value.copy(color = Palette.textBright))
+            }
+        } else if (stackPlace != null) {
+            BasicText(
+                stackPlace,
+                style = Type.value.copy(color = LocalAccent.current),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .pressable(onClick = onCloseStack)
+                    .padding(5.dp)
+                    .clip(Shapes.capsule)
+                    .background(Palette.panel)
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            )
         }
         if (isSelected) Box(Modifier.fillMaxSize().border(3.dp, LocalAccent.current, Shapes.tile))
     }
