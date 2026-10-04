@@ -1,6 +1,14 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
+import com.vaditim.gallery.vas.Motion
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.grid.LazyGridItemScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -16,6 +24,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.zIndex
+
+private const val JIGGLE_DEGREES = 1.4f
 
 // Dragging a cover onto another swaps their places. Every cover grid that can be arranged (albums, private groups) uses this one, so it feels the same in both.
 @Stable
@@ -81,9 +91,22 @@ fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, t
 }
 
 // The modifier chain keeps one shape whether or not this cover is the one held: swapping an element out recreates the pointer input below it and cancels the drag that just started.
+@Composable
 fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier {
     if (!isEnabled) return Modifier
     val isDragged = key == reorder.draggedKey
+    // Every cover waiting to be moved jiggles a little, each out of step with its neighbours so the grid shivers rather than sways.
+    val seed = key.hashCode()
+    val jiggle by rememberInfiniteTransition(label = "jiggle").animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(Motion.JIGGLE_MS + Math.floorMod(seed, 3) * 10, easing = Motion.powerThreeInOut),
+            RepeatMode.Reverse,
+            StartOffset(Math.floorMod(seed, Motion.JIGGLE_MS)),
+        ),
+        label = "jiggle",
+    )
     return Modifier
         .animateItem(placementSpec = if (isDragged) null else spring<IntOffset>())
         .zIndex(if (isDragged) 1f else 0f)
@@ -93,6 +116,8 @@ fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean
                 translationY = reorder.translation().y
                 scaleX = 1.05f
                 scaleY = 1.05f
+            } else {
+                rotationZ = JIGGLE_DEGREES * jiggle
             }
         }
         // On the card itself, so it claims the drag before the grid can scroll with it.

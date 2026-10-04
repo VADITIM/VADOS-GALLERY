@@ -230,3 +230,4 @@ review, which is not a goal.
 - Video controls are one slim bar (play, time, timeline, length, loop, sound). Sound off holds for every video while the app runs.
 - Album groups each take a row of their own; the cards under the cover fan out to the right.
 - Covers can be selected several at once (menu → Select, then tap): albums can then be grouped, moved to Private or deleted; private groups moved out or deleted. Deleting takes a second tap.
+- While rearranging, covers jiggle slightly. Double-tapping a zoomed photo always returns it to its original size.

@@ -1,4 +1,2 @@
-- Album groups each sit on a row of their own; opening one fans its albums out to the right and on into the next rows.
-- The cards under a group's cover now fan out visibly: each one shifted, leaning and darker than the one above.
-- Select several albums at once: long-press an album → Select, then tap others (a group selects all its albums). Add them to a group, move them to Private, or delete them (second tap).
-- The same works for private groups: Select, then move them out to an album or delete them (second tap).
+- While rearranging, every album and private group jiggles slightly until it is picked up.
+- Double-tapping a zoomed-in photo zooms it back out, however it was zoomed in.

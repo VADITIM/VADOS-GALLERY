@@ -436,6 +436,9 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     var total = Offset.Zero
                     var isVerticalSwipe = false
                     var isDirectionDecided = false
+                    // Zoomed in, a finger only pans once it has really moved; the small wobble of a double tap is left to the tap detector, so it can zoom back out.
+                    var panTotal = Offset.Zero
+                    var isPanning = false
                     do {
                         val event = awaitPointerEvent()
                         val isPinching = event.changes.count { it.pressed } >= 2
@@ -454,6 +457,12 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                                 change.consume()
                             }
                         } else if (isPinching || scale > 1.01f) {
+                            if (!isPinching && !isPanning) {
+                                val change = event.changes.first()
+                                panTotal += change.position - change.previousPosition
+                                if (panTotal.getDistance() <= viewConfiguration.touchSlop) continue
+                                isPanning = true
+                            }
                             val zoom = if (isPinching) event.calculateZoom() else 1f
                             val nextScale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
                             val pan = event.calculatePan()

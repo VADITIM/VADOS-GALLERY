@@ -28,4 +28,7 @@ object Motion {
 
     // An album group opening into its row, or folding back onto its top card.
     const val STACK_MS = 360
+
+    // One swing of a cover's jiggle while covers are being rearranged.
+    const val JIGGLE_MS = 130
 }

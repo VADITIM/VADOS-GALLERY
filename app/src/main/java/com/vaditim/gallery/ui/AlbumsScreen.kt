@@ -106,6 +106,7 @@ fun AlbumsScreen(
         )
     }
     // Outside rearranging, every card still glides to its new place when an opened group pushes the rest along.
+    @Composable
     fun LazyGridItemScope.placement(key: Any): Modifier = if (isRearranging) reorderable(reorder, key, true) else Modifier.animateItem()
 
     // Every group starts a row of its own and ends it, so a stack never shares a row and opening it fans out to the right of it.
