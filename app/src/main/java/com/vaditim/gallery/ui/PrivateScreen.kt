@@ -99,7 +99,7 @@ fun PrivateGroupsScreen(
         if (favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
                 val todaysIndex = selectionSeed % favorites.size
-                TodaysSelection(favorites[todaysIndex], isCovered = isViewerOpen, onClick = { onOpenSelection(todaysIndex) })
+                Box(Modifier.entrance()) { TodaysSelection(favorites[todaysIndex], isCovered = isViewerOpen, onClick = { onOpenSelection(todaysIndex) }) }
             }
         }
         items(groups, key = { it.name }, contentType = { "group" }) { group ->
@@ -109,13 +109,13 @@ fun PrivateGroupsScreen(
                 group.items.size,
                 onClick = { if (isPicking) onToggle(group) else if (!isRearranging) onOpen(group) },
                 onLongClick = { if (isPicking) onToggle(group) else if (!isRearranging) onLongPress(group) },
-                modifier = reorderable(reorder, group.name, isRearranging).jiggle(reorder, group.name, isRearranging),
+                modifier = reorderable(reorder, group.name, isRearranging).entrance().jiggle(reorder, group.name, isRearranging),
                 isSelected = group.name in selectedNames,
             )
         }
-        item(contentType = "new-group") { AddCard("New group", onClick = onNewGroup) }
+        item(contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New group", onClick = onNewGroup) } }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "favorites") {
-            FavoritesFolder(favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites)
+            Box(Modifier.entrance()) { FavoritesFolder(favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites) }
         }
     }
 }

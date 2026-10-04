@@ -115,7 +115,7 @@ fun AlbumsScreen(
             when (entry) {
                 is AlbumEntry.Single -> item(key = entry.key, span = { GridItemSpan(span) }, contentType = "album") {
                     val album = entry.album
-                    SpanCell(span, if (isRearranging) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide)) {
+                    SpanCell(span, (if (isRearranging) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide)).entrance()) {
                         CoverCard(
                             album.name,
                             album.cover,
@@ -144,13 +144,14 @@ fun AlbumsScreen(
                         isMovable = isMovable,
                         onArrangeGroup = { reordered -> arrange(entries, entry.name, reordered) },
                         modifier = (if (isMovable) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide))
+                            .entrance()
                             .padding(vertical = GROUP_GAP),
                     )
                 }
             }
         }
-        item(key = "new-album", contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide)) { AddCard("New album", onClick = onNewAlbum) } }
-        item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide)) { footer() } }
+        item(key = "new-album", contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum) } }
+        item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { footer() } }
     }
 }
 

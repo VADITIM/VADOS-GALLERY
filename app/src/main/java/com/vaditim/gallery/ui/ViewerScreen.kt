@@ -6,6 +6,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import androidx.media3.exoplayer.SeekParameters
@@ -111,6 +113,8 @@ fun ViewerScreen(
     onPhotoRatio: (Long, Float) -> Unit = { _, _ -> },
     onPull: (Float) -> Unit = {},
     places: Map<Long, Place> = emptyMap(),
+    isChromeAllowed: Boolean = true,
+    photoModifier: Modifier = Modifier,
 ) {
     if (items.isEmpty()) {
         LaunchedEffect(Unit) { onClose() }
@@ -123,6 +127,9 @@ fun ViewerScreen(
     // The group a photo is about to go into, held while the confirmation is open.
     var pendingGroup by remember { mutableStateOf<String?>(null) }
     var cropping by remember { mutableStateOf<MediaItem?>(null) }
+    // A swipe down is under way: the buttons step aside rather than being dragged along with the photo.
+    var isPulled by remember { mutableStateOf(false) }
+    val isChromeShown = isChromeVisible && isChromeAllowed && !isPulled
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
     LaunchedEffect(current.id) {
@@ -134,7 +141,9 @@ fun ViewerScreen(
 
     val hazeState = rememberHazeState()
     CompositionLocalProvider(LocalHazeState provides hazeState) {
-        Box(Modifier.fillMaxSize().background(Palette.viewerGround)) {
+        Box(Modifier.fillMaxSize()) {
+            // Only the photos follow the finger and shrink into the grid; the buttons below are outside this layer and leave on their own.
+            Box(photoModifier.fillMaxSize().background(Palette.viewerGround)) {
             HorizontalPager(
                 state = pagerState,
                 key = { items[it].id },
@@ -148,43 +157,39 @@ fun ViewerScreen(
                     onTap = { isChromeVisible = !isChromeVisible },
                     onSwipeDown = onClose,
                     onSwipeUp = { overlay = Overlay.DETAILS },
-                    onPull = onPull,
+                    onPull = { fraction ->
+                        isPulled = fraction > 0f
+                        onPull(fraction)
+                    },
                     onRatio = { onPhotoRatio(items[page].id, it) },
                 )
             }
+            }
 
-            AnimatedVisibility(
-                visible = isChromeVisible,
-                enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
-                exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)),
-                modifier = Modifier.align(Alignment.TopStart),
+            Row(
+                Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(
-                    Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
+                ChromePiece(isChromeShown, isFromTop = true, order = 0) {
                     Box(Modifier.pressable(onClick = onClose).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
                         BasicText("‹", style = Type.cardTitle.copy(color = LocalAccent.current))
                     }
+                }
+                ChromePiece(isChromeShown, isFromTop = true, order = 1) {
                     Box(Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp)) {
                         MicroLabel(formatStamp(current))
                     }
                 }
             }
 
-            AnimatedVisibility(
-                visible = isChromeVisible,
-                enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
-                exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)),
-                modifier = Modifier.align(Alignment.BottomCenter),
-            ) {
                 Column(
-                    Modifier.navigationBarsPadding().padding(bottom = 14.dp),
+                    Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                if (video != null) VideoControls(video, Modifier.padding(horizontal = 16.dp))
+                if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
+                ChromePiece(isChromeShown, isFromTop = false, order = 1) {
                 Row(
                     Modifier
                         .glass(Shapes.capsule, Palette.viewerGround)
@@ -213,7 +218,7 @@ fun ViewerScreen(
                     }
                 }
                 }
-            }
+                }
 
             OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
                 if (isPrivate) {
@@ -520,6 +525,18 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
     }
 }
 
+// One of the viewer's floating buttons: each slides off its own edge and fades, a step after the one before, instead of the whole set going as one sheet.
+@Composable
+private fun ChromePiece(isShown: Boolean, isFromTop: Boolean, order: Int, content: @Composable () -> Unit) {
+    val delay = order * Motion.CHROME_STAGGER_MS
+    AnimatedVisibility(
+        visible = isShown,
+        enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.powerTwoOut)) +
+            slideInVertically(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.backOut)) { if (isFromTop) -it else it },
+        exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) +
+            slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) { if (isFromTop) -it else it },
+    ) { content() }
+}
 
 private fun formatStamp(item: MediaItem): String =
     STAMP_FORMAT.format(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH)

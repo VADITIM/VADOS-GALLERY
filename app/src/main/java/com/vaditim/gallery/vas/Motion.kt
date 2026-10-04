@@ -31,4 +31,19 @@ object Motion {
 
     // One swing of a cover's jiggle while covers are being rearranged.
     const val JIGGLE_MS = 130
+
+    // The pause between the two clicks of the "done" vibration.
+    const val HAPTIC_CONFIRM_GAP_MS = 70
+
+    // The viewer's buttons leaving or arriving one after another rather than as one sheet.
+    const val CHROME_STAGGER_MS = 45
+
+    // The nav highlight sliding to another section: its leading edge goes first, the trailing edge follows.
+    const val NAV_SLIDE_MS = 240
+    const val NAV_TRAIL_MS = 60
+
+    // A grid's first screenful arriving as a cascade when its folder or section opens.
+    const val ENTRANCE_MS = 240
+    const val ENTRANCE_STAGGER_MS = 12
+    const val ENTRANCE_WINDOW_MS = 350
 }

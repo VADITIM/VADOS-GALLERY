@@ -66,6 +66,7 @@ val COVER_GAP = 14.dp
 @Composable
 fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: LazyGridScope.() -> Unit) {
     val haptic = LocalHapticFeedback.current
+    ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(Settings.albumColumns),
         state = state,
@@ -80,6 +81,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
         modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
         content = content,
     )
+    }
 }
 
 // A cover with its name and count: a card in a grid, a row when there is one column.

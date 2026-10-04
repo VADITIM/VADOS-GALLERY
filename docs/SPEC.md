@@ -216,7 +216,7 @@ review, which is not a goal.
 - The top row keeps a fixed-width month chip so the buttons beside it never move.
 - **Album layout.** Pinch the Albums grid (or Settings → Album columns) for 1–4 albums per row. Long-press an album → Rearrange albums: drag cards into any order, confirm with the check. The order is stored by folder path.
 - **Today's selection** plays a picked video silently on a loop.
-- **Haptics.** Every action answers with a vibration: a click on icon buttons and menu rows, toggle on/off in Settings, ticks on sliders, column changes, each tile reached by drag-select and each album swap while rearranging, a threshold buzz when a rearrange drag starts, a confirm when rearranging ends. Opening and closing photos stay silent.
+- **Haptics.** Every action answers with a vibration: a click on icon buttons and menu rows, toggle on/off in Settings, ticks on sliders, column changes, each photo or cover added to or removed from a selection (by tap or drag), each album swap while rearranging, a threshold buzz when a rearrange drag starts, a confirm when rearranging ends. A short double click when something has been moved, deleted, restored or favourited. Opening and closing photos stay silent.
 - **Album names fit:** at three or four per row the name and count shrink until they fit (down to 9sp), then cut. One per row is a list: small cover at the start, large name and count beside it.
 - **Month chip** reads "September 25" (two-digit year) and never wraps.
 - **One cover grid.** Albums, private groups and locations share `CoverGrid`/`CoverCard`: the same columns (pinch or Settings), list layout at one column, shrinking names. Albums and private groups can be rearranged (long-press → Rearrange), by dragging a card onto another.
@@ -233,3 +233,6 @@ review, which is not a goal.
 - While rearranging, covers jiggle slightly. Double-tapping a zoomed photo always returns it to its original size.
 - Rearranging with a group open orders that group's albums; with groups closed, it orders albums and groups. Opening a group peels its albums off the stack one after another.
 - A group is always shown as a one-column row (stack, then name and count). Opened, its albums lie three to a row. Several groups can be open at once.
+- The viewer's buttons are not part of the photo: on a swipe down, on closing, or on a tap they slide off their own edge one after another, and come back the same way once the photo has settled.
+- The section bar's highlight slides from section to section, its leading edge first, and the chosen label grows slightly.
+- Every photo grid and cover grid opens with a short cascade: its first screenful fades and rises into place, item after item. Items reached later by scrolling are simply there.

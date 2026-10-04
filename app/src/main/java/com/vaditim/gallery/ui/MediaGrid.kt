@@ -155,13 +155,14 @@ fun MediaGrid(
     val currentSelection by rememberUpdatedState(selection)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
+    ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         state = state,
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, haptic),
+        modifier = modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope),
     ) {
         items(
             entries,
@@ -174,6 +175,7 @@ fun MediaGrid(
                 is GridEntry.Photo -> {
                     val item = entry.item
                     Tile(
+                        modifier = Modifier.entrance(),
                         item = item,
                         sizePixels = tileSize,
                         isSettled = isSettled,
@@ -186,6 +188,7 @@ fun MediaGrid(
                 }
             }
         }
+    }
     }
 }
 
@@ -231,7 +234,6 @@ private fun Modifier.dragSelect(
     photosById: Map<Long, MediaItem>,
     selection: () -> Selection?,
     scope: CoroutineScope,
-    haptic: HapticFeedback,
 ): Modifier = pointerInput(state, photosById) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -259,14 +261,13 @@ private fun Modifier.dragSelect(
         }
 
         val first = itemAt(down.position) ?: return@awaitEachGesture
-        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         val isSelecting = first.id !in chosen.selectedIds
         val visited = HashSet<Long>()
         fun reach(position: Offset) {
             val item = itemAt(position) ?: return
             if (visited.add(item.id) && (item.id in (selection() ?: return).selectedIds) != isSelecting) {
+                // The toggle itself ticks, once per photo the finger reaches.
                 selection()?.onToggle(item)
-                haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
             }
         }
         reach(down.position)
@@ -328,7 +329,7 @@ class Selection(
 }
 
 @Composable
-private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelected: Boolean, onClick: () -> Unit, badge: String? = null) {
+private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelected: Boolean, onClick: () -> Unit, badge: String? = null, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
@@ -355,7 +356,7 @@ private fun Tile(item: MediaItem, sizePixels: Int, isSettled: Boolean, isSelecte
     val selectedScale by animateFloatAsState(if (isSelected) 0.86f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
     DisposableEffect(item.id) { onDispose { TileBounds.forget(item.id) } }
     Box(
-        Modifier
+        modifier
             .aspectRatio(1f)
             .onGloballyPositioned { TileBounds.register(item.id, it) }
             .pressable(onClick = onClick, pressedScale = 0.94f)

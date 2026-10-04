@@ -71,7 +71,7 @@ fun LocationsScreen(groups: List<LocationGroup>, onOpen: (LocationGroup) -> Unit
             BasicText("Locations", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
         items(groups, key = { it.key }, contentType = { "location" }) { group ->
-            CoverCard(group.city, group.cover, group.items.size, onClick = { onOpen(group) })
+            CoverCard(group.city, group.cover, group.items.size, onClick = { onOpen(group) }, modifier = Modifier.entrance())
         }
     }
 }

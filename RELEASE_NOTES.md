@@ -1,4 +1,5 @@
-- Album groups are rows of their own, like the one-column view: the stack on the left, the name and count beside it, with a gap between groups.
-- Opening a group lifts the same cards off the stack one after another into rows of three, whatever the album columns are; closing lays them back down. One continuous motion, nothing swapped.
-- Opening a group leaves other open groups open.
-- Rearranging: albums inside an open group can be dragged into a new order; closed groups and albums move as wholes. Everything that can move jiggles.
+- Swiping a photo down no longer drags its buttons along: they slide off the edges one after another, and come back the same way.
+- The section bar's highlight slides from section to section instead of fading.
+- Opening a folder, a group's album or a section lands its photos as a short cascade.
+- A short double vibration when something is moved, deleted, restored or favourited.
+- A light tick for every photo or album added to or removed from a selection.

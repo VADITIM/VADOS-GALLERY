@@ -63,6 +63,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,8 @@ import kotlinx.coroutines.launch
 private val BAR_ROOM = 84.dp
 private val HEADER_ROOM = 56.dp
 private val MONTH_CHIP_WIDTH = 148.dp
+// How far the viewer has grown into place before its buttons start arriving.
+private const val VIEWER_CHROME_AT = 0.85f
 
 // Where an open viewer gets its items from. Resolved from the live library on every frame, so a photo moved, favourited or deleted while it is open is reflected without the viewer holding a stale copy.
 sealed interface ViewerSource {
@@ -193,6 +196,8 @@ private fun Library(viewModel: GalleryViewModel) {
     var viewerPull by remember { mutableFloatStateOf(0f) }
     val photoRatios = remember { HashMap<Long, Float>() }
     val viewerProgress = remember { Animatable(0f) }
+    // The viewer's buttons come in once the photo has nearly grown into place, and leave as soon as it starts closing.
+    val isViewerSettled by remember { derivedStateOf { viewer != null && viewerProgress.value > VIEWER_CHROME_AT } }
     var scrollToNewestRequest by remember { mutableIntStateOf(0) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     // Albums (by folder path) or private groups (by name) picked in a cover grid; only one of the two grids is ever on screen.
@@ -270,6 +275,7 @@ private fun Library(viewModel: GalleryViewModel) {
     val isSelecting = selectedItems.isNotEmpty()
     val selection = Selection(selectedIds) { item ->
         selectedIds = if (item.id in selectedIds) selectedIds - item.id else selectedIds + item.id
+        Haptics.tick(context)
         isDeleteArmed = false
     }
     val clearSelection = {
@@ -286,6 +292,7 @@ private fun Library(viewModel: GalleryViewModel) {
     BackHandler(enabled = isSelecting || isSelectingCovers) { clearSelection() }
     val toggleCovers: (List<String>) -> Unit = { keys ->
         selectedCovers = if (keys.all { it in selectedCovers }) selectedCovers - keys.toSet() else selectedCovers + keys
+        Haptics.tick(context)
         isDeleteArmed = false
     }
 
@@ -978,10 +985,9 @@ private fun Library(viewModel: GalleryViewModel) {
             // The viewer grows out of the tile it was opened from and shrinks back into the tile of the photo it ends on; when that tile is not on screen it falls back to a quiet fade.
             shownViewer?.let { request ->
                 // Frame by frame the photo's own box (fitted to the screen, no black around it) is cropped down to the tile's square and moved onto it, so the animation shows what the grid shows. The chrome around the photo returns in the last stretch.
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        // Progress is read inside the draw lambdas, so the animation never recomposes the library.
+                ViewerScreen(
+                    // Progress is read inside the draw lambdas, so the animation never recomposes the library.
+                    photoModifier = Modifier
                         .drawWithContent {
                             val p = viewerProgress.value * (1f - viewerPull)
                             val tile = viewerRect
@@ -996,52 +1002,45 @@ private fun Library(viewModel: GalleryViewModel) {
                                 val clip = Path().apply { addRoundRect(RoundRect(lerp(frame, full, expand), CornerRadius(radius))) }
                                 clipPath(clip) { this@drawWithContent.drawContent() }
                             }
+                        }
+                        .graphicsLayer {
+                            val p = viewerProgress.value * (1f - viewerPull)
+                            val tile = viewerRect
+                            if (tile == null) {
+                                alpha = p
+                                scaleX = 0.94f + 0.06f * p
+                                scaleY = scaleX
+                            } else if (p < 1f) {
+                                val photo = fitInside(viewerRatio, size.width, size.height)
+                                val frame = lerp(tile, photo, p)
+                                val coverScale = maxOf(tile.width / photo.width, tile.height / photo.height)
+                                val scale = coverScale + (1f - coverScale) * p
+                                val centre = Offset(size.width / 2f, size.height / 2f)
+                                scaleX = scale
+                                scaleY = scale
+                                // Moves the photo's centre onto the frame's centre; at p = 1 the frame is the photo and this is zero.
+                                translationX = frame.center.x - centre.x - (photo.center.x - centre.x) * scale
+                                translationY = frame.center.y - centre.y - (photo.center.y - centre.y) * scale
+                            }
                         },
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .graphicsLayer {
-                                val p = viewerProgress.value * (1f - viewerPull)
-                                val tile = viewerRect
-                                if (tile == null) {
-                                    alpha = p
-                                    scaleX = 0.94f + 0.06f * p
-                                    scaleY = scaleX
-                                } else if (p < 1f) {
-                                    val photo = fitInside(viewerRatio, size.width, size.height)
-                                    val frame = lerp(tile, photo, p)
-                                    val coverScale = maxOf(tile.width / photo.width, tile.height / photo.height)
-                                    val scale = coverScale + (1f - coverScale) * p
-                                    val centre = Offset(size.width / 2f, size.height / 2f)
-                                    scaleX = scale
-                                    scaleY = scale
-                                    // Moves the photo's centre onto the frame's centre; at p = 1 the frame is the photo and this is zero.
-                                    translationX = frame.center.x - centre.x - (photo.center.x - centre.x) * scale
-                                    translationY = frame.center.y - centre.y - (photo.center.y - centre.y) * scale
-                                }
-                            },
-                    ) {
-                        ViewerScreen(
-                            items = itemsFor(request.source),
-                            startIndex = request.startIndex,
-                            albums = albums,
-                            privateGroups = privateContents.groups,
-                            isPrivate = request.source.isPrivateSource(),
-                            isTrash = request.source == ViewerSource.Trash,
-                            actions = actions,
-                            onClose = { viewer = null },
-                            onCurrentChanged = { viewerCurrentId = it },
-                            onPhotoRatio = { id, ratio -> photoRatios[id] = ratio },
-                            onPull = { fraction ->
-                                viewerRect = TileBounds.of(viewerCurrentId)
-                                viewerRatio = photoRatios[viewerCurrentId] ?: viewerRatio
-                                viewerPull = fraction
-                            },
-                            places = places,
-                        )
-                    }
-                }
+                    isChromeAllowed = isViewerSettled,
+                    items = itemsFor(request.source),
+                    startIndex = request.startIndex,
+                    albums = albums,
+                    privateGroups = privateContents.groups,
+                    isPrivate = request.source.isPrivateSource(),
+                    isTrash = request.source == ViewerSource.Trash,
+                    actions = actions,
+                    onClose = { viewer = null },
+                    onCurrentChanged = { viewerCurrentId = it },
+                    onPhotoRatio = { id, ratio -> photoRatios[id] = ratio },
+                    onPull = { fraction ->
+                        viewerRect = TileBounds.of(viewerCurrentId)
+                        viewerRatio = photoRatios[viewerCurrentId] ?: viewerRatio
+                        viewerPull = fraction
+                    },
+                    places = places,
+                )
             }
         }
     }

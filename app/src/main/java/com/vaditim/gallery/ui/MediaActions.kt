@@ -93,16 +93,18 @@ class MediaActions(
         if (isPrivate(item)) {
             runVault(if (item.isFavorite) "Removed from private favorites" else "Added to private favorites", "Could not change favorite") {
                 vault.setFavorite(item, !item.isFavorite)
+                Haptics.confirm(context)
                 true
             }
         } else {
-            startRequest(MediaStore.createFavoriteRequest(context.contentResolver, listOf(item.uri), !item.isFavorite)) { }
+            startRequest(MediaStore.createFavoriteRequest(context.contentResolver, listOf(item.uri), !item.isFavorite)) { isDone -> if (isDone) Haptics.confirm(context) }
         }
     }
 
     fun trash(items: List<MediaItem>) {
         if (items.isEmpty()) return
         startRequest(MediaStore.createTrashRequest(context.contentResolver, items.map { it.uri }, true)) { isDone ->
+            if (isDone) Haptics.confirm(context)
             notify(if (isDone) summary(items.size, items.size, "Moved to trash") else "Delete was not allowed")
         }
     }
@@ -114,6 +116,7 @@ class MediaActions(
         runSamsungTrash(samsungItems, "Moved to Restored") { samsungTrash.restore(it) }
         if (systemItems.isEmpty()) return
         startRequest(MediaStore.createTrashRequest(context.contentResolver, systemItems.map { it.uri }, false)) { isDone ->
+            if (isDone) Haptics.confirm(context)
             notify(if (isDone) summary(systemItems.size, systemItems.size, "Restored") else "Restore was not allowed")
         }
     }
@@ -124,6 +127,7 @@ class MediaActions(
         runSamsungTrash(samsungItems, "Deleted") { samsungTrash.delete(it) }
         if (systemItems.isEmpty()) return
         startRequest(MediaStore.createDeleteRequest(context.contentResolver, systemItems.map { it.uri })) { isDone ->
+            if (isDone) Haptics.confirm(context)
             notify(if (isDone) summary(systemItems.size, systemItems.size, "Deleted") else "Delete was not allowed")
         }
     }
@@ -135,6 +139,7 @@ class MediaActions(
         scope.launch {
             val done = items.count { runCatching { operation(it) }.getOrDefault(false) }
             onTrashChanged()
+            if (done > 0) Haptics.confirm(context)
             notify(summary(done, items.size, success))
         }
     }
@@ -163,6 +168,7 @@ class MediaActions(
         val moveAll = {
             scope.launch {
                 val moved = items.count { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
+                if (moved > 0) Haptics.confirm(context)
                 notify(summary(moved, items.size, "Moved to $albumName"))
             }
         }
@@ -191,6 +197,7 @@ class MediaActions(
             val restored = items.map { item -> item to runCatching { vault.unhide(item, relativePath) }.getOrNull() }
             afterwards()
             onPrivateChanged()
+            if (restored.any { it.second != null }) Haptics.confirm(context)
             notify(summary(restored.count { it.second != null }, items.size, "Moved to $albumName"))
             val favoriteUris = restored.filter { (item, uri) -> item.isFavorite && uri != null }.mapNotNull { it.second }
             if (favoriteUris.isNotEmpty()) startRequest(MediaStore.createFavoriteRequest(context.contentResolver, favoriteUris, true)) { }
@@ -198,7 +205,7 @@ class MediaActions(
     }
 
     fun deleteGroup(group: PrivateGroup) =
-        runVault("Deleted ${group.name}", "Could not delete ${group.name}") { vault.deleteGroup(group) }
+        runVault("Deleted ${group.name}", "Could not delete ${group.name}") { vault.deleteGroup(group).also { if (it) Haptics.confirm(context) } }
 
     fun deletePrivate(items: List<MediaItem>) =
         runVaultBatch(items, "Deleted") { vault.delete(it) }
@@ -208,6 +215,7 @@ class MediaActions(
         scope.launch {
             val done = items.count { runCatching { operation(it) }.getOrDefault(false) }
             onPrivateChanged()
+            if (done > 0) Haptics.confirm(context)
             notify(summary(done, items.size, success))
         }
     }
