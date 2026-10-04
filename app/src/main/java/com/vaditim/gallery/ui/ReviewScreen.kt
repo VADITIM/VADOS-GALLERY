@@ -1,6 +1,12 @@
 package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -59,6 +65,8 @@ private const val DECIDE_SHARE = 0.28f
 // Degrees the photo leans per screen width it has been dragged.
 private const val LEAN_DEGREES = 14f
 private const val NEXT_SCALE = 0.92f
+// How far down a swipe goes to take back the last decision.
+private val UNDO_DRAG = 80.dp
 private val REVIEW_STAMP = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 // One photo at a time, newest first: swipe left to let it go, right to keep it. Nothing is touched until the end, where the photos let go are deleted in one go — to the trash, or for good inside Private, which is why that last step is always shown.
@@ -108,6 +116,16 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         if (startIndex == null) onClose() else if (isFinishing && !isDone) isFinishing = false else if (marked.isNotEmpty() && !isFinishing) isFinishing = true else onClose()
     }
 
+    fun undo() {
+        if (decisions.isEmpty() || drag.isRunning) return
+        decisions.removeAt(decisions.lastIndex)
+        saveProgress(carriedMarks + decisions.filter { it.second }.map { it.first })
+        Haptics.tick(context)
+        scope.launch { drag.snapTo(0f) }
+    }
+
+    val isChoosing = startIndex == null
+    val shown = if (isChoosing) order.getOrNull(furthest - 1) ?: savedMarks.firstOrNull() else order.getOrNull(position)
     Box(
         Modifier
             .fillMaxSize()
@@ -115,109 +133,147 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             // Swallows taps so nothing behind the review reacts.
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {}),
     ) {
-        // Every card fills the whole screen on black, so a photo of another shape never shows the next one around its edges.
-        Box(Modifier.fillMaxSize().onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }) {
-            if (startIndex != null) order.getOrNull(position + 1)?.let { next ->
-                val reveal = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f)
-                ReviewCard(next, Modifier.graphicsLayer {
-                    val scale = NEXT_SCALE + (1f - NEXT_SCALE) * reveal
-                    scaleX = scale
-                    scaleY = scale
-                    alpha = 0.5f + 0.5f * reveal
-                })
-            }
-            if (startIndex != null) order.getOrNull(position)?.let { current ->
-                val lean = drag.value / width
-                ReviewCard(
-                    current,
-                    Modifier
-                        .graphicsLayer {
-                            translationX = drag.value
-                            rotationZ = lean * LEAN_DEGREES
-                        }
-                        .pointerInput(position) {
-                            detectDragGestures(
-                                onDragEnd = {
-                                    when {
-                                        drag.value < -width * DECIDE_SHARE -> decide(true)
-                                        drag.value > width * DECIDE_SHARE -> decide(false)
-                                        else -> scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }
+        // One layout for choosing and for swiping: the photo fills its container whatever its shape, and only what sits under it changes.
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp)) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(Shapes.viewerPhoto)
+                    .background(Palette.sunkenDeep)
+                    .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) },
+            ) {
+                if (isChoosing) {
+                    shown?.let { ReviewCard(it, Modifier) }
+                } else {
+                    order.getOrNull(position + 1)?.let { next ->
+                        val reveal = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f)
+                        ReviewCard(next, Modifier.graphicsLayer {
+                            val scale = NEXT_SCALE + (1f - NEXT_SCALE) * reveal
+                            scaleX = scale
+                            scaleY = scale
+                            alpha = 0.5f + 0.5f * reveal
+                        })
+                    }
+                    order.getOrNull(position)?.let { current ->
+                        val lean = drag.value / width
+                        ReviewCard(
+                            current,
+                            Modifier
+                                .graphicsLayer {
+                                    translationX = drag.value
+                                    rotationZ = lean * LEAN_DEGREES
+                                }
+                                // A tap on the left half lets the photo go, on the right half keeps it.
+                                .pointerInput(position) {
+                                    detectTapGestures { point -> decide(isDelete = point.x < size.width / 2f) }
+                                }
+                                .pointerInput(position) {
+                                    var across = 0f
+                                    var down = 0f
+                                    val settle = { scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }; Unit }
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            across = 0f
+                                            down = 0f
+                                        },
+                                        onDragEnd = {
+                                            when {
+                                                down > UNDO_DRAG.toPx() && down > abs(across) -> {
+                                                    undo()
+                                                    settle()
+                                                }
+                                                drag.value < -width * DECIDE_SHARE -> decide(true)
+                                                drag.value > width * DECIDE_SHARE -> decide(false)
+                                                else -> settle()
+                                            }
+                                        },
+                                        onDragCancel = { settle() },
+                                    ) { change, amount ->
+                                        change.consume()
+                                        across += amount.x
+                                        down += amount.y
+                                        if (abs(down) <= abs(across)) scope.launch { drag.snapTo(drag.value + amount.x) }
                                     }
                                 },
-                                onDragCancel = { scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) } },
-                            ) { change, amount ->
-                                change.consume()
-                                scope.launch { drag.snapTo(drag.value + amount.x) }
-                            }
-                        },
-                    // The verdict shows on the photo as it leans: red for letting go, the accent for keeping.
-                    verdict = when {
-                        lean < -0.05f -> false
-                        lean > 0.05f -> true
-                        else -> null
-                    },
-                    verdictStrength = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f),
-                )
-            }
-        }
-
-        if (startIndex != null) Row(
-            Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(Modifier.weight(1f))
-            order.getOrNull(position)?.let { current ->
-                ReviewChip(REVIEW_STAMP.format(Instant.ofEpochMilli(current.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH))
-            }
-            ReviewChip("${(position + 1).coerceAtMost(order.size)} / ${order.size}")
-            if (furthest > position + 1) ReviewChip("MAX $furthest", Palette.textMuted)
-        }
-
-        if (startIndex != null) Column(
-            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-        // Done deletes everything marked so far in one go. Inside Private that is final, so there it takes a second tap.
-        if (marked.isNotEmpty()) {
-            val doneColor = if (isDoneArmed) Palette.danger else Palette.textBright
-            Row(
-                Modifier
-                    .pressable(onClick = {
-                        if (isPrivate && !isDoneArmed) {
-                            isDoneArmed = true
-                        } else {
-                            onDelete(marked)
-                            saveProgress(emptyList())
-                            onClose()
-                        }
-                    })
-                    .clip(Shapes.capsule)
-                    .background(if (isDoneArmed) Palette.danger.copy(alpha = 0.22f) else Palette.panelSolid)
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                TrashIcon(Palette.danger, size = 18.dp)
-                BasicText(if (isDoneArmed) "TAP AGAIN · ${marked.size}" else "DONE · ${marked.size}", style = Type.action.copy(color = doneColor))
-            }
-        }
-        Row(
-            Modifier.clip(Shapes.capsule).background(Palette.panelSolid).padding(5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = { decide(isDelete = true) }) { TrashIcon(Palette.danger) }
-            IconButton(onClick = {
-                if (decisions.isNotEmpty() && !drag.isRunning) {
-                    decisions.removeAt(decisions.lastIndex)
-                    saveProgress(carriedMarks + decisions.filter { it.second }.map { it.first })
-                    scope.launch { drag.snapTo(0f) }
+                            // The verdict shows on the photo as it leans: red for letting go, the accent for keeping.
+                            verdict = when {
+                                lean < -0.05f -> false
+                                lean > 0.05f -> true
+                                else -> null
+                            },
+                            verdictStrength = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f),
+                        )
+                    }
                 }
-            }) { RestoreIcon(if (decisions.isEmpty()) Palette.textFaint else Palette.textBody) }
-            if (marked.isNotEmpty()) BasicText("${marked.size}", style = Type.value.copy(color = Palette.danger), modifier = Modifier.padding(horizontal = 6.dp))
-            IconButton(onClick = { decide(isDelete = false) }) { CheckIcon(LocalAccent.current) }
-        }
+            }
+
+            // Done deletes everything marked so far in one go. Inside Private that is final, so there it takes a second tap.
+            AnimatedVisibility(!isChoosing && marked.isNotEmpty(), enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+                val doneColor = if (isDoneArmed) Palette.danger else Palette.textBright
+                Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier
+                            .pressable(onClick = {
+                                if (isPrivate && !isDoneArmed) {
+                                    isDoneArmed = true
+                                } else {
+                                    onDelete(marked)
+                                    saveProgress(emptyList())
+                                    onClose()
+                                }
+                            })
+                            .clip(Shapes.capsule)
+                            .background(if (isDoneArmed) Palette.danger.copy(alpha = 0.22f) else Palette.panelSolid)
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        TrashIcon(Palette.danger, size = 18.dp)
+                        BasicText(if (isDoneArmed) "TAP AGAIN · ${marked.size}" else "DONE · ${marked.size}", style = Type.action.copy(color = doneColor))
+                    }
+                }
+            }
+
+            // The decision buttons come in under the photo once swiping begins.
+            AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+                Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier.clip(Shapes.capsule).background(Palette.panelSolid).padding(5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { decide(isDelete = true) }) { TrashIcon(Palette.danger) }
+                        IconButton(onClick = { undo() }) { RestoreIcon(if (decisions.isEmpty()) Palette.textFaint else Palette.textBody) }
+                        if (marked.isNotEmpty()) BasicText("${marked.size}", style = Type.value.copy(color = Palette.danger), modifier = Modifier.padding(horizontal = 6.dp))
+                        IconButton(onClick = { decide(isDelete = false) }) { CheckIcon(LocalAccent.current) }
+                    }
+                }
+            }
+
+            ReviewInfo(
+                shown = shown,
+                number = if (isChoosing) furthest else (position + 1).coerceAtMost(order.size),
+                total = order.size,
+                furthest = furthest,
+                isChoosing = isChoosing,
+                markedCount = if (isChoosing) savedMarks.size else marked.size,
+                modifier = Modifier.padding(top = 18.dp),
+            )
+
+            // The choice buttons leave downward and the text above them settles into their place.
+            AnimatedVisibility(isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+                Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ResumeButton("START FRESH", Palette.panelSolid, Palette.textBright, Modifier.weight(1f)) {
+                        startIndex = 0
+                        saveProgress(emptyList())
+                    }
+                    if (furthest < order.size || savedMarks.isNotEmpty()) ResumeButton("CONTINUE", LocalAccent.current, Palette.viewerGround, Modifier.weight(1f)) {
+                        carriedMarks = savedMarks
+                        startIndex = furthest
+                        if (furthest >= order.size) isFinishing = true
+                    }
+                }
+            }
         }
 
         OverlaySheet(
@@ -247,65 +303,25 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                 }
             }
         }
-
-        // A folder reviewed before opens on where it was left: the last photo looked at, how far that is, and the choice to carry on or begin again from the newest.
-        if (startIndex == null) {
-            ResumePane(
-                lastSeen = order.getOrNull(furthest - 1) ?: savedMarks.firstOrNull(),
-                reached = furthest,
-                total = order.size,
-                markedCount = savedMarks.size,
-                canContinue = furthest < order.size || savedMarks.isNotEmpty(),
-                onContinue = {
-                    carriedMarks = savedMarks
-                    startIndex = furthest
-                    if (furthest >= order.size) isFinishing = true
-                },
-                onStartFresh = {
-                    startIndex = 0
-                    saveProgress(emptyList())
-                },
-            )
-        }
     }
 }
 
+// The date, how far through the folder, and a bar for it: the same block while choosing where to begin and while swiping.
 @Composable
-private fun ResumePane(lastSeen: MediaItem?, reached: Int, total: Int, markedCount: Int, canContinue: Boolean, onContinue: () -> Unit, onStartFresh: () -> Unit) {
+private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int, isChoosing: Boolean, markedCount: Int, modifier: Modifier = Modifier) {
     val accent = LocalAccent.current
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            if (lastSeen != null) {
-                val context = LocalContext.current
-                val request = remember(lastSeen.uri) { ImageRequest.Builder(context).data(lastSeen.uri).build() }
-                AsyncImage(
-                    model = request,
-                    contentDescription = lastSeen.name,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().clip(Shapes.viewerPhoto),
-                )
-            }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (shown != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(shown.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH))
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BasicText("$number", style = Type.title.copy(color = accent))
+            BasicText("/ $total", style = Type.title.copy(color = Palette.textMuted))
+            // The furthest point stays shown while swiping behind it.
+            if (!isChoosing && furthest > number) BasicText("MAX $furthest", style = Type.value.copy(color = Palette.textMuted), modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
         }
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (lastSeen != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(lastSeen.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH))
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BasicText("$reached", style = Type.title.copy(color = accent))
-                BasicText("/ $total", style = Type.title.copy(color = Palette.textMuted))
-            }
-            // How far through the folder the furthest sitting got.
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderStrong)) {
-                Box(Modifier.fillMaxWidth(if (total > 0) reached.toFloat() / total else 0f).height(4.dp).clip(Shapes.capsule).background(accent))
-            }
-            if (markedCount > 0) BasicText("$markedCount marked", style = Type.value.copy(color = Palette.danger))
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderStrong)) {
+            Box(Modifier.fillMaxWidth(if (total > 0) number.toFloat() / total else 0f).height(4.dp).clip(Shapes.capsule).background(accent))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ResumeButton("START FRESH", Palette.panelSolid, Palette.textBright, Modifier.weight(1f), onStartFresh)
-            if (canContinue) ResumeButton("CONTINUE", accent, Palette.viewerGround, Modifier.weight(1f), onContinue)
-        }
+        if (markedCount > 0) BasicText("$markedCount marked", style = Type.value.copy(color = Palette.danger))
     }
 }
 

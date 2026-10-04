@@ -1,3 +1,3 @@
-- Album groups you opened stay open when you come back from an album.
-- Swipe left on an opened group to close it.
-- Easier to read: lighter grey text, stronger borders, dividers between rows in settings and sheets, values in the accent colour, clearer toggles and sliders.
+- Reviewing uses the same layout as the Start fresh / Continue screen: the photo fills its own box and never pushes the buttons.
+- The choice buttons slide away and the decision buttons come in under the photo, with the date and progress below.
+- Tap the left half of the photo to delete, the right half to keep, swipe down to take back the last decision.
