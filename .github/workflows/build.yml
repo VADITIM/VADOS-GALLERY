@@ -25,7 +25,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The release key lives only in the repository's secrets; without it there is nothing to publish, so the run stops here and says why.
+      - name: Release key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "::error::Missing secrets: RELEASE_KEYSTORE_BASE64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD"
+            exit 1
+          fi
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
       - name: Build APK
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           ./gradlew assembleRelease 2>&1 | tee build.log
           # The Kotlin errors are repeated here, last, so a failed run can be read from its tail instead of from the Gradle stack trace.
@@ -34,6 +50,8 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk "out/vados-gallery-v$version.apk"
+          # The certificate in the log, so a run signed with the wrong key is visible at a glance.
+          "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner" verify --print-certs "out/vados-gallery-v$version.apk" | grep -E "DN|SHA-256"
 
       - uses: actions/upload-artifact@v4
         with:

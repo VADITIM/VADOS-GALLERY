@@ -13,27 +13,36 @@ android {
         // Android 11 is the floor because favourites and the trash live in MediaStore columns (IS_FAVORITE, IS_TRASHED) that only exist from API 30.
         minSdk = 30
         targetSdk = 36
-        versionCode = 57
-        versionName = "0.57"
+        versionCode = 58
+        versionName = "0.58"
     }
 
-    // One debug key committed to the repository, so every CI build installs over the last one with `adb install -r` instead of failing on a changed signature.
     signingConfigs {
+        // Debug builds only: one committed key, so a local debug build installs over the last one.
         getByName("debug") {
             storeFile = file("debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // The release key never enters the repository, which is public; CI writes it out from the repository's secrets and points these variables at it.
+        create("release") {
+            System.getenv("RELEASE_KEYSTORE")?.let { path ->
+                storeFile = file(path)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
-        // The build to install. A debug build runs Compose unoptimised and debuggable, which is where most scroll jank on a large grid comes from; this one is shrunk and optimised by R8, and signed with the same committed key so it installs over either build.
+        // The build to install. A debug build runs Compose unoptimised and debuggable, which is where most scroll jank on a large grid comes from; this one is shrunk and optimised by R8 and signed with the dedicated release key, so every release installs over the last.
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

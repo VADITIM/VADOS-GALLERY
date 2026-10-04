@@ -1,2 +1,1 @@
-- Review has a Done button above its buttons once something is marked: it deletes everything you marked in one go (inside Private it asks for a second tap, since that delete is final).
-- Reopening a folder's review now shows the last photo you looked at, how far you got with a progress bar, how many are marked, and two clear buttons: Start fresh and Continue.
+- Signed with a dedicated release key instead of the debug key. This one time, uninstall the old version before installing: a new key cannot update an app signed with the old one. Settings, album order, covers and review progress start over; private photos are untouched.
