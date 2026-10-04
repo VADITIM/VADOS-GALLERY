@@ -1,2 +1,3 @@
-- While rearranging, every album and private group jiggles slightly until it is picked up.
-- Double-tapping a zoomed-in photo zooms it back out, however it was zoomed in.
+- Groups jiggle like albums while rearranging, swinging about their own card.
+- Opening a group: its albums peel off the stack one after another and settle into place with a slight overshoot; names appear once each card is clear. Closing runs it back, the furthest album first.
+- Rearranging with a group open moves the albums inside that group; with every group closed, albums and whole groups move. Starting to rearrange no longer closes the group.

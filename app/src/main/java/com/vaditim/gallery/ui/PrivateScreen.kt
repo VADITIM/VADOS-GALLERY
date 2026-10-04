@@ -109,7 +109,7 @@ fun PrivateGroupsScreen(
                 group.items.size,
                 onClick = { if (isPicking) onToggle(group) else if (!isRearranging) onOpen(group) },
                 onLongClick = { if (isPicking) onToggle(group) else if (!isRearranging) onLongPress(group) },
-                modifier = reorderable(reorder, group.name, isRearranging),
+                modifier = reorderable(reorder, group.name, isRearranging).jiggle(reorder, group.name, isRearranging),
                 isSelected = group.name in selectedNames,
             )
         }

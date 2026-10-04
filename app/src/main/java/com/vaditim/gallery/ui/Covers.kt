@@ -59,7 +59,7 @@ import com.vaditim.gallery.vas.pressable
 
 private const val COVER_PIXELS = 512
 private const val PINCH_STEP = 1.28f
-private val LIST_COVER = 84.dp
+val LIST_COVER = 84.dp
 val COVER_GAP = 14.dp
 
 // Albums, private groups and locations are one kind of screen: a grid of covers whose columns, list layout, shrinking names and pinch are the same everywhere. A new cover screen is built from these, not beside them.
@@ -84,12 +84,12 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
 
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }) {
     val request = rememberCoverRequest(cover)
     if (Settings.albumColumns == 1) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
             CoverImage(request, name, Modifier.size(LIST_COVER), isSelected)
-            Column(Modifier.padding(start = 18.dp).weight(1f)) {
+            Column(Modifier.padding(start = 18.dp).weight(1f).graphicsLayer { alpha = labelAlpha() }) {
                 BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
             }
@@ -104,14 +104,14 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.padding(start = 4.dp, top = 10.dp),
+                modifier = Modifier.padding(start = 4.dp, top = 10.dp).graphicsLayer { alpha = labelAlpha() },
             )
             BasicText(
                 count.toString(),
                 style = Type.value,
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.value.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp).graphicsLayer { alpha = labelAlpha() },
             )
         }
     }

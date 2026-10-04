@@ -90,23 +90,10 @@ fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, t
     return reorder
 }
 
-// The modifier chain keeps one shape whether or not this cover is the one held: swapping an element out recreates the pointer input below it and cancels the drag that just started.
-@Composable
+// The modifier chain keeps one shape whether or not this cover is the one held: swapping an element out recreates the pointer input below it and cancels the drag that just started. It goes on the grid item; the card inside it takes `jiggle`.
 fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier {
     if (!isEnabled) return Modifier
     val isDragged = key == reorder.draggedKey
-    // Every cover waiting to be moved jiggles a little, each out of step with its neighbours so the grid shivers rather than sways.
-    val seed = key.hashCode()
-    val jiggle by rememberInfiniteTransition(label = "jiggle").animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            tween(Motion.JIGGLE_MS + Math.floorMod(seed, 3) * 10, easing = Motion.powerThreeInOut),
-            RepeatMode.Reverse,
-            StartOffset(Math.floorMod(seed, Motion.JIGGLE_MS)),
-        ),
-        label = "jiggle",
-    )
     return Modifier
         .animateItem(placementSpec = if (isDragged) null else spring<IntOffset>())
         .zIndex(if (isDragged) 1f else 0f)
@@ -114,10 +101,6 @@ fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean
             if (isDragged) {
                 translationX = reorder.translation().x
                 translationY = reorder.translation().y
-                scaleX = 1.05f
-                scaleY = 1.05f
-            } else {
-                rotationZ = JIGGLE_DEGREES * jiggle
             }
         }
         // On the card itself, so it claims the drag before the grid can scroll with it.
@@ -132,4 +115,29 @@ fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean
                 },
             )
         }
+}
+
+// On the card, not the grid item, so a card in a wider cell still swings about its own centre. Each cover waiting to be moved jiggles a little, out of step with its neighbours so the grid shivers rather than sways; the one held is lifted instead.
+@Composable
+fun Modifier.jiggle(reorder: Reorder, key: Any, isEnabled: Boolean): Modifier {
+    if (!isEnabled) return this
+    val seed = key.hashCode()
+    val swing by rememberInfiniteTransition(label = "jiggle").animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(Motion.JIGGLE_MS + Math.floorMod(seed, 3) * 10, easing = Motion.powerThreeInOut),
+            RepeatMode.Reverse,
+            StartOffset(Math.floorMod(seed, Motion.JIGGLE_MS)),
+        ),
+        label = "jiggle",
+    )
+    return graphicsLayer {
+        if (key == reorder.draggedKey) {
+            scaleX = 1.05f
+            scaleY = 1.05f
+        } else {
+            rotationZ = JIGGLE_DEGREES * swing
+        }
+    }
 }
