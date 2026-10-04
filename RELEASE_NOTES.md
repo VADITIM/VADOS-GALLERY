@@ -1,4 +1,1 @@
-- Viewer: swiping up raises the details sheet with your finger; let go early and it sinks back, past the point it finishes opening.
-- Viewer: the buttons slide away with a swipe up too, not just a swipe down.
-- Review: swiping down brings the last photo back from above as you pull; let go past halfway to undo, earlier to cancel.
-- Albums: an opened group slides left with your finger and closes when let go far enough, instead of closing mid-swipe.
+- Review: the next three photos now sit in their own row above the photo, top right, larger and overlapped with the nearest in front, so the photo can no longer hide them.

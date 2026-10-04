@@ -74,9 +74,9 @@ private const val NEXT_SCALE = 0.92f
 private const val CARD_RATIO = 9f / 19f
 // How many photos ahead show in the corner.
 private const val UPCOMING_COUNT = 3
-private val UPCOMING_WIDTH = 54.dp
-private val UPCOMING_HEIGHT = 72.dp
-private val UPCOMING_STEP = 16.dp
+private val UPCOMING_WIDTH = 60.dp
+private val UPCOMING_HEIGHT = 80.dp
+private val UPCOMING_STEP = 40.dp
 // A swipe down of this share of the card brings the last photo all the way back; past half of it, letting go takes the decision back.
 private const val UNDO_SHARE = 0.6f
 private val REVIEW_STAMP = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
@@ -149,6 +149,12 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     ) {
         // One layout for choosing and for swiping: the photo fills its container whatever its shape, and only what sits under it changes.
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp)) {
+            // The next photos sit in a row of their own above the card, so the photo under them can never cover them.
+            AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+                Box(Modifier.fillMaxWidth().padding(bottom = 14.dp), contentAlignment = Alignment.TopEnd) {
+                    UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT))
+                }
+            }
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(
                 Modifier
@@ -234,7 +240,6 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                     decisions.lastOrNull()?.first?.let { previous ->
                         if (comeback.value > 0f) ReviewCard(previous, Modifier.graphicsLayer { translationY = -(1f - comeback.value) * size.height })
                     }
-                    UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT), Modifier.align(Alignment.TopEnd).padding(12.dp))
                 }
             }
             }
@@ -410,7 +415,6 @@ private fun ReviewChip(text: String, color: androidx.compose.ui.graphics.Color =
 // The next photos ahead, overlapped in the corner with the nearest in front, so what comes after this one can be weighed already.
 @Composable
 private fun UpcomingPile(items: List<MediaItem>, modifier: Modifier = Modifier) {
-    if (items.isEmpty()) return
     val context = LocalContext.current
     Box(modifier.size(width = UPCOMING_WIDTH + UPCOMING_STEP * (UPCOMING_COUNT - 1), height = UPCOMING_HEIGHT)) {
         items.asReversed().forEachIndexed { reversed, item ->
@@ -427,9 +431,14 @@ private fun UpcomingPile(items: List<MediaItem>, modifier: Modifier = Modifier) 
                         .align(Alignment.TopEnd)
                         .offset(x = -UPCOMING_STEP * depth)
                         .size(UPCOMING_WIDTH, UPCOMING_HEIGHT)
-                        .graphicsLayer { rotationZ = -4f * depth }
+                        .graphicsLayer {
+                            rotationZ = -3f * depth
+                            // The further ahead, the dimmer, so the nearest reads first.
+                            alpha = 1f - 0.2f * depth
+                        }
                         .clip(Shapes.tile)
-                        .border(1.dp, Palette.borderControl, Shapes.tile),
+                        .background(Palette.surface)
+                        .border(1.5.dp, if (depth == 0) Palette.textMuted else Palette.borderControl, Shapes.tile),
                 )
             }
         }
