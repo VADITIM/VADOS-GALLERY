@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -73,14 +74,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
 fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val request = remember(cover?.uri) {
-        cover?.let {
-            // Private covers live outside MediaStore and have no cached thumbnail, so they are decoded from the file.
-            val data: Any = if (it.uri.scheme == "content") Thumbnail(it.uri, COVER_PIXELS) else it.uri
-            ImageRequest.Builder(context).data(data).size(COVER_PIXELS).build()
-        }
-    }
+    val request = rememberCoverRequest(cover)
     if (Settings.albumColumns == 1) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
             CoverImage(request, name, Modifier.size(LIST_COVER))
@@ -107,6 +101,103 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.value.fontSize, stepSize = 0.5.sp),
                 modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberCoverRequest(cover: MediaItem?): ImageRequest? {
+    val context = LocalContext.current
+    return remember(cover?.uri) {
+        cover?.let {
+            // Private covers live outside MediaStore and have no cached thumbnail, so they are decoded from the file.
+            val data: Any = if (it.uri.scheme == "content") Thumbnail(it.uri, COVER_PIXELS) else it.uri
+            ImageRequest.Builder(context).data(data).size(COVER_PIXELS).build()
+        }
+    }
+}
+
+// How far each card of a stack leans: the top one straight, the ones under it alternating sides and leaning less the deeper they lie.
+fun stackTilt(depth: Int): Float = when (depth) {
+    0 -> 0f
+    else -> (if (depth % 2 == 1) -1f else 1f) * (STACK_TILT_DEGREES - depth).coerceAtLeast(2f)
+}
+
+// The scale of a card lying under the top one, so its leaning corners stay mostly hidden behind it.
+const val STACK_UNDER_SCALE = 0.94f
+private const val STACK_TILT_DEGREES = 8f
+private const val STACK_VISIBLE_LAYERS = 3
+
+// A group of covers lying on each other, each leaning a little, the first on top.
+@Composable
+fun StackCard(name: String, covers: List<MediaItem?>, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+    val requests = covers.take(STACK_VISIBLE_LAYERS).map { rememberCoverRequest(it) }
+    val stack: @Composable (Modifier) -> Unit = { size ->
+        Box(size) {
+            for (depth in requests.indices.reversed()) {
+                CoverImage(
+                    requests[depth],
+                    name,
+                    Modifier.matchParentSize().graphicsLayer {
+                        rotationZ = stackTilt(depth)
+                        val scale = if (depth == 0) 1f else STACK_UNDER_SCALE
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                )
+            }
+        }
+    }
+    if (Settings.albumColumns == 1) {
+        Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
+            stack(Modifier.size(LIST_COVER))
+            Column(Modifier.padding(start = 18.dp).weight(1f)) {
+                BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+    } else {
+        Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
+            stack(Modifier.fillMaxWidth().aspectRatio(1f))
+            BasicText(
+                name,
+                style = Type.cardTitle.copy(color = LocalAccent.current),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.padding(start = 4.dp, top = 10.dp),
+            )
+            BasicText(
+                count.toString(),
+                style = Type.value,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.value.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+// The card at the end of an opened stack that lays it back down.
+@Composable
+fun CollapseCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val glyph = @Composable { BasicText("‹", style = Type.title.copy(color = LocalAccent.current)) }
+    if (Settings.albumColumns == 1) {
+        Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) { glyph() }
+            BasicText(label, style = Type.cardTitle.copy(fontSize = 20.sp, color = Palette.textMuted), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 18.dp))
+        }
+    } else {
+        Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
+            Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) { glyph() }
+            BasicText(
+                label,
+                style = Type.cardTitle.copy(color = Palette.textMuted),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.padding(start = 4.dp, top = 10.dp),
             )
         }
     }

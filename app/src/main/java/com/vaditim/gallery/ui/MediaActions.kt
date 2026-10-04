@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.Settings
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
@@ -120,6 +121,7 @@ class MediaActions(
         val relativePath = if (parent.isEmpty()) "$cleanName/" else "$parent/$cleanName/"
         scope.launch {
             val moved = album.items.count { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
+            if (moved == album.items.size) Settings.replaceAlbumPath(album.relativePath, relativePath)
             File(Environment.getExternalStorageDirectory(), album.relativePath).let { folder -> if (folder.listFiles().isNullOrEmpty()) folder.delete() }
             notify(summary(moved, album.items.size, "Renamed to $cleanName"))
         }

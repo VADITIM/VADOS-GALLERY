@@ -25,4 +25,7 @@ object Motion {
     const val PRESS_MS = 80
     const val RELEASE_MS = 220
     const val STATE_MS = 220
+
+    // An album group opening into its row, or folding back onto its top card.
+    const val STACK_MS = 360
 }

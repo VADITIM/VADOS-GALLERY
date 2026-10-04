@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.AlbumStack
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
@@ -113,6 +114,18 @@ fun AlbumPickerSheet(
                 SheetRow(album.name, trailing = album.items.size.toString()) { onPick(album) }
             }
             item { SheetRow("+ New album", color = Palette.textMuted, onClick = onNewAlbum) }
+        }
+    }
+}
+
+@Composable
+fun StackPickerSheet(visible: Boolean, label: String, stacks: List<AlbumStack>, onPick: (String) -> Unit, onNewStack: () -> Unit, onDismiss: () -> Unit) {
+    OverlaySheet(visible = visible, label = label, onDismiss = onDismiss) {
+        LazyColumn(Modifier.heightIn(max = 380.dp)) {
+            items(stacks, key = { it.name }) { stack ->
+                SheetRow(stack.name, trailing = stack.paths.size.toString()) { onPick(stack.name) }
+            }
+            item { SheetRow("+ New group", color = Palette.textMuted, onClick = onNewStack) }
         }
     }
 }

@@ -42,6 +42,7 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
         SheetRow("Album columns", trailing = Settings.albumColumns.toString()) {
             Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
         }
+        SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
         SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
         SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
     }

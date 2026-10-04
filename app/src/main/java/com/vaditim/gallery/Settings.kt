@@ -40,6 +40,11 @@ object Settings {
     // The same for private groups, by name.
     var groupOrder by mutableStateOf<List<String>>(emptyList())
         private set
+    var groupedAlbums by mutableStateOf(false)
+        private set
+    // The album groups in their order, each holding its albums by folder path; kept while grouping is off, so turning it back on restores them.
+    var albumStacks by mutableStateOf<List<AlbumStack>>(emptyList())
+        private set
 
     fun init(context: Context) {
         preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -51,6 +56,11 @@ object Settings {
         albumColumns = preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
+        groupedAlbums = preferences.getBoolean("groupedAlbums", false)
+        albumStacks = preferences.getString("albumStacks", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
+            val parts = line.split('\t')
+            AlbumStack(parts.first(), parts.drop(1).filter { it.isNotEmpty() })
+        }.orEmpty()
     }
 
     fun updateBlur(value: Float) {
@@ -88,8 +98,52 @@ object Settings {
         preferences.edit().putString("albumOrder", paths.joinToString("\n")).apply()
     }
 
+    fun updateGroupedAlbums(value: Boolean) {
+        groupedAlbums = value
+        preferences.edit().putBoolean("groupedAlbums", value).apply()
+    }
+
+    fun updateAlbumStacks(stacks: List<AlbumStack>) {
+        albumStacks = stacks.filter { it.paths.isNotEmpty() }
+        preferences.edit().putString("albumStacks", albumStacks.joinToString("\n") { (listOf(it.name) + it.paths).joinToString("\t") }).apply()
+    }
+
+    // An album renamed is a folder moved: its place in the order and in its group follow it.
+    fun replaceAlbumPath(old: String, new: String) {
+        if (old in albumOrder) updateAlbumOrder(albumOrder.map { if (it == old) new else it })
+        if (albumStacks.any { old in it.paths }) updateAlbumStacks(albumStacks.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }) })
+    }
+
     fun updateAutoplayVideos(value: Boolean) {
         autoplayVideos = value
         preferences.edit().putBoolean("autoplay", value).apply()
     }
 }
+
+data class AlbumStack(val name: String, val paths: List<String>) {
+    // Tabs and line breaks hold the stored list together, so a name cannot carry them.
+    companion object {
+        fun cleanName(name: String): String = name.replace('\t', ' ').replace('\n', ' ').trim()
+    }
+}
+
+// Putting an album in a group takes it out of any other; a group left empty is gone.
+fun List<AlbumStack>.withAlbum(path: String, stackName: String): List<AlbumStack> {
+    val name = AlbumStack.cleanName(stackName).ifEmpty { return this }
+    val without = withoutAlbum(path)
+    return if (without.any { it.name == name }) without.map { if (it.name == name) it.copy(paths = it.paths + path) else it } else without + AlbumStack(name, listOf(path))
+}
+
+// A group renamed onto another's name joins it, in the place of whichever came first.
+fun List<AlbumStack>.renamed(old: String, new: String): List<AlbumStack> {
+    val name = AlbumStack.cleanName(new).ifEmpty { return this }
+    val merged = LinkedHashMap<String, List<String>>()
+    for (stack in this) {
+        val target = if (stack.name == old) name else stack.name
+        merged[target] = merged[target].orEmpty() + stack.paths
+    }
+    return merged.map { (stackName, paths) -> AlbumStack(stackName, paths.distinct()) }
+}
+
+fun List<AlbumStack>.withoutAlbum(path: String): List<AlbumStack> =
+    map { it.copy(paths = it.paths - path) }.filter { it.paths.isNotEmpty() }

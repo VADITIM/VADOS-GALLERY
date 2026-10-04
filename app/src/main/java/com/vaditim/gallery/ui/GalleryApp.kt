@@ -8,6 +8,9 @@ import android.content.Intent
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.vaditim.gallery.Settings
+import com.vaditim.gallery.renamed
+import com.vaditim.gallery.withAlbum
+import com.vaditim.gallery.withoutAlbum
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -134,6 +137,7 @@ private enum class AppSheet {
     ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP,
     GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
     PRIVATE_NEW_GROUP,
+    STACK_MENU, STACK_RENAME, ALBUM_STACK, ALBUM_NEW_STACK,
 }
 
 // Where the photo picker puts what is picked: an album folder (new or existing), or a private group.
@@ -195,6 +199,7 @@ private fun Library(viewModel: GalleryViewModel) {
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
     var sheetGroup by remember { mutableStateOf<PrivateGroup?>(null) }
+    var sheetStack by remember { mutableStateOf<String?>(null) }
     var isMenuDeleteArmed by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerTarget?>(null) }
     LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU) isMenuDeleteArmed = false }
@@ -383,16 +388,16 @@ private fun Library(viewModel: GalleryViewModel) {
                         AlbumsPlace.Folders -> AlbumsScreen(
                             albums = arrangedAlbums,
                             isRearranging = isRearranging,
-                            onMove = { from, to ->
-                                val paths = arrangedAlbums.map { it.relativePath }.toMutableList()
-                                paths.add(to, paths.removeAt(from))
-                                Settings.updateAlbumOrder(paths)
-                            },
+                            onArrange = { Settings.updateAlbumOrder(it) },
                             state = albumsListState,
                             onOpen = { albumsPlace = AlbumsPlace.Folder(it.id) },
                             onLongPress = { album ->
                                 sheetAlbum = album
                                 sheet = AppSheet.ALBUM_MENU
+                            },
+                            onStackLongPress = { name ->
+                                sheetStack = name
+                                sheet = AppSheet.STACK_MENU
                             },
                             onNewAlbum = { sheet = AppSheet.NEW_ALBUM },
                             contentPadding = insetPadding,
@@ -633,6 +638,17 @@ private fun Library(viewModel: GalleryViewModel) {
                     isRearranging = true
                     sheet = AppSheet.NONE
                 }
+                if (Settings.groupedAlbums) {
+                    val albumPath = sheetAlbum?.relativePath.orEmpty()
+                    val currentStack = Settings.albumStacks.firstOrNull { it.paths.contains(albumPath) }
+                    SheetRow(if (currentStack == null) "Add to group" else "Move to group", trailing = currentStack?.name, icon = { MoveIcon(it) }) { sheet = AppSheet.ALBUM_STACK }
+                    if (currentStack != null) {
+                        SheetRow("Remove from group", icon = { CloseIcon(it) }) {
+                            Settings.updateAlbumStacks(Settings.albumStacks.withoutAlbum(albumPath))
+                            sheet = AppSheet.NONE
+                        }
+                    }
+                }
                 SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
                     sheet = AppSheet.NONE
@@ -651,6 +667,30 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 }
             }
+
+            // A long-pressed album group. Ungrouping only lays its albums back into the grid; no photo is touched.
+            OverlaySheet(visible = sheet == AppSheet.STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
+                SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.STACK_RENAME }
+                SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
+                    isRearranging = true
+                    sheet = AppSheet.NONE
+                }
+                SheetRow("Ungroup", trailing = Settings.albumStacks.firstOrNull { it.name == sheetStack }?.paths?.size?.toString(), icon = { CloseIcon(it) }) {
+                    Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != sheetStack })
+                    sheet = AppSheet.NONE
+                }
+            }
+            StackPickerSheet(
+                visible = sheet == AppSheet.ALBUM_STACK,
+                label = "MOVE ${sheetAlbum?.name?.uppercase().orEmpty()} TO",
+                stacks = Settings.albumStacks.filter { stack -> !stack.paths.contains(sheetAlbum?.relativePath.orEmpty()) },
+                onPick = { name ->
+                    sheetAlbum?.let { Settings.updateAlbumStacks(Settings.albumStacks.withAlbum(it.relativePath, name)) }
+                    sheet = AppSheet.NONE
+                },
+                onNewStack = { sheet = AppSheet.ALBUM_NEW_STACK },
+                onDismiss = { sheet = AppSheet.NONE },
+            )
 
             SettingsSheet(
                 visible = sheet == AppSheet.SETTINGS,
@@ -769,6 +809,25 @@ private fun Library(viewModel: GalleryViewModel) {
                     initialName = sheetGroup?.name.orEmpty(),
                     onConfirm = { name ->
                         sheetGroup?.let { if (name != it.name) actions.renameGroup(it, name) }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.STACK_RENAME -> NameSheet(
+                    label = "RENAME GROUP",
+                    action = "RENAME",
+                    initialName = sheetStack.orEmpty(),
+                    onConfirm = { name ->
+                        sheetStack?.let { Settings.updateAlbumStacks(Settings.albumStacks.renamed(it, name)) }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.ALBUM_NEW_STACK -> NameSheet(
+                    label = "NEW GROUP",
+                    action = "CREATE",
+                    onConfirm = { name ->
+                        sheetAlbum?.let { Settings.updateAlbumStacks(Settings.albumStacks.withAlbum(it.relativePath, name)) }
                         sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
