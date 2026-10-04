@@ -1,3 +1,3 @@
-- Review: the marked count sits above the position and keeps its room, so nothing moves up when it appears.
-- Review: the photo card keeps a tall phone-screen shape (9:19) instead of stretching to whatever room is left.
-- Review: the next three photos are stacked in the top right corner so you can prepare for them.
+- Viewer: while you pull a photo down, the buttons slide out with your finger and come back as you let go, instead of jumping at a threshold.
+- Viewer: closing with a swipe down carries on smoothly from where you let go instead of jumping in size.
+- Viewer: when the photo you ended on is off screen in the grid, the grid scrolls to it as the pull starts, so the photo shrinks straight into its tile.

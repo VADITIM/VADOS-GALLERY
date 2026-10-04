@@ -91,6 +91,10 @@ private val PAGE_GAP = 18.dp
 private const val MAX_ZOOM = 5f
 // A pull of this share of the screen height has shrunk the viewer all the way down to its tile.
 private const val PULL_RANGE = 0.4f
+// The share of the full pull by which the buttons have left completely.
+private const val CHROME_PULL_SHARE = 0.35f
+// How many of its own heights a button travels on its way out.
+private const val CHROME_TRAVEL = 1.6f
 private const val HOLD_SPEED = 1.5f
 private const val REVERSE_STEP_MS = 120L
 private const val MIN_HOLD_SPEED = 0.25f
@@ -130,9 +134,9 @@ fun ViewerScreen(
     // The group a photo is about to go into, held while the confirmation is open.
     var pendingGroup by remember { mutableStateOf<String?>(null) }
     var cropping by remember { mutableStateOf<MediaItem?>(null) }
-    // A swipe down is under way: the buttons step aside rather than being dragged along with the photo.
-    var isPulled by remember { mutableStateOf(false) }
-    val isChromeShown = isChromeVisible && isChromeAllowed && !isPulled
+    // How far a swipe down has gone, 0 to 1: the buttons slide out with it and come back as it is let go.
+    var pull by remember { mutableFloatStateOf(0f) }
+    val isChromeShown = isChromeVisible && isChromeAllowed
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
     val context = LocalContext.current
@@ -163,7 +167,7 @@ fun ViewerScreen(
                     onSwipeDown = onClose,
                     onSwipeUp = { overlay = Overlay.DETAILS },
                     onPull = { fraction ->
-                        isPulled = fraction > 0f
+                        pull = fraction
                         onPull(fraction)
                     },
                     onRatio = { onPhotoRatio(items[page].id, it) },
@@ -177,7 +181,7 @@ fun ViewerScreen(
                 // No back button: the system back gesture or a swipe down closes the viewer.
                 horizontalArrangement = Arrangement.End,
             ) {
-                ChromePiece(isChromeShown, isFromTop = true, order = 0) {
+                ChromePiece(isChromeShown, isFromTop = true, order = 0, pull = { pull }) {
                     Row(
                         Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -194,8 +198,8 @@ fun ViewerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
-                ChromePiece(isChromeShown, isFromTop = false, order = 1) {
+                if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0, pull = { pull }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
+                ChromePiece(isChromeShown, isFromTop = false, order = 1, pull = { pull }) {
                 Row(
                     Modifier
                         .glass(Shapes.capsule, Palette.viewerGround)
@@ -573,9 +577,15 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
 
 // One of the viewer's floating buttons: each slides off its own edge and fades, a step after the one before, instead of the whole set going as one sheet.
 @Composable
-private fun ChromePiece(isShown: Boolean, isFromTop: Boolean, order: Int, content: @Composable () -> Unit) {
+private fun ChromePiece(isShown: Boolean, isFromTop: Boolean, order: Int, pull: () -> Float = { 0f }, content: @Composable () -> Unit) {
     val delay = order * Motion.CHROME_STAGGER_MS
     AnimatedVisibility(
+        // Follows the pull frame by frame, so the buttons move exactly as far as the finger has.
+        modifier = Modifier.graphicsLayer {
+            val out = (pull() / CHROME_PULL_SHARE).coerceIn(0f, 1f)
+            translationY = (if (isFromTop) -1f else 1f) * size.height * CHROME_TRAVEL * out
+            alpha = 1f - out
+        },
         visible = isShown,
         enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.powerTwoOut)) +
             slideInVertically(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.backOut)) { if (isFromTop) -it else it },

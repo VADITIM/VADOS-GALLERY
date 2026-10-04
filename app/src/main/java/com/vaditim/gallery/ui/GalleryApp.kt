@@ -200,6 +200,8 @@ private fun Library(viewModel: GalleryViewModel) {
     var viewerRatio by remember { mutableFloatStateOf(1f) }
     // How far a swipe down has already pulled the viewer towards its tile (0 to 1); the draw lambdas fold it into the animation's progress.
     var viewerPull by remember { mutableFloatStateOf(0f) }
+    // The photo whose tile a pull has already scrolled into view, so it is asked for once.
+    var revealingId by remember { mutableStateOf<Long?>(null) }
     val photoRatios = remember { HashMap<Long, Float>() }
     val viewerProgress = remember { Animatable(0f) }
     // The viewer's buttons come in once the photo has nearly grown into place, and leave as soon as it starts closing.
@@ -368,6 +370,7 @@ private fun Library(viewModel: GalleryViewModel) {
             viewerRect = TileBounds.of(openedId)
             viewerRatio = ratioOf(itemsFor(request.source).getOrNull(request.startIndex))
             viewerPull = 0f
+            revealingId = null
             shownViewer = request
             viewerProgress.snapTo(0f)
             viewerProgress.animateTo(1f, tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerTwoOut))
@@ -380,7 +383,14 @@ private fun Library(viewModel: GalleryViewModel) {
             }
             viewerRect = TileBounds.of(currentId)
             viewerRatio = ratioOf(shownViewer?.let { shown -> itemsFor(shown.source).firstOrNull { it.id == currentId } })
-            viewerProgress.animateTo(0f, tween(Motion.VIEWER_CLOSE_MS, easing = Motion.powerThreeInOut))
+            if (viewerPull > 0f) {
+                // Closed by a pull: the shrink carries on from where the finger let go, already moving, instead of restarting from full size.
+                viewerProgress.snapTo(viewerProgress.value * (1f - viewerPull))
+                viewerPull = 0f
+                viewerProgress.animateTo(0f, tween(Motion.VIEWER_CLOSE_MS, easing = Motion.powerTwoOut))
+            } else {
+                viewerProgress.animateTo(0f, tween(Motion.VIEWER_CLOSE_MS, easing = Motion.powerThreeInOut))
+            }
             shownViewer = null
             viewerPull = 0f
         }
@@ -1058,9 +1068,15 @@ private fun Library(viewModel: GalleryViewModel) {
                     onCurrentChanged = { viewerCurrentId = it },
                     onPhotoRatio = { id, ratio -> photoRatios[id] = ratio },
                     onPull = { fraction ->
-                        viewerRect = TileBounds.of(viewerCurrentId)
-                        viewerRatio = photoRatios[viewerCurrentId] ?: viewerRatio
+                        val currentId = viewerCurrentId
+                        viewerRect = TileBounds.of(currentId)
+                        viewerRatio = photoRatios[currentId] ?: viewerRatio
                         viewerPull = fraction
+                        // The tile is brought on screen as soon as the pull starts, so the shrink aims at it from the first frame instead of switching target on release.
+                        if (fraction > 0f && viewerRect == null && currentId != null && revealingId != currentId) {
+                            revealingId = currentId
+                            scope.launch { folderMemory?.revealItem(gridItems, currentId) }
+                        }
                     },
                     places = places,
                 )
