@@ -37,12 +37,13 @@ android {
     }
 
     buildTypes {
-        // The build to install. A debug build runs Compose unoptimised and debuggable, which is where most scroll jank on a large grid comes from; this one is shrunk and optimised by R8 and signed with the dedicated release key, so every release installs over the last.
+        // The build to install. A debug build runs Compose unoptimised and debuggable, which is where most scroll jank on a large grid comes from; this one is shrunk and optimised by R8 and signed with the dedicated release key once it is set up (debug key until then).
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("release")
+            // On hold: until the release key's secrets exist, releases keep the committed debug key so they still install over the last one.
+            signingConfig = signingConfigs.getByName(if (System.getenv("RELEASE_KEYSTORE") != null) "release" else "debug")
         }
     }
 

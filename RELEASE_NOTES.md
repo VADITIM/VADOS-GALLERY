@@ -1,1 +1,1 @@
-- Signed with a dedicated release key instead of the debug key. This one time, uninstall the old version before installing: a new key cannot update an app signed with the old one. Settings, album order, covers and review progress start over; private photos are untouched.
+- Release signing with a dedicated key is prepared but on hold; this build is still signed as before and installs over the last one.

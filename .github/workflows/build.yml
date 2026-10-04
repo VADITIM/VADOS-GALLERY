@@ -25,14 +25,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # The release key lives only in the repository's secrets; without it there is nothing to publish, so the run stops here and says why.
+      # The release key lives only in the repository's secrets. Release signing is on hold: without them the build falls back to the debug key and says so.
       - name: Release key
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
-            echo "::error::Missing secrets: RELEASE_KEYSTORE_BASE64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD"
-            exit 1
+            echo "::warning::No release key secrets; signing with the debug key"
+            exit 0
           fi
           echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
