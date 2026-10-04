@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import com.vaditim.gallery.Settings
 import android.view.TextureView
 import androidx.compose.animation.core.animateDpAsState
@@ -55,6 +57,9 @@ import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.glass
 import androidx.media3.common.MediaItem as PlayerMediaItem
 
+// Sound off holds for every video until it is turned back on, for as long as the app runs.
+private var isSoundOff by mutableStateOf(false)
+
 // Holding the timeline and sliding up makes the drag finer. Distances are how far above the point where the finger went down; each step is a slower scrub, down to a tenth, for stepping through split seconds.
 private val SCRUB_STEPS = listOf(0f to 1f, 40f to 0.5f, 110f to 0.25f, 190f to 0.1f)
 private val JUMP_GRAB_RADIUS = 28.dp
@@ -92,6 +97,7 @@ fun rememberVideoState(item: MediaItem?): VideoState? {
                 setMediaItem(PlayerMediaItem.fromUri(item.uri))
                 prepare()
                 playWhenReady = Settings.autoplayVideos
+                volume = if (isSoundOff) 0f else 1f
             },
         )
     }
@@ -133,44 +139,49 @@ fun VideoSurface(state: VideoState, modifier: Modifier = Modifier) {
     )
 }
 
+// One slim bar: play, the time, the timeline, the length, loop and sound. During a hold the speed takes the time's place, so nothing jumps.
 @Composable
 fun VideoControls(state: VideoState, modifier: Modifier = Modifier) {
-    Column(
+    val accent = LocalAccent.current
+    val small = Modifier.size(width = 40.dp, height = 36.dp)
+    Row(
         modifier
             .fillMaxWidth()
-            .glass(Shapes.panel, Palette.viewerGround)
-            .padding(horizontal = 6.dp, vertical = 8.dp),
+            .glass(Shapes.capsule, Palette.viewerGround)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Always this tall, so the controls do not jump when a hold starts and the speed appears here.
-        Box(Modifier.fillMaxWidth().height(22.dp), contentAlignment = Alignment.Center) {
-            state.holdSpeed?.let { speed ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SpeedArrows(isReverse = state.isHoldReverse, count = if (speed < 1.25f) 1 else if (speed < 2.5f) 2 else 3, color = LocalAccent.current)
+        IconButton(onClick = {
+            if (state.isPlaying) {
+                state.player.pause()
+            } else {
+                if (state.player.playbackState == Player.STATE_ENDED) state.player.seekTo(0)
+                state.player.play()
+            }
+        }, modifier = small) { PlayPauseIcon(state.isPlaying, Palette.textBright, size = 20.dp) }
+        Box(Modifier.widthIn(min = 44.dp), contentAlignment = Alignment.Center) {
+            val speed = state.holdSpeed
+            if (speed != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SpeedArrows(isReverse = state.isHoldReverse, count = if (speed < 1.25f) 1 else if (speed < 2.5f) 2 else 3, color = accent)
                     MicroLabel("%.2f×".format(speed))
                 }
+            } else {
+                MicroLabel(formatTime(state.positionMs, withFraction = state.isScrubbing && state.scrubSpeed < 1f))
             }
         }
-        Timeline(state, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            val isFine = state.isScrubbing && state.scrubSpeed < 1f
-            MicroLabel(formatTime(state.positionMs, withFraction = isFine))
+        Timeline(state, Modifier.weight(1f).padding(horizontal = 10.dp))
+        Box(Modifier.widthIn(min = 40.dp), contentAlignment = Alignment.Center) {
             MicroLabel(formatTime(state.durationMs, withFraction = false))
         }
-        val accent = LocalAccent.current
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = {
-                state.isLooping = !state.isLooping
-                state.player.repeatMode = if (state.isLooping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-            }) { LoopIcon(if (state.isLooping) accent else Palette.textMuted) }
-            IconButton(onClick = {
-                if (state.isPlaying) {
-                    state.player.pause()
-                } else {
-                    if (state.player.playbackState == Player.STATE_ENDED) state.player.seekTo(0)
-                    state.player.play()
-                }
-            }) { PlayPauseIcon(state.isPlaying, Palette.textBright, size = 28.dp) }
-        }
+        IconButton(onClick = {
+            state.isLooping = !state.isLooping
+            state.player.repeatMode = if (state.isLooping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        }, modifier = small) { LoopIcon(if (state.isLooping) accent else Palette.textMuted, size = 20.dp) }
+        IconButton(onClick = {
+            isSoundOff = !isSoundOff
+            state.player.volume = if (isSoundOff) 0f else 1f
+        }, modifier = small) { SpeakerIcon(isMuted = isSoundOff, color = if (isSoundOff) Palette.textMuted else Palette.textBright, size = 20.dp) }
     }
 }
 
@@ -180,12 +191,12 @@ private fun Timeline(state: VideoState, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     var widthPixels by remember { mutableFloatStateOf(1f) }
     val fraction = if (state.durationMs > 0) (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
-    val thickness by animateDpAsState(if (state.isScrubbing) 12.dp else 6.dp, tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "timeline")
+    val thickness by animateDpAsState(if (state.isScrubbing) 8.dp else 4.dp, tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "timeline")
 
     // A tall touch area around a thin track: the track is easy to see, the hold is easy to land.
     Box(
         modifier
-            .height(52.dp)
+            .height(36.dp)
             .onSizeChanged { widthPixels = it.width.toFloat() }
             .pointerInput(state) {
                 awaitEachGesture {
@@ -224,7 +235,7 @@ private fun Timeline(state: VideoState, modifier: Modifier = Modifier) {
                 val radius = CornerRadius(trackHeight / 2f)
                 drawRoundRect(Color(0x33FFFFFF), Offset(0f, top), Size(size.width, trackHeight), radius)
                 drawRoundRect(accent, Offset(0f, top), Size(size.width * fraction, trackHeight), radius)
-                drawCircle(Color.White, radius = trackHeight / 2f + 4.dp.toPx(), center = Offset(size.width * fraction, size.height / 2f))
+                drawCircle(Color.White, radius = trackHeight / 2f + 3.dp.toPx(), center = Offset(size.width * fraction, size.height / 2f))
             },
     )
 }

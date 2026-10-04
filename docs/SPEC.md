@@ -227,3 +227,4 @@ review, which is not a goal.
 - Renaming an album keeps its place in the arranged order and in its group.
 - Crop (viewer → More): photos are cropped, videos cropped and trimmed. Free or a fixed ratio (Original, 1:1, 4:5, 4:3, 16:9, 9:16). The result is saved as a copy beside the original with the original's date and location; the original is never changed. Available in Private as well.
 - Grid tiles bigger than the system thumbnail (few columns) load the photo itself once scrolling stops; while flinging only the cached thumbnails are read.
+- Video controls are one slim bar (play, time, timeline, length, loop, sound). Sound off holds for every video while the app runs.

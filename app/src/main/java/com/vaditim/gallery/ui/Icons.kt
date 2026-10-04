@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -67,6 +68,37 @@ fun HeartIcon(isFilled: Boolean, color: Color, size: Dp = 24.dp) {
             close()
         }
         if (isFilled) drawPath(heart, color) else drawPath(heart, color, style = Stroke(2f * unit, join = StrokeJoin.Round))
+    }
+}
+
+// A speaker with its sound waves; muting draws a stroke across it while the waves fade and shrink away, and unmuting runs it back.
+@Composable
+fun SpeakerIcon(isMuted: Boolean, color: Color, size: Dp = 24.dp) {
+    val mute by androidx.compose.animation.core.animateFloatAsState(
+        if (isMuted) 1f else 0f,
+        androidx.compose.animation.core.tween(com.vaditim.gallery.vas.Motion.STATE_MS, easing = com.vaditim.gallery.vas.Motion.powerTwoOut),
+        label = "mute",
+    )
+    Canvas(Modifier.size(size)) {
+        val unit = this.size.minDimension / 24f
+        val stroke = Stroke(2f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val body = Path().apply {
+            moveTo(3.5f * unit, 9f * unit); lineTo(7.5f * unit, 9f * unit); lineTo(12.5f * unit, 4.5f * unit)
+            lineTo(12.5f * unit, 19.5f * unit); lineTo(7.5f * unit, 15f * unit); lineTo(3.5f * unit, 15f * unit); close()
+        }
+        drawPath(body, color, style = stroke)
+        val waves = 1f - mute
+        if (waves > 0f) {
+            val inner = androidx.compose.ui.geometry.Rect(10f * unit, 8.5f * unit, 17f * unit, 15.5f * unit)
+            val outer = androidx.compose.ui.geometry.Rect(8.5f * unit, 4.5f * unit, 21f * unit, 19.5f * unit)
+            drawArc(color.copy(alpha = color.alpha * waves), -50f * waves, 100f * waves, false, inner.topLeft, inner.size, style = stroke)
+            drawArc(color.copy(alpha = color.alpha * waves), -50f * waves, 100f * waves, false, outer.topLeft, outer.size, style = stroke)
+        }
+        if (mute > 0f) {
+            val from = Offset(3f * unit, 3f * unit)
+            val to = Offset(21f * unit, 21f * unit)
+            drawLine(color, from, from + (to - from) * mute, 2f * unit, StrokeCap.Round)
+        }
     }
 }
 

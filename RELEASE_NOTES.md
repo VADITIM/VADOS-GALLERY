@@ -1,3 +1,2 @@
-- Photo grids are sharp at 1, 2 and 3 columns: tiles larger than the system's small thumbnail load the photo itself.
-- Sharp pictures load only once scrolling stops, so flinging stays smooth; tiles off screen are never decoded.
-- Applies to every photo grid: Recent, Favorites, albums, private groups, locations, trash and the photo picker.
+- Video controls are one slim bar: play, time, timeline, length, loop and sound.
+- New sound toggle: the speaker gets a stroke across it as its waves fade out, and back again. Sound off stays off for every video until turned back on.
