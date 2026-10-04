@@ -1,10 +1,13 @@
 package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.shrinkVertically
@@ -70,8 +73,8 @@ private const val DECIDE_SHARE = 0.28f
 // Degrees the photo leans per screen width it has been dragged.
 private const val LEAN_DEGREES = 14f
 private const val NEXT_SCALE = 0.92f
-// The photo card keeps the shape of the phone's screen, whatever room is left.
-private const val CARD_RATIO = 9f / 19f
+// How much of the screen, from the bottom, the shade behind the controls covers.
+private const val SHADE_SHARE = 0.45f
 // How many photos ahead show in the corner.
 private const val UPCOMING_COUNT = 3
 private val UPCOMING_WIDTH = 60.dp
@@ -147,7 +150,94 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             // Swallows taps so nothing behind the review reacts.
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {}),
     ) {
-        // One layout for choosing and for swiping: the photo fills its container whatever its shape, and only what sits under it changes.
+        // The photo fills the whole screen on black; everything else floats over it.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) },
+        ) {
+            if (isChoosing) {
+                shown?.let { ReviewCard(it, Modifier) }
+            } else {
+                order.getOrNull(position + 1)?.let { next ->
+                    val reveal = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f)
+                    ReviewCard(next, Modifier.graphicsLayer {
+                        val scale = NEXT_SCALE + (1f - NEXT_SCALE) * reveal
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = 0.5f + 0.5f * reveal
+                    })
+                }
+                order.getOrNull(position)?.let { current ->
+                    val lean = drag.value / width
+                    ReviewCard(
+                        current,
+                        Modifier
+                            .graphicsLayer {
+                                translationX = drag.value
+                                rotationZ = lean * LEAN_DEGREES
+                            }
+                            // A tap on the left half lets the photo go, on the right half keeps it.
+                            .pointerInput(position) {
+                                detectTapGestures { point -> decide(isDelete = point.x < size.width / 2f) }
+                            }
+                            .pointerInput(position) {
+                                var across = 0f
+                                var down = 0f
+                                val settle = {
+                                    scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }
+                                    scope.launch { comeback.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) }
+                                    Unit
+                                }
+                                detectDragGestures(
+                                    onDragStart = {
+                                        across = 0f
+                                        down = 0f
+                                    },
+                                    onDragEnd = {
+                                        when {
+                                            // Past halfway the last photo finishes coming back from where the finger left it, and only then is the decision taken back.
+                                            comeback.value >= 0.5f -> scope.launch {
+                                                comeback.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
+                                                undo()
+                                                comeback.snapTo(0f)
+                                            }
+                                            down > abs(across) -> settle()
+                                            drag.value < -width * DECIDE_SHARE -> decide(true)
+                                            drag.value > width * DECIDE_SHARE -> decide(false)
+                                            else -> settle()
+                                        }
+                                    },
+                                    onDragCancel = { settle() },
+                                ) { change, amount ->
+                                    change.consume()
+                                    across += amount.x
+                                    down += amount.y
+                                    if (abs(down) <= abs(across)) {
+                                        scope.launch { drag.snapTo(drag.value + amount.x) }
+                                    } else if (decisions.isNotEmpty()) {
+                                        // The last photo decided comes down from above with the finger.
+                                        scope.launch { comeback.snapTo((down / (size.height * UNDO_SHARE)).coerceIn(0f, 1f)) }
+                                    }
+                                }
+                            },
+                        // The verdict shows on the photo as it leans: red for letting go, the accent for keeping.
+                        verdict = when {
+                            lean < -0.05f -> false
+                            lean > 0.05f -> true
+                            else -> null
+                        },
+                        verdictStrength = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f),
+                    )
+                }
+                decisions.lastOrNull()?.first?.let { previous ->
+                    if (comeback.value > 0f) ReviewCard(previous, Modifier.graphicsLayer { translationY = -(1f - comeback.value) * size.height })
+                }
+            }
+        }
+        // A shade behind the controls at the bottom, so they read over any photo.
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(SHADE_SHARE).background(Brush.verticalGradient(listOf(Color.Transparent, Palette.viewerGround.copy(alpha = 0.85f)))))
+        // One layout for choosing and for swiping, floating over the photo: only the controls change between the two.
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp)) {
             // The next photos sit in a row of their own above the card, so the photo under them can never cover them.
             AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
@@ -155,94 +245,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                     UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT))
                 }
             }
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Box(
-                Modifier
-                    .aspectRatio(CARD_RATIO)
-                    .clip(Shapes.viewerPhoto)
-                    .background(Palette.sunkenDeep)
-                    .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) },
-            ) {
-                if (isChoosing) {
-                    shown?.let { ReviewCard(it, Modifier) }
-                } else {
-                    order.getOrNull(position + 1)?.let { next ->
-                        val reveal = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f)
-                        ReviewCard(next, Modifier.graphicsLayer {
-                            val scale = NEXT_SCALE + (1f - NEXT_SCALE) * reveal
-                            scaleX = scale
-                            scaleY = scale
-                            alpha = 0.5f + 0.5f * reveal
-                        })
-                    }
-                    order.getOrNull(position)?.let { current ->
-                        val lean = drag.value / width
-                        ReviewCard(
-                            current,
-                            Modifier
-                                .graphicsLayer {
-                                    translationX = drag.value
-                                    rotationZ = lean * LEAN_DEGREES
-                                }
-                                // A tap on the left half lets the photo go, on the right half keeps it.
-                                .pointerInput(position) {
-                                    detectTapGestures { point -> decide(isDelete = point.x < size.width / 2f) }
-                                }
-                                .pointerInput(position) {
-                                    var across = 0f
-                                    var down = 0f
-                                    val settle = {
-                                        scope.launch { drag.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }
-                                        scope.launch { comeback.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) }
-                                        Unit
-                                    }
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            across = 0f
-                                            down = 0f
-                                        },
-                                        onDragEnd = {
-                                            when {
-                                                // Past halfway the last photo finishes coming back from where the finger left it, and only then is the decision taken back.
-                                                comeback.value >= 0.5f -> scope.launch {
-                                                    comeback.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
-                                                    undo()
-                                                    comeback.snapTo(0f)
-                                                }
-                                                down > abs(across) -> settle()
-                                                drag.value < -width * DECIDE_SHARE -> decide(true)
-                                                drag.value > width * DECIDE_SHARE -> decide(false)
-                                                else -> settle()
-                                            }
-                                        },
-                                        onDragCancel = { settle() },
-                                    ) { change, amount ->
-                                        change.consume()
-                                        across += amount.x
-                                        down += amount.y
-                                        if (abs(down) <= abs(across)) {
-                                            scope.launch { drag.snapTo(drag.value + amount.x) }
-                                        } else if (decisions.isNotEmpty()) {
-                                            // The last photo decided comes down from above with the finger.
-                                            scope.launch { comeback.snapTo((down / (size.height * UNDO_SHARE)).coerceIn(0f, 1f)) }
-                                        }
-                                    }
-                                },
-                            // The verdict shows on the photo as it leans: red for letting go, the accent for keeping.
-                            verdict = when {
-                                lean < -0.05f -> false
-                                lean > 0.05f -> true
-                                else -> null
-                            },
-                            verdictStrength = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f),
-                        )
-                    }
-                    decisions.lastOrNull()?.first?.let { previous ->
-                        if (comeback.value > 0f) ReviewCard(previous, Modifier.graphicsLayer { translationY = -(1f - comeback.value) * size.height })
-                    }
-                }
-            }
-            }
+            Spacer(Modifier.weight(1f))
 
             // Done deletes everything marked so far in one go. Inside Private that is final, so there it takes a second tap.
             AnimatedVisibility(!isChoosing && marked.isNotEmpty(), enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {

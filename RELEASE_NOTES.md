@@ -1,1 +1,2 @@
-- Review: the next three photos now sit in their own row above the photo, top right, larger and overlapped with the nearest in front, so the photo can no longer hide them.
+- Review: the photo fills the whole screen again, on black outside its own shape; the upcoming photos, buttons, count and progress float over it.
+- Review: a soft shade at the bottom keeps the controls readable over bright photos.
