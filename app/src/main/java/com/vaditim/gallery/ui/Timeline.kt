@@ -87,9 +87,15 @@ private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
 private data class TimelineLabel(val year: Int, val month: TimelineMark?)
 
 // Every year, and right after the held one its months; all of them the same distance apart.
-private fun labelsOf(years: List<Int>, monthsByYear: Map<Int, List<TimelineMark>>, heldYear: Int?): List<TimelineLabel> =
+// At rest the year being shown carries just the month being shown beneath it.
+private fun labelsOf(years: List<Int>, monthsByYear: Map<Int, List<TimelineMark>>, heldYear: Int?, restMark: TimelineMark? = null): List<TimelineLabel> =
     years.flatMap { year ->
-        listOf(TimelineLabel(year, null)) + if (year == heldYear) monthsByYear[year].orEmpty().map { TimelineLabel(year, it) } else emptyList()
+        val months = when {
+            year == heldYear -> monthsByYear[year].orEmpty()
+            heldYear == null && year == restMark?.month?.year -> listOf(restMark)
+            else -> emptyList()
+        }
+        listOf(TimelineLabel(year, null)) + months.map { TimelineLabel(year, it) }
     }
 
 // Half the screen tall and centred, oldest at the top like the grid: the years at rest, evenly apart. Held, the year under the finger opens into its months and everything respaces evenly; the grid follows the finger month by month.
@@ -125,7 +131,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             marks.lastOrNull { it.index <= middle } ?: marks.first()
         }
     }
-    val labels = labelsOf(years, monthsByYear, heldYear)
+    val labels = labelsOf(years, monthsByYear, heldYear, viewMark)
 
     BoxWithConstraints(modifier.fillMaxHeight()) {
         val height = constraints.maxHeight.toFloat()
@@ -144,19 +150,19 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             key(label) {
                 val y by animateFloatAsState(yOf(label, labels), tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline-label")
                 val isMonth = label.month != null
-                val isCurrent = isHeld && if (isMonth) label.month == heldMark else heldYear == label.year
+                val isCurrent = if (isHeld) (if (isMonth) label.month == heldMark else heldYear == label.year) else !isMonth && label.year == viewMark.month.year
                 BasicText(
                     if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString(),
                     style = Type.value.copy(
                         fontSize = if (isMonth) 10.sp else 11.sp,
-                        color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
+                        color = if (isCurrent) accent else if (isMonth && isHeld) Palette.textMuted else Palette.textBright,
                     ),
                     maxLines = 1,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .offset { IntOffset(0, (y - labelHalf).roundToInt()) }
                         .padding(end = STRIP_WIDTH - 4.dp)
-                        .graphicsLayer { alpha = if (isMonth) reveal else 1f }
+                        .graphicsLayer { alpha = if (isMonth && isHeld) reveal else 1f }
                         .clip(Shapes.capsule)
                         .background(Palette.panel)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -165,7 +171,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         }
 
         // Where the grid is now: on its year at rest, on the finger while held.
-        val restY = labels.indexOfFirst { it.year == viewMark.month.year && it.month == null }.let { top + slotY(it.coerceAtLeast(0), labels.size) }
+        val restY = labels.indexOfFirst { it.month == viewMark }.let { top + slotY(it.coerceAtLeast(0), labels.size) }
         val markerY by animateFloatAsState(fingerY ?: restY, tween(Motion.PRESS_MS), label = "timeline-marker")
         Box(
             Modifier

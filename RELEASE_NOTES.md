@@ -1,2 +1,1 @@
-- The timeline's labels sit close together, centred on the right edge; they only squeeze closer when there are too many to fit in half the screen.
-- Sliding to a month lands on that month's first photo, at the top of the grid.
+- At rest the timeline colours the year you are looking at and shows the month you are in right beneath it; both follow as you scroll.
