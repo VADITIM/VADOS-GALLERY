@@ -65,6 +65,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -214,6 +215,8 @@ private fun Library(viewModel: GalleryViewModel) {
     var sheetStack by remember { mutableStateOf<String?>(null) }
     var isMenuDeleteArmed by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerTarget?>(null) }
+    // The folder being reviewed one photo at a time, if any.
+    var review by remember { mutableStateOf<ViewerSource?>(null) }
     LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU) isMenuDeleteArmed = false }
 
     val recentMemory = remember { GridMemory() }
@@ -307,10 +310,11 @@ private fun Library(viewModel: GalleryViewModel) {
         if (!isPrivateUnlocked) {
             if (albumsPlace.isPrivate) albumsPlace = AlbumsPlace.Folders
             if (viewer?.source.isPrivateSource()) viewer = null
+            if (review.isPrivateSource()) review = null
         }
     }
     // Private stays out of screenshots and the recent-apps preview while it is on screen.
-    val isShowingPrivate = isInPrivate || viewer?.source.isPrivateSource()
+    val isShowingPrivate = isInPrivate || viewer?.source.isPrivateSource() || review.isPrivateSource()
     DisposableEffect(isShowingPrivate) {
         val window = (context as? Activity)?.window
         if (isShowingPrivate) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -542,6 +546,13 @@ private fun Library(viewModel: GalleryViewModel) {
                 },
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
+                onReview = when {
+                    openAlbum != null -> { { review = ViewerSource.InAlbum(openAlbum.id) } }
+                    openPrivateGroup != null -> { { review = ViewerSource.InPrivateGroup(openPrivateGroup.name) } }
+                    place is AlbumsPlace.PrivateFavorites -> { { review = ViewerSource.PrivateFavorites } }
+                    openLocation != null -> { { review = ViewerSource.InLocation(openLocation.key) } }
+                    else -> null
+                },
                 onAdd = when {
                     openAlbum != null -> { { picker = PickerTarget.IntoAlbum(openAlbum.relativePath, openAlbum.name) } }
                     openPrivateGroup != null -> { { picker = PickerTarget.IntoGroup(openPrivateGroup.name) } }
@@ -998,6 +1009,17 @@ private fun Library(viewModel: GalleryViewModel) {
                 )
             }
 
+            review?.let { source ->
+                key(source) {
+                    ReviewScreen(
+                        items = itemsFor(source),
+                        isPrivate = source.isPrivateSource(),
+                        onDelete = { picked -> if (source.isPrivateSource()) actions.deletePrivate(picked) else actions.trash(picked) },
+                        onClose = { review = null },
+                    )
+                }
+            }
+
             // The viewer grows out of the tile it was opened from and shrinks back into the tile of the photo it ends on; when that tile is not on screen it falls back to a quiet fade.
             shownViewer?.let { request ->
                 // Frame by frame the photo's own box (fitted to the screen, no black around it) is cropped down to the tile's square and moved onto it, so the animation shows what the grid shows. The chrome around the photo returns in the last stretch.
@@ -1077,7 +1099,7 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 // The top layer: the month you are looking at, the way back out of a folder, or — while selecting — the count and the way out of the selection.
 // Everything right of the back button has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
+private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onBack: () -> Unit, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val click = { haptic.performHapticFeedback(HapticFeedbackType.ContextClick) }
     Row(
@@ -1099,6 +1121,11 @@ private fun TopRow(backLabel: String?, month: String, selectedCount: Int, onAdd:
             }
             Box(Modifier.weight(if (backLabel != null) 0.001f else 1f))
             if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
+            if (onReview != null) {
+                Box(Modifier.pressable(onClick = { click(); onReview() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    ReviewIcon(LocalAccent.current)
+                }
+            }
             if (onAdd != null) {
                 Box(Modifier.pressable(onClick = { click(); onAdd() }).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
                     PlusIcon(LocalAccent.current)

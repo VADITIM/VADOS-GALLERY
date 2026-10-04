@@ -1,1 +1,3 @@
-- Videos: ••• → Save frame saves the frame on screen as a full-size photo beside the video, dated at that moment so it sorts next to it.
+- Review mode: a new button at the top of every album, private group, Private Favorites and location goes through its photos one at a time, newest first.
+- Swipe left to let a photo go, right to keep it (or use the buttons below); the middle button takes back the last swipe.
+- Nothing is deleted until the end: one last step moves the ones you let go to the trash (deletes them for good inside Private), or closes without touching anything.

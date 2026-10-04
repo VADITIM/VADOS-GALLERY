@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -315,6 +316,16 @@ fun MotionIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, 
     repeat(12) { step ->
         val angle = step * Math.PI / 6
         drawCircle(color, 0.9f * unit, Offset((12f + 9.2f * kotlin.math.cos(angle).toFloat()) * unit, (12f + 9.2f * kotlin.math.sin(angle).toFloat()) * unit))
+    }
+}
+
+// Review: a card on top of another, leaning off it.
+@Composable
+fun ReviewIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawRoundRect(color, Offset(4f * unit, 6f * unit), Size(11f * unit, 14f * unit), CornerRadius(2f * unit), style = stroke)
+    rotate(14f, Offset(14f * unit, 12f * unit)) {
+        drawRoundRect(Color.Black, Offset(9f * unit, 4f * unit), Size(11f * unit, 14f * unit), CornerRadius(2f * unit))
+        drawRoundRect(color, Offset(9f * unit, 4f * unit), Size(11f * unit, 14f * unit), CornerRadius(2f * unit), style = stroke)
     }
 }
 
