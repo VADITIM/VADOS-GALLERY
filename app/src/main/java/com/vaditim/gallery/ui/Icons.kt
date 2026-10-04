@@ -216,6 +216,14 @@ fun RestoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit,
 }
 
 @Composable
+fun CropIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(Path().apply {
+        moveTo(7f * unit, 3.5f * unit); lineTo(7f * unit, 17f * unit); lineTo(20.5f * unit, 17f * unit)
+        moveTo(3.5f * unit, 7f * unit); lineTo(17f * unit, 7f * unit); lineTo(17f * unit, 20.5f * unit)
+    }, color, style = stroke)
+}
+
+@Composable
 fun PlusIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
     drawPath(path(unit) { u -> moveTo(12f * u, 5f * u); lineTo(12f * u, 19f * u); moveTo(5f * u, 12f * u); lineTo(19f * u, 12f * u) }, color, style = stroke)
 }

@@ -13,8 +13,8 @@ android {
         // Android 11 is the floor because favourites and the trash live in MediaStore columns (IS_FAVORITE, IS_TRASHED) that only exist from API 30.
         minSdk = 30
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.36"
+        versionCode = 37
+        versionName = "0.37"
     }
 
     // One debug key committed to the repository, so every CI build installs over the last one with `adb install -r` instead of failing on a changed signature.
@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
 }
 
 kotlin {

@@ -1,0 +1,4 @@
+- Crop photos: drag the corners, edges or the whole frame; free or locked to Original, 1:1, 4:5, 4:3, 16:9, 9:16. Opened from More in the viewer.
+- Crop and trim videos: the same frame, plus a strip of frames below to set where the video starts and ends; the kept part plays on a loop.
+- Edits are saved as a copy beside the original (`_crop` / `_edit`), keeping its date and location. Works in Private too.
+- Releases now carry a changelog instead of the commit id.

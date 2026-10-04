@@ -1,5 +1,10 @@
 package com.vaditim.gallery.ui
 
+import com.vaditim.gallery.media.MediaEditor
+import kotlinx.coroutines.Job
+import android.media.MediaScannerConnection
+import android.graphics.RectF
+import android.content.ContentValues
 import com.vaditim.gallery.Settings
 import android.app.Activity
 import android.app.PendingIntent
@@ -40,6 +45,8 @@ class MediaActions(
     private val scope: CoroutineScope,
     private val startRequest: (PendingIntent, (Boolean) -> Unit) -> Unit,
 ) {
+    private val editor = MediaEditor(context)
+
     fun share(items: List<MediaItem>) {
         if (items.isEmpty()) return
         val uris = ArrayList(items.map { shareableUri(it) })
@@ -62,6 +69,24 @@ class MediaActions(
         } catch (exception: ActivityNotFoundException) {
             notify("No editor installed")
         }
+    }
+
+    // A crop or trim saved as a copy beside the original. The returned job is cancelled when the editor is left mid-save.
+    fun crop(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit, onFinished: (Boolean) -> Unit): Job = scope.launch {
+        val result = runCatching { if (item.isVideo) editor.editVideo(item, crop, startMs, endMs, onProgress) else editor.cropImage(item, crop) }
+        result.onSuccess { file ->
+            if (isPrivate(item)) {
+                onPrivateChanged()
+            } else {
+                // The scan files it in MediaStore; the date taken is set after, so the copy sorts beside its original even when the file carries no date of its own.
+                MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { _, uri ->
+                    if (uri != null) runCatching { context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.DATE_TAKEN, item.timestampMillis) }, null, null) }
+                }
+            }
+            notify("Saved as a copy")
+        }
+        result.exceptionOrNull()?.let { if (it !is kotlinx.coroutines.CancellationException) notify("Could not save: ${it.message.orEmpty().take(80)}") }
+        onFinished(result.isSuccess)
     }
 
     fun toggleFavorite(item: MediaItem) {

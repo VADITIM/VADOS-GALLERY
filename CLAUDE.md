@@ -24,3 +24,4 @@ Work directly on `master`: commit and push there, no feature branches. Every pus
 the APK as the release `v<versionName>`.
 
 Every change raises `versionName` in `app/build.gradle.kts` (and `versionCode`): 0.1, 0.2, and so on. The release tag comes from it.
+Every change also rewrites `RELEASE_NOTES.md`: a short changelog of that version, a few plain bullets of what changed for the user. It is the release's text.

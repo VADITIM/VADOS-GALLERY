@@ -122,6 +122,7 @@ fun ViewerScreen(
     var isDeleteArmed by remember { mutableStateOf(false) }
     // The group a photo is about to go into, held while the confirmation is open.
     var pendingGroup by remember { mutableStateOf<String?>(null) }
+    var cropping by remember { mutableStateOf<MediaItem?>(null) }
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
     LaunchedEffect(current.id) {
@@ -223,6 +224,11 @@ fun ViewerScreen(
                     SheetRow("Move to private", icon = { LockIcon(it) }) { overlay = Overlay.HIDE }
                     SheetRow("Edit", icon = { SlidersIcon(it) }) { overlay = Overlay.NONE; actions.edit(current) }
                 }
+                SheetRow("Crop", icon = { CropIcon(it) }) {
+                    overlay = Overlay.NONE
+                    video?.player?.pause()
+                    cropping = current
+                }
                 SheetRow("Details", icon = { InfoIcon(it) }) { overlay = Overlay.DETAILS }
             }
 
@@ -315,6 +321,8 @@ fun ViewerScreen(
                     BasicText(if (isPrivate) "Private · ${current.bucketName}" else current.relativePath, style = Type.value)
                 }
             }
+
+            cropping?.let { CropScreen(it, actions, onClose = { cropping = null }) }
         }
     }
 }

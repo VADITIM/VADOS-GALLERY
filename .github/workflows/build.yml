@@ -40,7 +40,7 @@ jobs:
           name: vados-gallery
           path: out/
 
-      # One release per version, tagged v<versionName>. Bump versionName in app/build.gradle.kts with every change; a push that keeps the version replaces that release.
+      # One release per version, tagged v<versionName>, its text the short changelog in RELEASE_NOTES.md. Bump versionName in app/build.gradle.kts with every change; a push that keeps the version replaces that release.
       - name: Publish release
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         env:
@@ -50,4 +50,4 @@ jobs:
           gh release create "v$VERSION" "out/vados-gallery-v$VERSION.apk" \
             --target "$GITHUB_SHA" \
             --title "v$VERSION" \
-            --notes "Built from $GITHUB_SHA. Install vados-gallery-v$VERSION.apk."
+            --notes-file RELEASE_NOTES.md
