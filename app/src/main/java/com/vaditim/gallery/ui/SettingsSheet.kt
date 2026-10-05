@@ -39,6 +39,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.PhotoLayout
+import com.vaditim.gallery.SettingsView
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
@@ -51,7 +52,8 @@ private enum class SettingsTab(val label: String) { GENERAL("GENERAL"), INTERFAC
 @Composable
 fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
     var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss) {
+    // Named at the right with the view it changes, since each view keeps its own grid and album settings.
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, trailingLabel = Settings.view.label.uppercase()) {
         SettingsTabs(tab, onSelect = { tab = it })
         AnimatedContent(
             targetState = tab,
@@ -76,10 +78,10 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
                         }
                         SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
                         SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
-                        SettingsHeader("Albums")
-                        SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
-                        // Grouped albums lie as rows, so the column count only exists with grouping off.
-                        if (!Settings.groupedAlbums) {
+                        if (Settings.view.hasCovers) SettingsHeader("Albums")
+                        // Only Albums groups its folders; grouped albums lie as rows, so the column count only exists with grouping off.
+                        if (Settings.view == SettingsView.ALBUMS) SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
+                        if (Settings.view.hasCovers && !Settings.groupedAlbums) {
                             SheetRow("Album columns", trailing = Settings.albumColumns.toString()) {
                                 Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
                             }

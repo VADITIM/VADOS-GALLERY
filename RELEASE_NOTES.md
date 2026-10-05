@@ -1,5 +1,6 @@
-# 0.87
+# 0.88
 
-- Inside Private, the bottom bar now works for Private: Recent shows every private photo, Favorites shows private favourites (as one grid or grouped, remembered separately from normal Favorites), and Albums shows the private groups.
+- Inside Private, the bottom bar works for Private: Recent shows every private photo, Favorites shows private favourites (as one grid or grouped), and Albums shows the private groups.
 - The Favorites folder inside Private is gone; use the Favorites button instead.
-- Back from Private's Recent or Favorites goes to its groups; back from there leaves Private.
+- Each view (Recent, Albums, Favorites, Locations, Trash, Private) now keeps its own settings: columns, layout, month headers, stacked shots and album layout.
+- The settings sheet shows which view you're changing on the right of its title.

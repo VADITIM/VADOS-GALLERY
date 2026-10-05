@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -29,30 +29,40 @@ object Settings {
         private set
     var glassOpacity by mutableFloatStateOf(DEFAULT_OPACITY)
         private set
-    var defaultColumns by mutableIntStateOf(DEFAULT_COLUMNS)
-        private set
-    var showMonthHeaders by mutableStateOf(true)
-        private set
-    var photoLayout by mutableStateOf(PhotoLayout.MONTHS)
-        private set
+    // The view on screen, whose own settings the sheet shows and changes; every view keeps its grid and album settings apart.
+    var view by mutableStateOf(SettingsView.RECENT)
+    private val columnsByView = mutableStateMapOf<SettingsView, Int>()
+    private val monthHeadersByView = mutableStateMapOf<SettingsView, Boolean>()
+    private val photoLayoutByView = mutableStateMapOf<SettingsView, PhotoLayout>()
+    private val stackSimilarByView = mutableStateMapOf<SettingsView, Boolean>()
+    private val groupedAlbumsByView = mutableStateMapOf<SettingsView, Boolean>()
+    private val albumColumnsByView = mutableStateMapOf<SettingsView, Int>()
+
+    fun columnsIn(view: SettingsView): Int = columnsByView[view] ?: DEFAULT_COLUMNS
+    fun monthHeadersIn(view: SettingsView): Boolean = monthHeadersByView[view] ?: true
+    fun photoLayoutIn(view: SettingsView): PhotoLayout = photoLayoutByView[view] ?: PhotoLayout.MONTHS
+    fun stackSimilarIn(view: SettingsView): Boolean = stackSimilarByView[view] ?: true
+    fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbumsByView[view] ?: false
+    fun albumColumnsIn(view: SettingsView): Int = albumColumnsByView[view] ?: DEFAULT_ALBUM_COLUMNS
+
+    val defaultColumns: Int get() = columnsIn(view)
+    val showMonthHeaders: Boolean get() = monthHeadersIn(view)
+    val photoLayout: PhotoLayout get() = photoLayoutIn(view)
     var autoplayVideos by mutableStateOf(true)
         private set
-    var albumColumns by mutableIntStateOf(DEFAULT_ALBUM_COLUMNS)
-        private set
+    val albumColumns: Int get() = albumColumnsIn(view)
     // Albums in the order the user arranged them, by folder path; albums not in it keep the default order after these.
     var albumOrder by mutableStateOf<List<String>>(emptyList())
         private set
     // The same for private groups, by name.
     var groupOrder by mutableStateOf<List<String>>(emptyList())
         private set
-    var groupedAlbums by mutableStateOf(false)
-        private set
+    val groupedAlbums: Boolean get() = groupedAlbumsIn(view)
     // The album groups in their order, each holding its albums by folder path; kept while grouping is off, so turning it back on restores them.
     var albumStacks by mutableStateOf<List<AlbumStack>>(emptyList())
         private set
 
-    var stackSimilar by mutableStateOf(true)
-        private set
+    val stackSimilar: Boolean get() = stackSimilarIn(view)
 
     var groundBrightness by mutableFloatStateOf(DEFAULT_GROUND_BRIGHTNESS)
         private set
@@ -80,15 +90,19 @@ object Settings {
         preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         blurDp = preferences.getFloat("blur", DEFAULT_BLUR_DP)
         glassOpacity = preferences.getFloat("opacity", DEFAULT_OPACITY)
-        defaultColumns = preferences.getInt("columns", DEFAULT_COLUMNS)
-        showMonthHeaders = preferences.getBoolean("monthHeaders", true)
-        photoLayout = PhotoLayout.entries.firstOrNull { it.name == preferences.getString("photoLayout", null) } ?: PhotoLayout.MONTHS
+        // Each view starts from what the single setting was before views kept their own.
+        for (each in SettingsView.entries) {
+            columnsByView[each] = preferences.getInt("columns.${each.name}", preferences.getInt("columns", DEFAULT_COLUMNS))
+            monthHeadersByView[each] = preferences.getBoolean("monthHeaders.${each.name}", preferences.getBoolean("monthHeaders", true))
+            val layoutName = preferences.getString("photoLayout.${each.name}", null) ?: preferences.getString("photoLayout", null)
+            photoLayoutByView[each] = PhotoLayout.entries.firstOrNull { it.name == layoutName } ?: PhotoLayout.MONTHS
+            stackSimilarByView[each] = preferences.getBoolean("stackSimilar.${each.name}", preferences.getBoolean("stackSimilar", true))
+            groupedAlbumsByView[each] = preferences.getBoolean("groupedAlbums.${each.name}", preferences.getBoolean("groupedAlbums", false))
+            albumColumnsByView[each] = preferences.getInt("albumColumns.${each.name}", preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS))
+        }
         autoplayVideos = preferences.getBoolean("autoplay", true)
-        albumColumns = preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
-        groupedAlbums = preferences.getBoolean("groupedAlbums", false)
-        stackSimilar = preferences.getBoolean("stackSimilar", true)
         hiddenFromRecent = preferences.getString("hiddenFromRecent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty().toSet()
         albumNames = preferences.getString("albumNames", null)?.split('\n')?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.orEmpty().toMap()
         groundBrightness = preferences.getFloat("groundBrightness", DEFAULT_GROUND_BRIGHTNESS)
@@ -159,23 +173,23 @@ object Settings {
     }
 
     fun updateDefaultColumns(value: Int) {
-        defaultColumns = value.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
-        preferences.edit().putInt("columns", defaultColumns).apply()
+        columnsByView[view] = value.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
+        preferences.edit().putInt("columns.${view.name}", defaultColumns).apply()
     }
 
     fun updateShowMonthHeaders(value: Boolean) {
-        showMonthHeaders = value
-        preferences.edit().putBoolean("monthHeaders", value).apply()
+        monthHeadersByView[view] = value
+        preferences.edit().putBoolean("monthHeaders.${view.name}", value).apply()
     }
 
     fun updatePhotoLayout(value: PhotoLayout) {
-        photoLayout = value
-        preferences.edit().putString("photoLayout", value.name).apply()
+        photoLayoutByView[view] = value
+        preferences.edit().putString("photoLayout.${view.name}", value.name).apply()
     }
 
     fun updateAlbumColumns(value: Int) {
-        albumColumns = value.coerceIn(MIN_COLUMNS, MAX_ALBUM_COLUMNS)
-        preferences.edit().putInt("albumColumns", albumColumns).apply()
+        albumColumnsByView[view] = value.coerceIn(MIN_COLUMNS, MAX_ALBUM_COLUMNS)
+        preferences.edit().putInt("albumColumns.${view.name}", albumColumns).apply()
     }
 
     fun updateGroupOrder(names: List<String>) {
@@ -194,13 +208,13 @@ object Settings {
     }
 
     fun updateStackSimilar(value: Boolean) {
-        stackSimilar = value
-        preferences.edit().putBoolean("stackSimilar", value).apply()
+        stackSimilarByView[view] = value
+        preferences.edit().putBoolean("stackSimilar.${view.name}", value).apply()
     }
 
     fun updateGroupedAlbums(value: Boolean) {
-        groupedAlbums = value
-        preferences.edit().putBoolean("groupedAlbums", value).apply()
+        groupedAlbumsByView[view] = value
+        preferences.edit().putBoolean("groupedAlbums.${view.name}", value).apply()
     }
 
     fun updateAlbumStacks(stacks: List<AlbumStack>) {
@@ -219,6 +233,14 @@ object Settings {
         autoplayVideos = value
         preferences.edit().putBoolean("autoplay", value).apply()
     }
+}
+
+// The views that keep settings of their own, named as the settings sheet shows which one it is changing.
+enum class SettingsView(val label: String) {
+    RECENT("Recent"), ALBUMS("Albums"), FAVORITES("Favorites"), LOCATIONS("Locations"), TRASH("Trash"), PRIVATE("Private");
+
+    // Whether the view shows covers, so the album settings mean something there.
+    val hasCovers: Boolean get() = this != RECENT && this != TRASH
 }
 
 data class FavoriteAlbum(val name: String, val ids: List<Long>)

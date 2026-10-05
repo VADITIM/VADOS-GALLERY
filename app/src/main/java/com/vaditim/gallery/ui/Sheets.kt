@@ -53,7 +53,7 @@ import com.vaditim.gallery.vault.PrivateGroup
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, content: @Composable () -> Unit) {
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
@@ -90,7 +90,11 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                     .padding(top = 18.dp, bottom = 10.dp),
             ) {
-                MicroLabel(label, Modifier.padding(start = 20.dp, bottom = 6.dp))
+                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    MicroLabel(label)
+                    // What the sheet is about, at the other end of its label, in the section colour.
+                    if (trailingLabel != null) BasicText(trailingLabel.uppercase(), style = Type.microLabel.copy(color = LocalAccent.current))
+                }
                 content()
             }
         }

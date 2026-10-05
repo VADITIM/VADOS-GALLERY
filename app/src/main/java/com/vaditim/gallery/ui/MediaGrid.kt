@@ -2,6 +2,7 @@ package com.vaditim.gallery.ui
 
 import androidx.compose.runtime.mutableStateOf
 import com.vaditim.gallery.Settings
+import com.vaditim.gallery.SettingsView
 import com.vaditim.gallery.PhotoLayout
 import java.time.LocalDate
 import androidx.compose.ui.unit.sp
@@ -90,16 +91,16 @@ private val GAP = 3.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yy", Locale.ENGLISH)
 
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
-class GridMemory(private val isStacking: Boolean = true) {
+class GridMemory(val view: SettingsView = Settings.view, private val isStacking: Boolean = true) {
     val state = LazyGridState()
     var isPositioned = false
     var knownCount = 0
-    var columns by mutableIntStateOf(Settings.defaultColumns)
+    var columns by mutableIntStateOf(Settings.columnsIn(view))
     // Stacks of similar shots opened out in this grid, by the id of their cover.
     var openStacks by mutableStateOf<Set<Long>>(emptySet())
 
     // Every reader of this grid's entries builds them the same way, so an entry index means the same tile everywhere.
-    fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilar)
+    fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilarIn(view), view)
 }
 
 // A grid is photos with a month header in front of each month's first photo, and in the week layout a week header in front of each week's. `index` is the photo's place in the original list, which is what the viewer opens at.
@@ -112,9 +113,9 @@ sealed interface GridEntry {
     }
 }
 
-fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false): List<GridEntry> {
+fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false, view: SettingsView = Settings.view): List<GridEntry> {
     val entries = ArrayList<GridEntry>(items.size + 24)
-    val isWeeks = Settings.photoLayout == PhotoLayout.WEEKS
+    val isWeeks = Settings.photoLayoutIn(view) == PhotoLayout.WEEKS
     var currentMonth: YearMonth? = null
     var currentDay: LocalDate? = null
     // The open week's header is put in when its first photo comes and labelled once its last day is known.
@@ -138,7 +139,7 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
         val month = YearMonth.from(day)
         if (month != currentMonth) {
             closeWeek()
-            if (Settings.showMonthHeaders) entries += GridEntry.Header(MONTH_FORMAT.format(month), "month-$month")
+            if (Settings.monthHeadersIn(view)) entries += GridEntry.Header(MONTH_FORMAT.format(month), "month-$month")
             currentMonth = month
         }
         if (isWeeks) {
@@ -171,7 +172,7 @@ fun MediaGrid(
     badge: ((MediaItem) -> String?)? = null,
 ) {
     val state = memory.state
-    val entries = remember(items, Settings.showMonthHeaders, Settings.photoLayout, Settings.stackSimilar, SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
+    val entries = remember(items, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -229,7 +230,7 @@ fun MediaGrid(
             contentType = { entry -> if (entry is GridEntry.Header) "header" else "tile" },
         ) { entry ->
             when (entry) {
-                is GridEntry.Header -> if (entry.isWeek) WeekHeader(entry.label) else MonthHeader(entry.label, isRoomy = Settings.photoLayout == PhotoLayout.WEEKS)
+                is GridEntry.Header -> if (entry.isWeek) WeekHeader(entry.label) else MonthHeader(entry.label, isRoomy = Settings.photoLayoutIn(memory.view) == PhotoLayout.WEEKS)
                 is GridEntry.Photo -> {
                     val item = entry.item
                     Tile(
@@ -389,7 +390,7 @@ private fun Modifier.dragSelect(
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<String> {
-    val entries = remember(items, Settings.showMonthHeaders, Settings.photoLayout, Settings.stackSimilar, SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
+    val entries = remember(items, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     return remember(entries, memory) {
         derivedStateOf {
             // A header at the top belongs to the photos under it.

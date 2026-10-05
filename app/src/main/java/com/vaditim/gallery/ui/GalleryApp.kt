@@ -9,6 +9,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.vaditim.gallery.AlbumStack
 import com.vaditim.gallery.Settings
+import androidx.compose.runtime.SideEffect
+import com.vaditim.gallery.SettingsView
 import com.vaditim.gallery.renamedAlbum
 import com.vaditim.gallery.withPhotos
 import com.vaditim.gallery.renamed
@@ -254,10 +256,10 @@ private fun Library(viewModel: GalleryViewModel) {
     val favoriteAlbumsListState = rememberLazyGridState()
     val favoriteAlbumMemories = remember { mutableMapOf<String, GridMemory>() }
 
-    val recentMemory = remember { GridMemory() }
-    val favoritesMemory = remember { GridMemory() }
-    val privateFavoritesMemory = remember { GridMemory() }
-    val privateRecentMemory = remember { GridMemory() }
+    val recentMemory = remember { GridMemory(SettingsView.RECENT) }
+    val favoritesMemory = remember { GridMemory(SettingsView.FAVORITES) }
+    val privateFavoritesMemory = remember { GridMemory(SettingsView.PRIVATE) }
+    val privateRecentMemory = remember { GridMemory(SettingsView.PRIVATE) }
     val privateFavoriteGroupMemories = remember { mutableMapOf<String, GridMemory>() }
     val privateFavoriteGroupsListState = rememberLazyGridState()
     // Inside Private the bar's sections show Private's own photos: Recent all of them, Favorites its favourites, Albums its groups. Entered from Albums, left by backing out of the groups or by locking.
@@ -265,7 +267,7 @@ private fun Library(viewModel: GalleryViewModel) {
     // The private group opened from Private's Favorites, as a grid of only its favourites.
     var openPrivateFavoriteGroup by remember { mutableStateOf<String?>(null) }
     // The trash keeps every shot on its own, since each one there is about to go.
-    val trashMemory = remember { GridMemory(isStacking = false) }
+    val trashMemory = remember { GridMemory(SettingsView.TRASH, isStacking = false) }
     // Photos about to go into Private, held while the confirmation is open.
     var pendingPrivate by remember { mutableStateOf<PendingPrivate?>(null) }
     var isRearranging by remember { mutableStateOf(false) }
@@ -322,6 +324,16 @@ private fun Library(viewModel: GalleryViewModel) {
     val openAlbum = (place as? AlbumsPlace.Folder)?.let { folder -> albums.firstOrNull { it.id == folder.albumId } }
     val openPrivateGroup = (place as? AlbumsPlace.PrivateFolder)?.let { folder -> privateContents.groups.firstOrNull { it.name == folder.name } }
     val isInPrivate = isPrivateMode
+    // The view whose own settings apply and which the settings sheet names.
+    val settingsView = when {
+        isPrivateMode -> SettingsView.PRIVATE
+        section == Section.RECENT -> SettingsView.RECENT
+        section == Section.FAVORITES -> SettingsView.FAVORITES
+        place == AlbumsPlace.Locations || place is AlbumsPlace.Location -> SettingsView.LOCATIONS
+        place == AlbumsPlace.Trash -> SettingsView.TRASH
+        else -> SettingsView.ALBUMS
+    }
+    SideEffect { Settings.view = settingsView }
     // Every private photo, oldest first like the library, and the favourites gathered by the group they are in.
     val privateRecent = remember(privateContents) { privateContents.groups.flatMap { it.items }.sortedWith(compareBy<MediaItem> { it.timestampMillis }.thenBy { it.id }) }
     val privateFavoriteGroups = remember(privateContents, arrangedGroups) {
@@ -453,17 +465,17 @@ private fun Library(viewModel: GalleryViewModel) {
     val folderMemory = when {
         isPrivateMode && section == Section.RECENT -> privateRecentMemory
         isPrivateMode && section == Section.FAVORITES -> when {
-            openPrivateFavorite != null -> privateFavoriteGroupMemories.getOrPut(openPrivateFavorite.name) { GridMemory() }
+            openPrivateFavorite != null -> privateFavoriteGroupMemories.getOrPut(openPrivateFavorite.name) { GridMemory(SettingsView.PRIVATE) }
             isPrivateFavoritesGrouped -> null
             else -> privateFavoritesMemory
         }
-        openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory() }
-        openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory() }
-        openLocation != null -> locationMemories.getOrPut(openLocation.key) { GridMemory() }
+        openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory(SettingsView.ALBUMS) }
+        openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory(SettingsView.PRIVATE) }
+        openLocation != null -> locationMemories.getOrPut(openLocation.key) { GridMemory(SettingsView.LOCATIONS) }
         place is AlbumsPlace.Trash -> trashMemory
         section == Section.RECENT -> recentMemory
         section == Section.FAVORITES -> when {
-            openFavorite != null -> favoriteAlbumMemories.getOrPut(openFavorite.name) { GridMemory() }
+            openFavorite != null -> favoriteAlbumMemories.getOrPut(openFavorite.name) { GridMemory(SettingsView.FAVORITES) }
             favoritesView == FavoritesView.All -> favoritesMemory
             else -> null
         }
@@ -563,7 +575,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             else -> privateFavoriteGroups.firstOrNull { it.name == shownView }?.let { group ->
                                 MediaGrid(
                                     items = group.items,
-                                    memory = privateFavoriteGroupMemories.getOrPut(group.name) { GridMemory() },
+                                    memory = privateFavoriteGroupMemories.getOrPut(group.name) { GridMemory(SettingsView.PRIVATE) },
                                     onOpen = { viewer = ViewerRequest(ViewerSource.InPrivateFavoriteGroup(group.name), it) },
                                     contentPadding = insetPadding,
                                     selection = selection,
@@ -622,7 +634,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         is AlbumsPlace.Folder -> albums.firstOrNull { it.id == shownPlace.albumId }?.let { album ->
                             AlbumScreen(
                                 album = album,
-                                memory = albumMemories.getOrPut(album.id) { GridMemory() },
+                                memory = albumMemories.getOrPut(album.id) { GridMemory(SettingsView.ALBUMS) },
                                 onOpen = { viewer = ViewerRequest(ViewerSource.InAlbum(album.id), it) },
                                 onBack = { albumsPlace = AlbumsPlace.Folders },
                                 contentPadding = insetPadding,
@@ -647,7 +659,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         is AlbumsPlace.Location -> locations.firstOrNull { it.key == shownPlace.key }?.let { group ->
                             LocationScreen(
                                 items = group.items,
-                                memory = locationMemories.getOrPut(group.key) { GridMemory() },
+                                memory = locationMemories.getOrPut(group.key) { GridMemory(SettingsView.LOCATIONS) },
                                 onOpen = { viewer = ViewerRequest(ViewerSource.InLocation(group.key), it) },
                                 onBack = { albumsPlace = AlbumsPlace.Locations },
                                 contentPadding = insetPadding,
@@ -680,7 +692,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         is AlbumsPlace.PrivateFolder -> privateContents.groups.firstOrNull { it.name == shownPlace.name }?.let { group ->
                             PrivateItemsScreen(
                                 items = group.items,
-                                memory = privateMemories.getOrPut(group.name) { GridMemory() },
+                                memory = privateMemories.getOrPut(group.name) { GridMemory(SettingsView.PRIVATE) },
                                 onOpen = { viewer = ViewerRequest(ViewerSource.InPrivateGroup(group.name), it) },
                                 onBack = { albumsPlace = AlbumsPlace.PrivateGroups },
                                 contentPadding = insetPadding,
@@ -734,7 +746,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         is FavoritesView.InAlbum -> favoriteAlbumViews.firstOrNull { it.name == shownView.name }?.let { album ->
                             AlbumScreen(
                                 album = album,
-                                memory = favoriteAlbumMemories.getOrPut(album.name) { GridMemory() },
+                                memory = favoriteAlbumMemories.getOrPut(album.name) { GridMemory(SettingsView.FAVORITES) },
                                 onOpen = { viewer = ViewerRequest(ViewerSource.InFavoriteAlbum(album.name), it) },
                                 onBack = { openFavoriteAlbum = null },
                                 contentPadding = insetPadding,
@@ -1105,8 +1117,11 @@ private fun Library(viewModel: GalleryViewModel) {
             SettingsSheet(
                 visible = sheet == AppSheet.SETTINGS,
                 onDismiss = { sheet = AppSheet.NONE },
+                // Only the grids of the view whose setting changed take the new count.
                 onColumnsChanged = { columns ->
-                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory, privateRecentMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values + privateFavoriteGroupMemories.values).forEach { it.columns = columns }
+                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory, privateRecentMemory, trashMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values + privateFavoriteGroupMemories.values + locationMemories.values)
+                        .filter { it.view == settingsView }
+                        .forEach { it.columns = columns }
                 },
             )
 
