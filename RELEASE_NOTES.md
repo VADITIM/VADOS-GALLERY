@@ -1,3 +1,3 @@
-# 0.75
+# 0.76
 
-- The timeline is drawn on the left edge only; the right edge still grabs it.
+- Fixed: the timeline sometimes stopped moving the photos after you had scrolled, until you left the view and came back.

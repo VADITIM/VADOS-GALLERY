@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -51,7 +52,11 @@ import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.glass
+import androidx.compose.foundation.MutatePriority
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.YearMonth
@@ -187,9 +192,16 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
     LaunchedEffect(state) {
         snapshotFlow { target.intValue }.collect { index ->
             if (index < 0) return@collect
-            state.scrollToItem(index)
-            // The month's first photo (or its header) belongs at the top, just under the header room, not merely somewhere on screen.
-            state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { if (it.offset.y != 0) state.scrollBy(it.offset.y.toFloat()) }
+            try {
+                // A fling still running holds the list at a higher priority and would refuse the jump, so it is stopped first.
+                state.stopScroll(MutatePriority.PreventUserInput)
+                state.scrollToItem(index)
+                // The month's first photo (or its header) belongs at the top, just under the header room, not merely somewhere on screen.
+                state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { if (it.offset.y != 0) state.scrollBy(it.offset.y.toFloat()) }
+            } catch (refused: CancellationException) {
+                // A jump refused by a scroll in progress only loses that jump; letting it through would end this collector, and the timeline would never move the grid again.
+                if (!currentCoroutineContext().isActive) throw refused
+            }
         }
     }
     // Where the grid stands on the strip, in steps, between the month at its top and the next: a scrollbar's reading, so the very end of the grid reaches the newest month.
