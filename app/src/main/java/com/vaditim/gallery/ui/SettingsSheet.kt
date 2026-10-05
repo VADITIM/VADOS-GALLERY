@@ -1,5 +1,22 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import com.vaditim.gallery.vas.MicroLabel
+import com.vaditim.gallery.vas.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -28,25 +45,90 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 
-// The settings, as a sheet. The glass settings sit first so their effect can be watched on the sheet itself while they are dragged.
+// The settings, as a sheet in two tabs: what the app does, and how it looks. The look tab keeps the glass settings, so their effect can be watched on the sheet itself while they are dragged.
+private enum class SettingsTab(val label: String) { GENERAL("GENERAL"), INTERFACE("INTERFACE") }
+
 @Composable
 fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
+    var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
     OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss) {
-        SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
-        SettingsSlider("Background", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
-        SheetRow("Columns", trailing = Settings.defaultColumns.toString()) {
-            val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
-            Settings.updateDefaultColumns(next)
-            onColumnsChanged(next)
+        SettingsTabs(tab, onSelect = { tab = it })
+        AnimatedContent(
+            targetState = tab,
+            transitionSpec = {
+                fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut))
+                    .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
+                    .using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS, easing = Motion.powerTwoOut) })
+            },
+            label = "settings-tab",
+        ) { shown ->
+            Column {
+                when (shown) {
+                    SettingsTab.GENERAL -> {
+                        SettingsHeader("Photos")
+                        SheetRow("Image columns", trailing = Settings.defaultColumns.toString()) {
+                            val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
+                            Settings.updateDefaultColumns(next)
+                            onColumnsChanged(next)
+                        }
+                        SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
+                        SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
+                        SettingsHeader("Albums")
+                        SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
+                        // Grouped albums lie as rows, so the column count only exists with grouping off.
+                        if (!Settings.groupedAlbums) {
+                            SheetRow("Album columns", trailing = Settings.albumColumns.toString()) {
+                                Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
+                            }
+                        }
+                        SettingsHeader("Videos")
+                        SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
+                    }
+                    SettingsTab.INTERFACE -> {
+                        SettingsHeader("Overlays")
+                        SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
+                        SettingsSlider("Opacity", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
+                        SettingsHeader("Background")
+                        SettingsSlider("Brightness", Settings.groundBrightness, "${(Settings.groundBrightness * 100).toInt()}%") { Settings.updateGroundBrightness(it) }
+                    }
+                }
+            }
         }
-        SheetRow("Album columns", trailing = Settings.albumColumns.toString()) {
-            Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
-        }
-        SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
-        SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
-        SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
-        SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
     }
+}
+
+// The two tabs as one capsule; the accent fill slides under the chosen one.
+@Composable
+private fun SettingsTabs(active: SettingsTab, onSelect: (SettingsTab) -> Unit) {
+    val accent = LocalAccent.current
+    val position by animateFloatAsState(active.ordinal.toFloat(), tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "settings-tabs")
+    Box(
+        Modifier
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .fillMaxWidth()
+            .clip(Shapes.capsule)
+            .background(Palette.sunkenDeep)
+            .drawBehind {
+                val width = size.width / SettingsTab.entries.size
+                drawRoundRect(accent, Offset(width * position, 0f), Size(width, size.height), CornerRadius(size.height / 2f))
+            },
+    ) {
+        Row(Modifier.fillMaxWidth()) {
+            SettingsTab.entries.forEach { tab ->
+                Box(
+                    Modifier.weight(1f).pressable(onClick = { onSelect(tab) }, pressedScale = 0.96f).padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BasicText(tab.label, style = Type.navigation.copy(color = if (tab == active) Palette.sunkenDeep else Palette.textMuted))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsHeader(text: String) {
+    MicroLabel(text, Modifier.padding(start = 20.dp, top = 18.dp, bottom = 2.dp))
 }
 
 @Composable

@@ -343,6 +343,19 @@ fun EyeIcon(color: Color, isCrossed: Boolean = false, size: Dp = 22.dp) = LineGl
     drawCircle(color, 3f * unit, Offset(12f * unit, 12f * unit), style = stroke)
 }
 
+// All photos at once: a grid of four.
+@Composable
+fun GridIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    listOf(4f, 13f).forEach { x -> listOf(4f, 13f).forEach { y -> drawRoundRect(color, Offset(x * unit, y * unit), Size(7f * unit, 7f * unit), CornerRadius(1.6f * unit), style = stroke) } }
+}
+
+// Albums: a cover with another lying behind it.
+@Composable
+fun AlbumsIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u -> moveTo(7.5f * u, 4f * u); lineTo(20f * u, 4f * u); lineTo(20f * u, 16.5f * u) }, color, style = stroke)
+    drawRoundRect(color, Offset(4f * unit, 7.5f * unit), Size(12.5f * unit, 12.5f * unit), CornerRadius(2f * unit), style = stroke)
+}
+
 @Composable
 fun GripIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, _ ->
     listOf(9f, 15f).forEach { x -> listOf(6f, 12f, 18f).forEach { y -> drawCircle(color, 1.6f * unit, Offset(x * unit, y * unit)) } }

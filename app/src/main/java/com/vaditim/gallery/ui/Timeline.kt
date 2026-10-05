@@ -32,6 +32,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
@@ -55,8 +60,10 @@ import kotlin.math.roundToInt
 private const val MIN_PHOTOS = 90
 // The timeline is always this share of the grid's height, centred on it.
 private const val TRACK_SHARE = 0.5f
-// The strip a finger takes hold of, along the right edge; narrow so tiles under it stay tappable.
+// The strip a finger takes hold of along the right edge, besides the labels themselves; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
+// Room around a label that still counts as taking hold of it.
+private val LABEL_GRAB_SLACK = 6.dp
 private val LABEL_HEIGHT = 18.dp
 private val THUMB_HEIGHT = 22.dp
 // Labels are never further apart than this; with few of them the timeline is shorter, centred where it always is.
@@ -98,12 +105,62 @@ private fun labelsOf(years: List<Int>, monthsByYear: Map<Int, List<TimelineMark>
         listOf(TimelineLabel(year, null)) + months.map { TimelineLabel(year, it) }
     }
 
+// The timeline's hold, worked from the box holding the grid: a sibling over the grid would block every tile under it, but the parent sees each touch first and takes only those on the strip or on a label.
+class TimelineGrab {
+    var timeline: LayoutCoordinates? = null
+    var holder: LayoutCoordinates? = null
+    val labels = HashMap<Any, LayoutCoordinates>()
+    var begin: () -> Unit = {}
+    // Finger height within the timeline's track.
+    var follow: (Float) -> Unit = {}
+    var release: () -> Unit = {}
+    var isActive = false
+    var stripWidth = 0f
+    var labelSlack = 0f
+    var trackTop = 0f
+    var trackHeight = 0f
+
+    fun takes(root: Offset): Boolean {
+        val timeline = timeline?.takeIf { isActive && it.isAttached } ?: return false
+        val local = timeline.rootToLocal(root)
+        val isOnStrip = local.x >= timeline.size.width - stripWidth && local.y >= trackTop && local.y <= trackTop + trackHeight
+        return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
+    }
+
+    fun trackY(root: Offset): Float = (timeline?.rootToLocal(root)?.y ?: 0f) - trackTop
+}
+
+fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
+    onGloballyPositioned { grab.holder = it }.pointerInput(grab) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val coordinates = grab.holder ?: return@awaitEachGesture
+            if (!grab.takes(coordinates.localToRoot(down.position))) return@awaitEachGesture
+            // Taken before the grid sees it, so the held finger neither scrolls the list, taps a tile nor starts a selection.
+            down.consume()
+            grab.begin()
+            grab.follow(grab.trackY(coordinates.localToRoot(down.position)))
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                grab.follow(grab.trackY(coordinates.localToRoot(change.position)))
+                change.consume()
+            } while (change.pressed)
+            grab.release()
+        }
+    }
+
 // Half the screen tall and centred, oldest at the top like the grid: the years at rest, evenly apart. Held, the year under the finger opens into its months and everything respaces evenly; the grid follows the finger month by month.
 @Composable
-fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, modifier: Modifier = Modifier) {
+fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
     val photoCount = remember(entries) { entries.count { it is GridEntry.Photo } }
-    if (photoCount < MIN_PHOTOS || marks.isEmpty()) return
+    val isShown = photoCount >= MIN_PHOTOS && marks.isNotEmpty()
+    DisposableEffect(grab, isShown) {
+        grab.isActive = isShown
+        onDispose { grab.isActive = false }
+    }
+    if (!isShown) return
     val monthsByYear = remember(marks) { marks.groupBy { it.month.year } }
     val years = remember(marks) { monthsByYear.keys.sorted() }
     val haptic = LocalHapticFeedback.current
@@ -133,7 +190,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
     }
     val labels = labelsOf(years, monthsByYear, heldYear, viewMark)
 
-    BoxWithConstraints(modifier.fillMaxHeight()) {
+    BoxWithConstraints(modifier.fillMaxHeight().onGloballyPositioned { grab.timeline = it }) {
         val height = constraints.maxHeight.toFloat()
         val track = height * TRACK_SHARE
         val top = (height - track) / 2f
@@ -148,6 +205,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
 
         labels.forEach { label ->
             key(label) {
+                DisposableEffect(label) { onDispose { grab.labels.remove(label) } }
                 val y by animateFloatAsState(yOf(label, labels), tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline-label")
                 val isMonth = label.month != null
                 val isCurrent = if (isHeld) (if (isMonth) label.month == heldMark else heldYear == label.year) else !isMonth && label.year == viewMark.month.year
@@ -162,6 +220,8 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                         .align(Alignment.TopEnd)
                         .offset { IntOffset(0, (y - labelHalf).roundToInt()) }
                         .padding(end = STRIP_WIDTH - 4.dp)
+                        // The label itself can be taken hold of, not only the strip beside it; a month hidden at rest is not there to take.
+                        .onGloballyPositioned { if (!isMonth || isHeld || label.month == viewMark) grab.labels[label] = it else grab.labels.remove(label) }
                         .graphicsLayer { alpha = if (isMonth && isHeld) reveal else 1f }
                         .clip(Shapes.capsule)
                         .background(Palette.panel)
@@ -198,57 +258,45 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             )
         }
 
-        // Only the timeline's own half of the edge takes a finger; above and below it the grid scrolls as usual.
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, top.roundToInt()) }
-                .size(width = STRIP_WIDTH, height = with(density) { track.toDp() })
-                .pointerInput(marks, track) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        down.consume()
-                        // A year opening or closing respaces the labels under a still finger, so after a switch the finger has to travel a little before another one counts.
-                        var switchedAt = Float.NaN
-                        fun follow(y: Float) {
-                            val shown = labelsOf(years, monthsByYear, heldYear)
-                            val gap = gapFor(shown.size)
-                            // The finger can be anywhere on the half-screen strip; past the first or last label it stays on that label.
-                            val clamped = y.coerceIn(slotY(0, shown.size), slotY(shown.lastIndex, shown.size))
-                            fingerY = top + clamped
-                            val slot = if (shown.size <= 1) 0 else ((clamped - slotY(0, shown.size)) / gap).roundToInt().coerceIn(0, shown.lastIndex)
-                            val label = shown[slot]
-                            val canSwitch = switchedAt.isNaN() || abs(clamped - switchedAt) > gap
-                            val mark = when {
-                                label.month != null -> label.month
-                                label.year == heldYear -> heldMark ?: monthsByYear[label.year]?.first()
-                                heldYear == null || canSwitch -> {
-                                    val isGoingDown = heldYear?.let { label.year > it } ?: false
-                                    heldYear = label.year
-                                    switchedAt = clamped
-                                    monthsByYear[label.year]?.let { if (isGoingDown) it.first() else it.last() }
-                                }
-                                else -> heldMark
-                            } ?: return
-                            if (mark != heldMark) {
-                                if (heldMark != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                                heldMark = mark
-                                target.intValue = mark.index
-                            }
-                        }
-                        follow(down.position.y)
-                        do {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            follow(change.position.y)
-                            change.consume()
-                        } while (change.pressed)
-                        heldMark = null
-                        heldYear = null
-                        fingerY = null
-                        target.intValue = -1
-                    }
-                },
-        )
+        // Only the timeline's own half of the edge and its labels take a finger; above and below it the grid scrolls as usual.
+        // A year opening or closing respaces the labels under a still finger, so after a switch the finger has to travel a little before another one counts.
+        val gesture = remember { object { var switchedAt = Float.NaN } }
+        grab.stripWidth = with(density) { STRIP_WIDTH.toPx() }
+        grab.labelSlack = with(density) { LABEL_GRAB_SLACK.toPx() }
+        grab.trackTop = top
+        grab.trackHeight = track
+        grab.begin = { gesture.switchedAt = Float.NaN }
+        grab.follow = follow@{ y ->
+            val shown = labelsOf(years, monthsByYear, heldYear)
+            val gap = gapFor(shown.size)
+            // The finger can be anywhere on the half-screen strip; past the first or last label it stays on that label.
+            val clamped = y.coerceIn(slotY(0, shown.size), slotY(shown.lastIndex, shown.size))
+            fingerY = top + clamped
+            val slot = if (shown.size <= 1) 0 else ((clamped - slotY(0, shown.size)) / gap).roundToInt().coerceIn(0, shown.lastIndex)
+            val label = shown[slot]
+            val canSwitch = gesture.switchedAt.isNaN() || abs(clamped - gesture.switchedAt) > gap
+            val mark = when {
+                label.month != null -> label.month
+                label.year == heldYear -> heldMark ?: monthsByYear[label.year]?.first()
+                heldYear == null || canSwitch -> {
+                    val isGoingDown = heldYear?.let { label.year > it } ?: false
+                    heldYear = label.year
+                    gesture.switchedAt = clamped
+                    monthsByYear[label.year]?.let { if (isGoingDown) it.first() else it.last() }
+                }
+                else -> heldMark
+            } ?: return@follow
+            if (mark != heldMark) {
+                if (heldMark != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                heldMark = mark
+                target.intValue = mark.index
+            }
+        }
+        grab.release = {
+            heldMark = null
+            heldYear = null
+            fingerY = null
+            target.intValue = -1
+        }
     }
 }

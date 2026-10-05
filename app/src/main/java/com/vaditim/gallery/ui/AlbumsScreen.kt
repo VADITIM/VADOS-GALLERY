@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vaditim.gallery.AlbumStack
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.vas.LocalAccent
@@ -64,9 +65,9 @@ private sealed interface AlbumEntry {
 }
 
 // A group sits where its first album would, so the arranged order still decides where everything is.
-private fun entriesOf(albums: List<Album>): List<AlbumEntry> {
-    if (!Settings.groupedAlbums) return albums.map { AlbumEntry.Single(it) }
-    val stackOf = Settings.albumStacks.flatMap { stack -> stack.paths.map { it to stack.name } }.toMap()
+private fun entriesOf(albums: List<Album>, stacks: List<AlbumStack>): List<AlbumEntry> {
+    if (stacks.isEmpty()) return albums.map { AlbumEntry.Single(it) }
+    val stackOf = stacks.flatMap { stack -> stack.paths.map { it to stack.name } }.toMap()
     val members = albums.groupBy { stackOf[it.relativePath] }
     val placed = HashSet<String>()
     return albums.mapNotNull { album ->
@@ -75,17 +76,20 @@ private fun entriesOf(albums: List<Album>): List<AlbumEntry> {
     }
 }
 
-// Folders only. No "Recent" and no "Favorites" album: both are sections already, and an album that repeats a section is the Samsung habit this app exists to drop.
+// Folders, or the albums made inside Favorites. No "Recent" and no "Favorites" album: both are sections already, and an album that repeats a section is the Samsung habit this app exists to drop.
+// `stacks` are the groups shown, by album path; the folders pass theirs only while Grouped albums is on.
 @Composable
 fun AlbumsScreen(
     albums: List<Album>,
+    title: String = "Albums",
+    stacks: List<AlbumStack> = if (Settings.groupedAlbums) Settings.albumStacks else emptyList(),
     state: LazyGridState,
     onOpen: (Album) -> Unit,
     onLongPress: (Album) -> Unit,
     onStackLongPress: (String) -> Unit,
     onNewAlbum: () -> Unit,
     contentPadding: PaddingValues,
-    footer: @Composable () -> Unit,
+    footer: @Composable () -> Unit = {},
     isRearranging: Boolean = false,
     onArrange: (paths: List<String>) -> Unit = {},
     selectedPaths: Set<String> = emptySet(),
@@ -94,7 +98,7 @@ fun AlbumsScreen(
     onOpenStacksChange: (Set<String>) -> Unit = {},
 ) {
     val isPicking = selectedPaths.isNotEmpty()
-    val entries = remember(albums, Settings.groupedAlbums, Settings.albumStacks) { entriesOf(albums) }
+    val entries = remember(albums, stacks) { entriesOf(albums, stacks) }
     // Several groups can be open at once; opening one leaves the others as they are. The set lives above this screen so it survives opening an album and coming back.
     // While rearranging, back ends rearranging (the app root handles that) rather than closing groups.
     BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging) { onOpenStacksChange(emptySet()) }
@@ -112,11 +116,11 @@ fun AlbumsScreen(
     val glide = tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut)
 
     // Every group is a row of its own, so the albums before it end their row early.
-    val spans = remember(entries, Settings.albumColumns) { spansOf(entries, Settings.albumColumns) }
+    val spans = remember(entries, Settings.coverColumns) { spansOf(entries, Settings.coverColumns) }
 
     CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
-            BasicText("Albums", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+            BasicText(title, style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
         entries.forEachIndexed { index, entry ->
             val span = spans[index]

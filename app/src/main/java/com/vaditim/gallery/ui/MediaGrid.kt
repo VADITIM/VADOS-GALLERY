@@ -34,6 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.drop
+import android.os.SystemClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -174,7 +177,13 @@ fun MediaGrid(
     val currentSelection by rememberUpdatedState(selection)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    Box(modifier.fillMaxSize()) {
+    // When the grid last came to rest, so a hold that only stopped a fling never selects.
+    val scrollStoppedAt = remember(state) { longArrayOf(0L) }
+    LaunchedEffect(state) {
+        snapshotFlow { state.isScrollInProgress }.drop(1).collect { isMoving -> if (!isMoving) scrollStoppedAt[0] = SystemClock.uptimeMillis() }
+    }
+    val timelineGrab = remember { TimelineGrab() }
+    Box(modifier.fillMaxSize().timelineGrab(timelineGrab)) {
     ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -182,7 +191,7 @@ fun MediaGrid(
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = Modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope),
+        modifier = Modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, { scrollStoppedAt[0] }),
     ) {
         items(
             entries,
@@ -220,7 +229,7 @@ fun MediaGrid(
         }
     }
     }
-    GridTimeline(entries, state, contentPadding, Modifier.align(Alignment.TopEnd))
+    GridTimeline(entries, state, contentPadding, timelineGrab, Modifier.align(Alignment.TopEnd))
     }
 }
 
@@ -266,10 +275,13 @@ private fun Modifier.dragSelect(
     photosById: Map<Long, List<MediaItem>>,
     selection: () -> Selection?,
     scope: CoroutineScope,
+    scrollStoppedAt: () -> Long,
 ): Modifier = pointerInput(state, photosById) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val isHeld = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        // Taken by the timeline, or landing on a moving grid (or just after it stopped): that finger is scrolling, not selecting.
+        if (down.isConsumed || state.isScrollInProgress || down.uptimeMillis - scrollStoppedAt() < Motion.SELECT_AFTER_SCROLL_MS) return@awaitEachGesture
+        val isHeld = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis + Motion.SELECT_HOLD_EXTRA_MS) {
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull() ?: break

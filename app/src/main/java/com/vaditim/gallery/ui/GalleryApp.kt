@@ -7,7 +7,10 @@ import androidx.compose.ui.unit.sp
 import android.content.Intent
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.vaditim.gallery.AlbumStack
 import com.vaditim.gallery.Settings
+import com.vaditim.gallery.renamedAlbum
+import com.vaditim.gallery.withPhotos
 import com.vaditim.gallery.renamed
 import com.vaditim.gallery.withAlbum
 import com.vaditim.gallery.withoutAlbum
@@ -114,6 +117,7 @@ sealed interface ViewerSource {
     data object PrivateFavorites : ViewerSource
     data object Trash : ViewerSource
     data class InLocation(val key: String) : ViewerSource
+    data class InFavoriteAlbum(val name: String) : ViewerSource
 }
 
 data class ViewerRequest(val source: ViewerSource, val startIndex: Int)
@@ -142,6 +146,15 @@ private enum class AppSheet {
     GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
     PRIVATE_NEW_GROUP,
     STACK_MENU, STACK_RENAME, ALBUM_STACK, ALBUM_NEW_STACK,
+    FAVORITE_NEW_ALBUM, FAVORITE_ALBUM_PICK, FAVORITE_SELECTION_NEW_ALBUM, FAVORITE_ALBUM_MENU, FAVORITE_ALBUM_RENAME,
+    FAVORITE_STACK_MENU, FAVORITE_STACK_RENAME, FAVORITE_ALBUM_STACK, FAVORITE_ALBUM_NEW_STACK,
+}
+
+// What Favorites shows: every favourite as one grid, the albums made inside it, or one of those albums.
+private sealed interface FavoritesView {
+    data object All : FavoritesView
+    data object Albums : FavoritesView
+    data class InAlbum(val name: String) : FavoritesView
 }
 
 // Where the photo picker puts what is picked: an album folder (new or existing), or a private group.
@@ -149,6 +162,7 @@ private sealed interface PickerTarget {
     val title: String
     data class IntoAlbum(val relativePath: String, val name: String) : PickerTarget { override val title get() = "Add to $name" }
     data class IntoGroup(val name: String) : PickerTarget { override val title get() = "Add to Private · $name" }
+    data class IntoFavoriteAlbum(val name: String) : PickerTarget { override val title get() = "Add to Favorites · $name" }
 }
 
 @Composable
@@ -219,7 +233,13 @@ private fun Library(viewModel: GalleryViewModel) {
     var picker by remember { mutableStateOf<PickerTarget?>(null) }
     // The folder being reviewed one photo at a time, if any.
     var review by remember { mutableStateOf<ViewerSource?>(null) }
-    LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU) isMenuDeleteArmed = false }
+    LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU && sheet != AppSheet.FAVORITE_ALBUM_MENU) isMenuDeleteArmed = false }
+    // The Favorites album open, the one long-pressed, and its groups left open.
+    var openFavoriteAlbum by remember { mutableStateOf<String?>(null) }
+    var sheetFavoriteAlbum by remember { mutableStateOf<String?>(null) }
+    var openFavoriteStacks by remember { mutableStateOf(emptySet<String>()) }
+    val favoriteAlbumsListState = rememberLazyGridState()
+    val favoriteAlbumMemories = remember { mutableMapOf<String, GridMemory>() }
 
     val recentMemory = remember { GridMemory() }
     val favoritesMemory = remember { GridMemory() }
@@ -252,6 +272,24 @@ private fun Library(viewModel: GalleryViewModel) {
     val locationsListState = rememberLazyGridState()
     val hazeState = rememberHazeState()
 
+    // Favorites albums hold favourites only: a photo unfavourited leaves them, and an album left empty is not shown. The name is the album's path, so groups and order hold names.
+    val favoriteAlbumViews = remember(favorites, Settings.favoriteAlbums, Settings.favoriteAlbumOrder) {
+        val order = Settings.favoriteAlbumOrder
+        Settings.favoriteAlbums.mapNotNull { album ->
+            val ids = album.ids.toSet()
+            val items = favorites.filter { it.id in ids }
+            if (items.isEmpty()) null else Album(album.name.hashCode().toLong(), album.name, album.name, items)
+        }.sortedBy { album -> order.indexOf(album.name).let { if (it < 0) Int.MAX_VALUE else it } }
+    }
+    val openFavorite = openFavoriteAlbum?.let { name -> favoriteAlbumViews.firstOrNull { it.name == name } }
+    // An album emptied while open (its last photo unfavourited) closes itself.
+    LaunchedEffect(openFavorite == null) { if (openFavorite == null) openFavoriteAlbum = null }
+    val favoritesView = when {
+        openFavorite != null -> FavoritesView.InAlbum(openFavorite.name)
+        Settings.favoritesAsAlbums -> FavoritesView.Albums
+        else -> FavoritesView.All
+    }
+
     val accent by animateColorAsState(section.accent, tween(Motion.STATE_MS), label = "accent")
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val insetPadding = PaddingValues(
@@ -276,7 +314,11 @@ private fun Library(viewModel: GalleryViewModel) {
     // The items of the grid on screen, which is what a selection is made of.
     val gridItems: List<MediaItem> = when {
         section == Section.RECENT -> recent
-        section == Section.FAVORITES -> favorites
+        section == Section.FAVORITES -> when {
+            openFavorite != null -> openFavorite.items
+            favoritesView == FavoritesView.All -> favorites
+            else -> emptyList()
+        }
         openAlbum != null -> openAlbum.items
         openPrivateGroup != null -> openPrivateGroup.items
         openLocation != null -> openLocation.items
@@ -297,7 +339,7 @@ private fun Library(viewModel: GalleryViewModel) {
         isDeleteArmed = false
         sheet = AppSheet.NONE
     }
-    LaunchedEffect(section, albumsPlace) {
+    LaunchedEffect(section, albumsPlace, favoritesView) {
         clearSelection()
         isRearranging = false
     }
@@ -344,6 +386,7 @@ private fun Library(viewModel: GalleryViewModel) {
         is ViewerSource.InPrivateGroup -> if (isPrivateUnlocked) privateContents.groups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
         ViewerSource.PrivateFavorites -> if (isPrivateUnlocked) privateContents.favorites else emptyList()
         is ViewerSource.InLocation -> locations.firstOrNull { it.key == source.key }?.items.orEmpty()
+        is ViewerSource.InFavoriteAlbum -> favoriteAlbumViews.firstOrNull { it.name == source.name }?.items.orEmpty()
         ViewerSource.Trash -> trash
     }
 
@@ -354,7 +397,11 @@ private fun Library(viewModel: GalleryViewModel) {
         place is AlbumsPlace.Trash -> trashMemory
         place is AlbumsPlace.PrivateFavorites -> privateFavoritesMemory
         section == Section.RECENT -> recentMemory
-        section == Section.FAVORITES -> favoritesMemory
+        section == Section.FAVORITES -> when {
+            openFavorite != null -> favoriteAlbumMemories.getOrPut(openFavorite.name) { GridMemory() }
+            favoritesView == FavoritesView.All -> favoritesMemory
+            else -> null
+        }
         else -> null
     }
 
@@ -409,6 +456,8 @@ private fun Library(viewModel: GalleryViewModel) {
                 label = "section",
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { shown ->
+                // Each section keeps its own accent while it leaves, so the outgoing one never takes on the next one's colour.
+                CompositionLocalProvider(LocalAccent provides shown.accent) {
                 when (shown) {
                     Section.RECENT -> MediaGrid(
                         items = recent,
@@ -535,15 +584,57 @@ private fun Library(viewModel: GalleryViewModel) {
                             selection = selection,
                         )
                     } }
-                    Section.FAVORITES -> MediaGrid(
-                        items = favorites,
-                        memory = favoritesMemory,
-                        onOpen = { viewer = ViewerRequest(ViewerSource.Favorites, it) },
-                        contentPadding = insetPadding,
-                        selection = selection,
-                        scrollToNewestRequest = scrollToNewestRequest,
-                        emptyCaption = "Nothing favourited yet.",
-                    )
+                    Section.FAVORITES -> AnimatedContent(
+                        targetState = favoritesView,
+                        transitionSpec = {
+                            (fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut)) +
+                                scaleIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut), initialScale = 0.96f))
+                                .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
+                        },
+                        label = "favorites",
+                    ) { shownView -> when (shownView) {
+                        FavoritesView.All -> MediaGrid(
+                            items = favorites,
+                            memory = favoritesMemory,
+                            onOpen = { viewer = ViewerRequest(ViewerSource.Favorites, it) },
+                            contentPadding = insetPadding,
+                            selection = selection,
+                            scrollToNewestRequest = scrollToNewestRequest,
+                            emptyCaption = "Nothing favourited yet.",
+                        )
+                        FavoritesView.Albums -> AlbumsScreen(
+                            albums = favoriteAlbumViews,
+                            title = "Favorites",
+                            stacks = Settings.favoriteStacks,
+                            openStacks = openFavoriteStacks,
+                            onOpenStacksChange = { openFavoriteStacks = it },
+                            isRearranging = isRearranging,
+                            onArrange = { Settings.updateFavoriteAlbumOrder(it) },
+                            state = favoriteAlbumsListState,
+                            onOpen = { openFavoriteAlbum = it.name },
+                            onLongPress = { album ->
+                                sheetFavoriteAlbum = album.name
+                                sheet = AppSheet.FAVORITE_ALBUM_MENU
+                            },
+                            onStackLongPress = { name ->
+                                sheetStack = name
+                                sheet = AppSheet.FAVORITE_STACK_MENU
+                            },
+                            onNewAlbum = { sheet = AppSheet.FAVORITE_NEW_ALBUM },
+                            contentPadding = insetPadding,
+                        )
+                        is FavoritesView.InAlbum -> favoriteAlbumViews.firstOrNull { it.name == shownView.name }?.let { album ->
+                            AlbumScreen(
+                                album = album,
+                                memory = favoriteAlbumMemories.getOrPut(album.name) { GridMemory() },
+                                onOpen = { viewer = ViewerRequest(ViewerSource.InFavoriteAlbum(album.name), it) },
+                                onBack = { openFavoriteAlbum = null },
+                                contentPadding = insetPadding,
+                                selection = selection,
+                            )
+                        }
+                    } }
+                }
                 }
             }
 
@@ -558,8 +649,12 @@ private fun Library(viewModel: GalleryViewModel) {
                     openPrivateGroup != null -> { { review = ViewerSource.InPrivateGroup(openPrivateGroup.name) } }
                     place is AlbumsPlace.PrivateFavorites -> { { review = ViewerSource.PrivateFavorites } }
                     openLocation != null -> { { review = ViewerSource.InLocation(openLocation.key) } }
+                    section == Section.FAVORITES && openFavorite != null -> { { review = ViewerSource.InFavoriteAlbum(openFavorite.name) } }
                     else -> null
                 },
+                // Favorites switches between every favourite in one grid and the albums made inside it.
+                onToggleView = if (section == Section.FAVORITES && openFavorite == null) { { Settings.updateFavoritesAsAlbums(!Settings.favoritesAsAlbums) } } else null,
+                isAlbumsView = Settings.favoritesAsAlbums,
                 onCancelSelection = clearSelection,
                 onSettings = { sheet = AppSheet.SETTINGS },
             )
@@ -642,6 +737,16 @@ private fun Library(viewModel: GalleryViewModel) {
                             modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
                         ) { TrashIcon(Palette.danger) }
                     } else {
+                        if (section == Section.FAVORITES) {
+                            IconButton(onClick = { sheet = AppSheet.FAVORITE_ALBUM_PICK }) { AlbumsIcon(Palette.textBody) }
+                            if (openFavorite != null) {
+                                IconButton(onClick = {
+                                    val removed = selectedItems.map { it.id }.toSet()
+                                    Settings.updateFavoriteAlbums(Settings.favoriteAlbums.map { if (it.name == openFavorite.name) it.copy(ids = it.ids.filter { id -> id !in removed }) else it })
+                                    clearSelection()
+                                }) { CloseIcon(Palette.textBody) }
+                            }
+                        }
                         IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
                         IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { LockIcon(Palette.textBody) }
                         IconButton(onClick = {
@@ -656,7 +761,11 @@ private fun Library(viewModel: GalleryViewModel) {
                     active = section,
                     onSelect = { selected ->
                         if (selected == section) {
-                            if (selected == Section.ALBUMS) albumsPlace = AlbumsPlace.Folders else scrollToNewestRequest++
+                            when {
+                                selected == Section.ALBUMS -> albumsPlace = AlbumsPlace.Folders
+                                selected == Section.FAVORITES && openFavoriteAlbum != null -> openFavoriteAlbum = null
+                                else -> scrollToNewestRequest++
+                            }
                         }
                         section = selected
                     },
@@ -775,11 +884,76 @@ private fun Library(viewModel: GalleryViewModel) {
                 onDismiss = { sheet = AppSheet.NONE },
             )
 
+            // Favorites albums only gather favourites; nothing here moves or changes a photo.
+            NamePickerSheet(
+                visible = sheet == AppSheet.FAVORITE_ALBUM_PICK,
+                label = "ADD TO ALBUM",
+                choices = favoriteAlbumViews.filter { it.name != openFavorite?.name }.map { it.name to it.items.size },
+                newLabel = "+ New album",
+                onPick = { name ->
+                    Settings.updateFavoriteAlbums(Settings.favoriteAlbums.withPhotos(name, selectedItems.map { it.id }))
+                    clearSelection()
+                },
+                onNew = { sheet = AppSheet.FAVORITE_SELECTION_NEW_ALBUM },
+                onDismiss = { sheet = AppSheet.NONE },
+            )
+            OverlaySheet(visible = sheet == AppSheet.FAVORITE_ALBUM_MENU, label = sheetFavoriteAlbum?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
+                val albumName = sheetFavoriteAlbum.orEmpty()
+                SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.FAVORITE_ALBUM_RENAME }
+                SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
+                    isRearranging = true
+                    sheet = AppSheet.NONE
+                }
+                val currentStack = Settings.favoriteStacks.firstOrNull { it.paths.contains(albumName) }
+                SheetRow(if (currentStack == null) "Add to group" else "Move to group", trailing = currentStack?.name, icon = { MoveIcon(it) }) { sheet = AppSheet.FAVORITE_ALBUM_STACK }
+                if (currentStack != null) {
+                    SheetRow("Remove from group", icon = { CloseIcon(it) }) {
+                        Settings.updateFavoriteStacks(Settings.favoriteStacks.withoutAlbum(albumName))
+                        sheet = AppSheet.NONE
+                    }
+                }
+                SheetRow("Add photos", icon = { PlusIcon(it) }) {
+                    picker = PickerTarget.IntoFavoriteAlbum(albumName)
+                    sheet = AppSheet.NONE
+                }
+                // The photos stay favourites; only the album goes, but it cannot be brought back, so it takes a second tap.
+                SheetRow(if (isMenuDeleteArmed) "Tap again: delete album" else "Delete album", color = Palette.danger, icon = { TrashIcon(it) }) {
+                    if (isMenuDeleteArmed) {
+                        Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name != albumName })
+                        sheet = AppSheet.NONE
+                    } else {
+                        isMenuDeleteArmed = true
+                    }
+                }
+            }
+            OverlaySheet(visible = sheet == AppSheet.FAVORITE_STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
+                SheetRow("Rename", icon = { PenIcon(it) }) { sheet = AppSheet.FAVORITE_STACK_RENAME }
+                SheetRow("Rearrange albums", icon = { GripIcon(it) }) {
+                    isRearranging = true
+                    sheet = AppSheet.NONE
+                }
+                SheetRow("Ungroup", trailing = Settings.favoriteStacks.firstOrNull { it.name == sheetStack }?.paths?.size?.toString(), icon = { CloseIcon(it) }) {
+                    Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != sheetStack })
+                    sheet = AppSheet.NONE
+                }
+            }
+            StackPickerSheet(
+                visible = sheet == AppSheet.FAVORITE_ALBUM_STACK,
+                label = "MOVE ${sheetFavoriteAlbum?.uppercase().orEmpty()} TO",
+                stacks = Settings.favoriteStacks.filter { !it.paths.contains(sheetFavoriteAlbum) },
+                onPick = { name ->
+                    sheetFavoriteAlbum?.let { Settings.updateFavoriteStacks(Settings.favoriteStacks.withAlbum(it, name)) }
+                    sheet = AppSheet.NONE
+                },
+                onNewStack = { sheet = AppSheet.FAVORITE_ALBUM_NEW_STACK },
+                onDismiss = { sheet = AppSheet.NONE },
+            )
+
             SettingsSheet(
                 visible = sheet == AppSheet.SETTINGS,
                 onDismiss = { sheet = AppSheet.NONE },
                 onColumnsChanged = { columns ->
-                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory) + albumMemories.values + privateMemories.values).forEach { it.columns = columns }
+                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values).forEach { it.columns = columns }
                 },
             )
 
@@ -919,6 +1093,62 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
                     onDismiss = { sheet = AppSheet.NONE },
                 )
+                AppSheet.FAVORITE_NEW_ALBUM -> NameSheet(
+                    label = "NEW ALBUM",
+                    action = "CHOOSE PHOTOS",
+                    onConfirm = { name ->
+                        sheet = AppSheet.NONE
+                        picker = PickerTarget.IntoFavoriteAlbum(AlbumStack.cleanName(name))
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.FAVORITE_SELECTION_NEW_ALBUM -> NameSheet(
+                    label = "NEW ALBUM",
+                    action = "ADD HERE",
+                    onConfirm = { name ->
+                        Settings.updateFavoriteAlbums(Settings.favoriteAlbums.withPhotos(name, selectedItems.map { it.id }))
+                        clearSelection()
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.FAVORITE_ALBUM_RENAME -> NameSheet(
+                    label = "RENAME ALBUM",
+                    action = "RENAME",
+                    initialName = sheetFavoriteAlbum.orEmpty(),
+                    onConfirm = { name ->
+                        sheetFavoriteAlbum?.let { old ->
+                            val new = AlbumStack.cleanName(name)
+                            if (new.isNotEmpty() && new != old) {
+                                Settings.updateFavoriteAlbums(Settings.favoriteAlbums.renamedAlbum(old, new))
+                                // The album's place in its group and in the order follow the new name.
+                                Settings.updateFavoriteStacks(Settings.favoriteStacks.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }.distinct()) })
+                                Settings.updateFavoriteAlbumOrder(Settings.favoriteAlbumOrder.map { if (it == old) new else it }.distinct())
+                                if (openFavoriteAlbum == old) openFavoriteAlbum = new
+                            }
+                        }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.FAVORITE_STACK_RENAME -> NameSheet(
+                    label = "RENAME GROUP",
+                    action = "RENAME",
+                    initialName = sheetStack.orEmpty(),
+                    onConfirm = { name ->
+                        sheetStack?.let { Settings.updateFavoriteStacks(Settings.favoriteStacks.renamed(it, name)) }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.FAVORITE_ALBUM_NEW_STACK -> NameSheet(
+                    label = "NEW GROUP",
+                    action = "CREATE",
+                    onConfirm = { name ->
+                        sheetFavoriteAlbum?.let { Settings.updateFavoriteStacks(Settings.favoriteStacks.withAlbum(it, name)) }
+                        sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
                 AppSheet.NEW_ALBUM -> NameSheet(
                     label = "NEW ALBUM",
                     action = "CHOOSE PHOTOS",
@@ -987,15 +1217,21 @@ private fun Library(viewModel: GalleryViewModel) {
             }
 
             picker?.let { target ->
-                val alreadyThere = (target as? PickerTarget.IntoAlbum)?.let { into -> albums.firstOrNull { it.relativePath == into.relativePath }?.items?.map { it.id }?.toSet() }.orEmpty()
+                val alreadyThere = when (target) {
+                    is PickerTarget.IntoAlbum -> albums.firstOrNull { it.relativePath == target.relativePath }?.items?.map { it.id }?.toSet().orEmpty()
+                    is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.firstOrNull { it.name == target.name }?.ids?.toSet().orEmpty()
+                    is PickerTarget.IntoGroup -> emptySet()
+                }
                 PickerScreen(
                     title = target.title,
-                    items = library.filter { it.id !in alreadyThere },
+                    // A Favorites album gathers favourites, so only they are offered.
+                    items = (if (target is PickerTarget.IntoFavoriteAlbum) favorites else library).filter { it.id !in alreadyThere },
                     action = "Add",
                     onDone = { picked ->
                         when (target) {
                             is PickerTarget.IntoAlbum -> actions.move(picked, target.relativePath, target.name)
                             is PickerTarget.IntoGroup -> actions.hide(picked, target.name)
+                            is PickerTarget.IntoFavoriteAlbum -> Settings.updateFavoriteAlbums(Settings.favoriteAlbums.withPhotos(target.name, picked.map { it.id }))
                         }
                         picker = null
                     },
@@ -1104,6 +1340,7 @@ private fun ViewerSource.reviewKey(): String = when (this) {
     ViewerSource.Recent -> "recent"
     ViewerSource.Favorites -> "favorites"
     ViewerSource.Trash -> "trash"
+    is ViewerSource.InFavoriteAlbum -> "favorite-album:$name"
 }
 
 private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites
@@ -1111,7 +1348,7 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 // The top layer: the month you are looking at, or — while selecting — the count and the way out of the selection. Leaving a folder is the system back gesture.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit) {
+private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1125,6 +1362,8 @@ private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, o
             Box(Modifier.weight(1f))
             if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
             if (onReview != null) TopButton(onReview) { ReviewIcon(LocalAccent.current) }
+            // The icon shows where a tap goes: the grid of every favourite, or the albums.
+            if (onToggleView != null) TopButton(onToggleView) { if (isAlbumsView) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current) }
             TopButton(onSettings) { SettingsIcon(Palette.textBright) }
         }
     }

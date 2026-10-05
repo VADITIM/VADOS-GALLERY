@@ -55,6 +55,11 @@ object Motion {
     const val SWEEP_RETRACT_MS = 500
     const val SWEEP_LEAVE_MS = 300
 
+    // Holding a tile to select waits this much past the system's long press, so a resting thumb does not select by accident.
+    const val SELECT_HOLD_EXTRA_MS = 120L
+    // A finger that lands while the grid is moving, or this soon after it stopped, is stopping a scroll, not starting a selection.
+    const val SELECT_AFTER_SCROLL_MS = 350L
+
     // How long a delete or a move can still be taken back from the pill above the bar.
     const val UNDO_MS = 4500
 }

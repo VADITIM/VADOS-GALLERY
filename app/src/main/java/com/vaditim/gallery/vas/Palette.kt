@@ -2,10 +2,12 @@ package com.vaditim.gallery.vas
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.vaditim.gallery.Settings
 
 // The VAS ground, grey ramp and text steps (dna/01-palette.md), plus the screen accents this app casts into its three sections.
 object Palette {
-    val ground = Color(0xFF181818)
+    // The ground is the user's: a grey from black up to a dark charcoal, read from the setting so every surface on it follows a change at once.
+    val ground: Color get() = (Settings.groundBrightness * Settings.MAX_GROUND_LEVEL / 255f).let { Color(it, it, it) }
     val panel = Color(0xD9121212)
     val surface = Color(0xFF202020)
     val glassTint = Color(0x8C141414)

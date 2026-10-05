@@ -142,13 +142,18 @@ fun AlbumPickerSheet(
 }
 
 @Composable
-fun StackPickerSheet(visible: Boolean, label: String, stacks: List<AlbumStack>, onPick: (String) -> Unit, onNewStack: () -> Unit, onDismiss: () -> Unit) {
+fun StackPickerSheet(visible: Boolean, label: String, stacks: List<AlbumStack>, onPick: (String) -> Unit, onNewStack: () -> Unit, onDismiss: () -> Unit) =
+    NamePickerSheet(visible, label, stacks.map { it.name to it.paths.size }, "+ New group", onPick, onNewStack, onDismiss)
+
+// A list of named things with their counts, ending with the way to make a new one.
+@Composable
+fun NamePickerSheet(visible: Boolean, label: String, choices: List<Pair<String, Int>>, newLabel: String, onPick: (String) -> Unit, onNew: () -> Unit, onDismiss: () -> Unit) {
     OverlaySheet(visible = visible, label = label, onDismiss = onDismiss) {
         LazyColumn(Modifier.heightIn(max = 380.dp)) {
-            items(stacks, key = { it.name }) { stack ->
-                SheetRow(stack.name, trailing = stack.paths.size.toString()) { onPick(stack.name) }
+            items(choices, key = { it.first }) { (name, count) ->
+                SheetRow(name, trailing = count.toString()) { onPick(name) }
             }
-            item { SheetRow("+ New group", color = Palette.textMuted, onClick = onNewStack) }
+            item { SheetRow(newLabel, color = Palette.textMuted, onClick = onNew) }
         }
     }
 }

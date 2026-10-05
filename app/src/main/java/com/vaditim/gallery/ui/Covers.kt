@@ -68,7 +68,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
     val haptic = LocalHapticFeedback.current
     ProvideEntrance {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(Settings.albumColumns),
+        columns = GridCells.Fixed(Settings.coverColumns),
         state = state,
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -77,7 +77,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
             bottom = contentPadding.calculateBottomPadding() + 12.dp,
         ),
         horizontalArrangement = Arrangement.spacedBy(COVER_GAP),
-        verticalArrangement = Arrangement.spacedBy(if (Settings.albumColumns == 1) 12.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (Settings.coverColumns == 1) 12.dp else 20.dp),
         modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
         content = content,
     )
@@ -86,7 +86,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
 
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = Settings.albumColumns == 1) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = Settings.coverColumns == 1) {
     val request = rememberCoverRequest(cover)
     if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
@@ -145,7 +145,7 @@ private const val STACK_VISIBLE_LAYERS = 4
 
 // The card at the end of an opened stack that lays it back down: the glyph alone, since the group's name is its heading.
 @Composable
-fun CollapseCard(onClick: () -> Unit, modifier: Modifier = Modifier, isList: Boolean = Settings.albumColumns == 1) {
+fun CollapseCard(onClick: () -> Unit, modifier: Modifier = Modifier, isList: Boolean = Settings.coverColumns == 1) {
     val glyph = @Composable { BasicText("‹", style = Type.title.copy(color = LocalAccent.current)) }
     if (isList) {
         Box(modifier.size(LIST_COVER).pressable(onClick = onClick, pressedScale = 0.9f), contentAlignment = Alignment.Center) { glyph() }
@@ -188,7 +188,7 @@ fun SpanCell(span: Int, modifier: Modifier = Modifier, content: @Composable () -
 // The "make a new one" card at the end of a grid of covers: albums and private groups both end with one.
 @Composable
 fun AddCard(label: String, onClick: () -> Unit) {
-    if (Settings.albumColumns == 1) {
+    if (Settings.coverColumns == 1) {
         Row(Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) {
                 BasicText("+", style = Type.title.copy(color = LocalAccent.current))
@@ -212,7 +212,8 @@ private fun Modifier.pinchAlbumColumns(haptic: HapticFeedback): Modifier = point
         var zoom = 1f
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
-            if (event.changes.count { it.pressed } >= 2) {
+            // Grouped albums lie as rows, so there is no column count to pinch.
+            if (event.changes.count { it.pressed } >= 2 && !Settings.groupedAlbums) {
                 zoom *= event.calculateZoom()
                 val before = Settings.albumColumns
                 if (zoom > PINCH_STEP) {

@@ -19,6 +19,9 @@ object Settings {
     private const val DEFAULT_COLUMNS = 4
     const val MAX_ALBUM_COLUMNS = 4
     private const val DEFAULT_ALBUM_COLUMNS = 2
+    // The ground's grey, as a share of the lightest it may go; the VAS ground (#181818) sits at the default.
+    const val MAX_GROUND_LEVEL = 64f
+    private const val DEFAULT_GROUND_BRIGHTNESS = 24f / MAX_GROUND_LEVEL
 
     private lateinit var preferences: SharedPreferences
 
@@ -49,6 +52,20 @@ object Settings {
     var stackSimilar by mutableStateOf(true)
         private set
 
+    var groundBrightness by mutableFloatStateOf(DEFAULT_GROUND_BRIGHTNESS)
+        private set
+
+    // Albums made inside Favorites only, each holding favourited photos by id; they never touch the folders.
+    var favoriteAlbums by mutableStateOf<List<FavoriteAlbum>>(emptyList())
+        private set
+    // Groups of those albums, by album name, and the albums' arranged order.
+    var favoriteStacks by mutableStateOf<List<AlbumStack>>(emptyList())
+        private set
+    var favoriteAlbumOrder by mutableStateOf<List<String>>(emptyList())
+        private set
+    var favoritesAsAlbums by mutableStateOf(false)
+        private set
+
     // Album folders kept out of Recent; they still open as albums.
     var hiddenFromRecent by mutableStateOf<Set<String>>(emptySet())
         private set
@@ -66,10 +83,55 @@ object Settings {
         groupedAlbums = preferences.getBoolean("groupedAlbums", false)
         stackSimilar = preferences.getBoolean("stackSimilar", true)
         hiddenFromRecent = preferences.getString("hiddenFromRecent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty().toSet()
+        groundBrightness = preferences.getFloat("groundBrightness", DEFAULT_GROUND_BRIGHTNESS)
+        favoriteAlbums = preferences.getString("favoriteAlbums", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
+            val parts = line.split('\t')
+            FavoriteAlbum(parts.first(), parts.drop(1).mapNotNull { it.toLongOrNull() })
+        }.orEmpty()
+        favoriteStacks = readStacks("favoriteStacks")
+        favoriteAlbumOrder = preferences.getString("favoriteAlbumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
+        favoritesAsAlbums = preferences.getBoolean("favoritesAsAlbums", false)
         albumStacks = preferences.getString("albumStacks", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
             val parts = line.split('\t')
             AlbumStack(parts.first(), parts.drop(1).filter { it.isNotEmpty() })
         }.orEmpty()
+    }
+
+    private fun readStacks(key: String): List<AlbumStack> =
+        preferences.getString(key, null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
+            val parts = line.split('\t')
+            AlbumStack(parts.first(), parts.drop(1).filter { it.isNotEmpty() })
+        }.orEmpty()
+
+    // With Grouped albums on, the albums lie as rows beside the groups, so the column count only applies with it off.
+    val coverColumns: Int get() = if (groupedAlbums) 1 else albumColumns
+
+    fun updateGroundBrightness(value: Float) {
+        groundBrightness = value.coerceIn(0f, 1f)
+        preferences.edit().putFloat("groundBrightness", groundBrightness).apply()
+    }
+
+    fun updateFavoriteAlbums(albums: List<FavoriteAlbum>) {
+        favoriteAlbums = albums.filter { it.ids.isNotEmpty() }
+        preferences.edit().putString("favoriteAlbums", favoriteAlbums.joinToString("\n") { (listOf(it.name) + it.ids.map(Long::toString)).joinToString("\t") }).apply()
+        // A group keeps only albums that still exist.
+        val names = favoriteAlbums.map { it.name }.toSet()
+        if (favoriteStacks.any { stack -> stack.paths.any { it !in names } }) updateFavoriteStacks(favoriteStacks.map { stack -> stack.copy(paths = stack.paths.filter { it in names }) })
+    }
+
+    fun updateFavoriteStacks(stacks: List<AlbumStack>) {
+        favoriteStacks = stacks.filter { it.paths.isNotEmpty() }
+        preferences.edit().putString("favoriteStacks", favoriteStacks.joinToString("\n") { (listOf(it.name) + it.paths).joinToString("\t") }).apply()
+    }
+
+    fun updateFavoriteAlbumOrder(names: List<String>) {
+        favoriteAlbumOrder = names
+        preferences.edit().putString("favoriteAlbumOrder", names.joinToString("\n")).apply()
+    }
+
+    fun updateFavoritesAsAlbums(value: Boolean) {
+        favoritesAsAlbums = value
+        preferences.edit().putBoolean("favoritesAsAlbums", value).apply()
     }
 
     fun updateBlur(value: Float) {
@@ -138,6 +200,24 @@ object Settings {
         autoplayVideos = value
         preferences.edit().putBoolean("autoplay", value).apply()
     }
+}
+
+data class FavoriteAlbum(val name: String, val ids: List<Long>)
+
+// Photos join a Favorites album, or one made for them; an album renamed onto another's name joins it.
+fun List<FavoriteAlbum>.withPhotos(albumName: String, ids: List<Long>): List<FavoriteAlbum> {
+    val name = AlbumStack.cleanName(albumName).ifEmpty { return this }
+    return if (any { it.name == name }) map { if (it.name == name) it.copy(ids = (it.ids + ids).distinct()) else it } else this + FavoriteAlbum(name, ids.distinct())
+}
+
+fun List<FavoriteAlbum>.renamedAlbum(old: String, new: String): List<FavoriteAlbum> {
+    val name = AlbumStack.cleanName(new).ifEmpty { return this }
+    val merged = LinkedHashMap<String, List<Long>>()
+    for (album in this) {
+        val target = if (album.name == old) name else album.name
+        merged[target] = merged[target].orEmpty() + album.ids
+    }
+    return merged.map { (albumName, ids) -> FavoriteAlbum(albumName, ids.distinct()) }
 }
 
 data class AlbumStack(val name: String, val paths: List<String>) {
