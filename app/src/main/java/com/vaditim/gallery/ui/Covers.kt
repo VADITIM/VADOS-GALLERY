@@ -215,7 +215,7 @@ private fun Modifier.pinchAlbumColumns(haptic: HapticFeedback): Modifier = point
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             // Grouped albums lie as rows, so there is no column count to pinch.
-            if (event.changes.count { it.pressed } >= 2 && !Settings.groupedAlbums) {
+            if (event.changes.count { it.pressed } >= 2 && !(Settings.groupedAlbums && Settings.view.canGroup)) {
                 zoom *= event.calculateZoom()
                 val before = Settings.albumColumns
                 if (zoom > PINCH_STEP) {

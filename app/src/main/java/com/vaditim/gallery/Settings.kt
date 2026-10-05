@@ -42,7 +42,7 @@ object Settings {
     fun monthHeadersIn(view: SettingsView): Boolean = monthHeadersByView[view] ?: true
     fun photoLayoutIn(view: SettingsView): PhotoLayout = photoLayoutByView[view] ?: PhotoLayout.MONTHS
     fun stackSimilarIn(view: SettingsView): Boolean = stackSimilarByView[view] ?: true
-    fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbumsByView[view] ?: false
+    fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbumsByView[view] ?: (view == SettingsView.FAVORITES)
     fun albumColumnsIn(view: SettingsView): Int = albumColumnsByView[view] ?: DEFAULT_ALBUM_COLUMNS
 
     val defaultColumns: Int get() = columnsIn(view)
@@ -97,7 +97,8 @@ object Settings {
             val layoutName = preferences.getString("photoLayout.${each.name}", null) ?: preferences.getString("photoLayout", null)
             photoLayoutByView[each] = PhotoLayout.entries.firstOrNull { it.name == layoutName } ?: PhotoLayout.MONTHS
             stackSimilarByView[each] = preferences.getBoolean("stackSimilar.${each.name}", preferences.getBoolean("stackSimilar", true))
-            groupedAlbumsByView[each] = preferences.getBoolean("groupedAlbums.${each.name}", preferences.getBoolean("groupedAlbums", false))
+            // Favorites always showed its groups before it had the setting, so it starts with them on.
+            groupedAlbumsByView[each] = preferences.getBoolean("groupedAlbums.${each.name}", if (each == SettingsView.FAVORITES) true else preferences.getBoolean("groupedAlbums", false))
             albumColumnsByView[each] = preferences.getInt("albumColumns.${each.name}", preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS))
         }
         autoplayVideos = preferences.getBoolean("autoplay", true)
@@ -127,7 +128,7 @@ object Settings {
         }.orEmpty()
 
     // With Grouped albums on, the albums lie as rows beside the groups, so the column count only applies with it off.
-    val coverColumns: Int get() = if (groupedAlbums) 1 else albumColumns
+    val coverColumns: Int get() = if (groupedAlbums && view.canGroup) 1 else albumColumns
 
     fun updateGroundBrightness(value: Float) {
         groundBrightness = value.coerceIn(0f, 1f)
@@ -239,8 +240,8 @@ object Settings {
 enum class SettingsView(val label: String) {
     RECENT("Recent"), ALBUMS("Albums"), FAVORITES("Favorites"), LOCATIONS("Locations"), TRASH("Trash"), PRIVATE("Private");
 
-    // Whether the view shows covers, so the album settings mean something there.
-    val hasCovers: Boolean get() = this != RECENT && this != TRASH
+    // Only Albums and Favorites gather their albums into groups.
+    val canGroup: Boolean get() = this == ALBUMS || this == FAVORITES
 }
 
 data class FavoriteAlbum(val name: String, val ids: List<Long>)

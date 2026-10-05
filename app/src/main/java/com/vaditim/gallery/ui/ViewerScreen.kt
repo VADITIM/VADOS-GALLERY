@@ -62,11 +62,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.newAlbumPath
@@ -129,6 +126,7 @@ fun ViewerScreen(
         LaunchedEffect(Unit) { onClose() }
         return
     }
+    HighRangeWindow()
     val pagerState = rememberPagerState(initialPage = startIndex.coerceIn(0, items.lastIndex)) { items.size }
     var isChromeVisible by remember { mutableStateOf(true) }
     var overlay by remember { mutableStateOf(Overlay.NONE) }
@@ -356,7 +354,6 @@ fun ViewerScreen(
 @Composable
 private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, onSwipeDown: () -> Unit, onSwipeUp: () -> Unit, onPull: (Float) -> Unit, onLift: (Float) -> Unit, onRatio: (Float) -> Unit) {
     val context = LocalContext.current
-    val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).build() }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     var scale by remember { mutableFloatStateOf(1f) }
@@ -574,13 +571,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     clip = true
                 },
         ) {
-            AsyncImage(
-                model = request,
-                contentDescription = item.name,
-                contentScale = ContentScale.Fit,
-                onSuccess = { success -> ratio = success.result.image.width.toFloat() / success.result.image.height },
-                modifier = Modifier.fillMaxSize(),
-            )
+            FullPhoto(item.uri, item.name, isZoomed = scale > 1.01f, onRatio = { ratio = it }, modifier = Modifier.fillMaxSize())
             // The still frame shows until the video has its first picture, then the video draws over it.
             if (video != null) VideoSurface(video, Modifier.fillMaxSize())
             motion?.let { VideoSurface(it, Modifier.fillMaxSize()) }

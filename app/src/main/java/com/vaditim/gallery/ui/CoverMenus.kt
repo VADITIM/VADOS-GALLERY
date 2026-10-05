@@ -21,7 +21,7 @@ fun AlbumMenuRows(
     armedDeleteText: String,
     onDelete: () -> Unit,
 ) {
-    SheetHeader("General")
+    SheetHeader("Albums")
     // Once armed the whole row is the delete, so the second tap cannot land on the other half.
     if (isDeleteArmed) {
         SheetRow(armedDeleteText, color = Palette.danger, icon = { TrashIcon(it) }, onClick = onDelete)
@@ -36,6 +36,7 @@ fun AlbumMenuRows(
         )
     }
     if (group?.name != null) SheetRow("Remove from group", trailing = group.name, icon = { CloseIcon(it) }, onClick = group.onRemove)
+    SheetRow("Add photos", icon = { PlusIcon(it) }, onClick = onAddPhotos)
     SheetHeader("Edit")
     SheetRow("Rename", icon = { PenIcon(it) }, onClick = onRename)
     if (group != null) {
@@ -43,15 +44,14 @@ fun AlbumMenuRows(
     } else {
         SheetRow("Move album to private", icon = { LockIcon(it) }, onClick = onPrivate)
     }
-    SheetRow("Add photos", icon = { PlusIcon(it) }, onClick = onAddPhotos)
     SelectRow(onSelect, onRearrange)
 }
 
-// The long-press menu of a group, of albums or of private photos, laid out as an album's: what it does to the group, changing it, and selecting last.
+// The long-press menu of a group, of albums or of private photos, laid out as an album's: what it does to the groups, changing this one, and selecting last.
 @Composable
-fun GroupMenuRows(onRename: () -> Unit, onSelect: () -> Unit, onRearrange: () -> Unit, general: @Composable () -> Unit, edit: @Composable () -> Unit = {}) {
-    SheetHeader("General")
-    general()
+fun GroupMenuRows(onRename: () -> Unit, onSelect: () -> Unit, onRearrange: () -> Unit, groups: @Composable () -> Unit, edit: @Composable () -> Unit = {}) {
+    SheetHeader("Groups")
+    groups()
     SheetHeader("Edit")
     SheetRow("Rename", icon = { PenIcon(it) }, onClick = onRename)
     edit()

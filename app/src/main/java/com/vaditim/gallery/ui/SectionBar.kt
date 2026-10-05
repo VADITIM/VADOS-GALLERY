@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onPlaced
@@ -39,7 +40,7 @@ private const val ACTIVE_LABEL_SCALE = 1.06f
 
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
-fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier) {
+fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }) {
     // Where each section's pill sits in the bar, left edge and right edge, so the highlight knows where to slide.
     val spans = remember { mutableStateMapOf<Section, Pair<Float, Float>>() }
     val left = remember { Animatable(Float.NaN) }
@@ -74,7 +75,7 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
     ) {
         Section.entries.forEach { section ->
             val isActive = section == active
-            val ink by animateColorAsState(if (isActive) section.accent else Palette.textMuted, tween(Motion.STATE_MS), label = "section-ink")
+            val ink by animateColorAsState(if (isActive) accentOf(section) else Palette.textMuted, tween(Motion.STATE_MS), label = "section-ink")
             val labelScale by animateFloatAsState(if (isActive) ACTIVE_LABEL_SCALE else 1f, tween(Motion.NAV_SLIDE_MS, easing = Motion.backOut), label = "section-scale")
             Box(
                 Modifier

@@ -1,6 +1,7 @@
-# 0.88
-
-- Inside Private, the bottom bar works for Private: Recent shows every private photo, Favorites shows private favourites (as one grid or grouped), and Albums shows the private groups.
-- The Favorites folder inside Private is gone; use the Favorites button instead.
-- Each view (Recent, Albums, Favorites, Locations, Trash, Private) now keeps its own settings: columns, layout, month headers, stacked shots and album layout.
-- The settings sheet shows which view you're changing on the right of its title.
+- Sharper photos in the viewer: smoother scaling, full resolution when zoomed, and HDR for Ultra HDR shots.
+- Settings in three tabs: the place you're in, General and Interface. Review photos lives under General.
+- A back button at the top left inside folders; the photo count sits above the month on black.
+- Private has its own red, with a PRIVATE pill and back button above the bar.
+- Favorites albums can be grouped or not, with their own album columns.
+- Menus: albums under "Albums" (Add photos at the bottom), groups under "Groups" with "Ungroup all".
+- Selected albums can be hidden from Recent from the bar; the bar now pops between its states.

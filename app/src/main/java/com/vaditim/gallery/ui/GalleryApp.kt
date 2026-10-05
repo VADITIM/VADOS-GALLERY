@@ -23,6 +23,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.ui.unit.Constraints
@@ -110,7 +111,9 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 
 private val BAR_ROOM = 84.dp
-private val HEADER_ROOM = 56.dp
+// What the top row leaves above itself for the count hanging over the month pill; declared first so the header room can count it.
+private val COUNT_ROOM = 22.dp
+private val HEADER_ROOM = 56.dp + COUNT_ROOM
 private val MONTH_CHIP_WIDTH = 148.dp
 // How far the viewer has grown into place before its buttons start arriving.
 private const val VIEWER_CHROME_AT = 0.85f
@@ -313,7 +316,8 @@ private fun Library(viewModel: GalleryViewModel) {
         else -> FavoritesView.All
     }
 
-    val accent by animateColorAsState(section.accent, tween(Motion.STATE_MS), label = "accent")
+    // Private has a colour of its own across every section.
+    val accent by animateColorAsState(if (isPrivateMode) Palette.privateRed else section.accent, tween(Motion.STATE_MS), label = "accent")
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val insetPadding = PaddingValues(
         top = statusBarHeight + HEADER_ROOM,
@@ -535,7 +539,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { (shown, isPrivateShown) ->
                 // Each section keeps its own accent while it leaves, so the outgoing one never takes on the next one's colour.
-                CompositionLocalProvider(LocalAccent provides shown.accent) {
+                CompositionLocalProvider(LocalAccent provides if (isPrivateShown || (shown == Section.ALBUMS && isPrivateMode)) Palette.privateRed else shown.accent) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(
                         items = privateRecent,
@@ -722,7 +726,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             albums = favoriteAlbumViews,
                             title = "Favorites",
                             isAccented = true,
-                            stacks = Settings.favoriteStacks,
+                            stacks = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) Settings.favoriteStacks else emptyList(),
                             openStacks = openFavoriteStacks,
                             onOpenStacksChange = { openFavoriteStacks = it },
                             isRearranging = isRearranging,
@@ -761,25 +765,34 @@ private fun Library(viewModel: GalleryViewModel) {
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
             Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.8f).fadingGlass())
 
+            // Sorting through the photos on screen, from the settings sheet; a place of covers has none to go through.
+            val reviewAction: (() -> Unit)? = when {
+                isPrivateMode && section == Section.RECENT -> { { review = ViewerSource.PrivateRecent } }
+                isPrivateMode && section == Section.FAVORITES -> when {
+                    openPrivateFavorite != null -> { { review = ViewerSource.InPrivateFavoriteGroup(openPrivateFavorite.name) } }
+                    isPrivateFavoritesGrouped -> null
+                    else -> { { review = ViewerSource.PrivateFavorites } }
+                }
+                section == Section.RECENT -> { { review = ViewerSource.Recent } }
+                section == Section.FAVORITES && favoritesView == FavoritesView.All -> { { review = ViewerSource.Favorites } }
+                openAlbum != null -> { { review = ViewerSource.InAlbum(openAlbum.id) } }
+                openPrivateGroup != null -> { { review = ViewerSource.InPrivateGroup(openPrivateGroup.name) } }
+                openLocation != null -> { { review = ViewerSource.InLocation(openLocation.key) } }
+                section == Section.FAVORITES && openFavorite != null -> { { review = ViewerSource.InFavoriteAlbum(openFavorite.name) } }
+                else -> null
+            }
+            // Out of a folder, the same as the system back; Private's own groups leave by the Private pill instead.
+            val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            val canGoBack = if (isPrivateMode) {
+                (section == Section.ALBUMS && place is AlbumsPlace.PrivateFolder) || (section == Section.FAVORITES && openPrivateFavoriteGroup != null)
+            } else {
+                (section == Section.ALBUMS && place != AlbumsPlace.Folders) || (section == Section.FAVORITES && openFavoriteAlbum != null)
+            }
             TopRow(
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
                 photoCount = if (folderMemory != null) gridItems.size else 0,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
-                onReview = when {
-                    isPrivateMode && section == Section.RECENT -> { { review = ViewerSource.PrivateRecent } }
-                    isPrivateMode && section == Section.FAVORITES -> when {
-                        openPrivateFavorite != null -> { { review = ViewerSource.InPrivateFavoriteGroup(openPrivateFavorite.name) } }
-                        isPrivateFavoritesGrouped -> null
-                        else -> { { review = ViewerSource.PrivateFavorites } }
-                    }
-                    section == Section.RECENT -> { { review = ViewerSource.Recent } }
-                    section == Section.FAVORITES && favoritesView == FavoritesView.All -> { { review = ViewerSource.Favorites } }
-                    openAlbum != null -> { { review = ViewerSource.InAlbum(openAlbum.id) } }
-                    openPrivateGroup != null -> { { review = ViewerSource.InPrivateGroup(openPrivateGroup.name) } }
-                    openLocation != null -> { { review = ViewerSource.InLocation(openLocation.key) } }
-                    section == Section.FAVORITES && openFavorite != null -> { { review = ViewerSource.InFavoriteAlbum(openFavorite.name) } }
-                    else -> null
-                },
+                onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
                 // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
                 onAdd = when {
                     isPrivateMode && section != Section.ALBUMS -> null
@@ -800,85 +813,77 @@ private fun Library(viewModel: GalleryViewModel) {
                 onSettings = { sheet = AppSheet.SETTINGS },
             )
 
-            val barModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp)
-            if (isRearranging) {
-                Box(barModifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
-                    CheckIcon(accent)
-                }
-            } else if (isSelectingCovers) {
-                Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
-                    val deleteModifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier
-                    if (selectedGroups.isNotEmpty()) {
-                        IconButton(onClick = { sheet = AppSheet.GROUP_MOVE_OUT }) { LockIcon(Palette.textBody, isOpen = true) }
-                        // Private groups are outside the system trash, so deleting them takes a second tap.
-                        IconButton(onClick = {
-                            if (isDeleteArmed) {
-                                selectedGroups.forEach { actions.deleteGroup(it) }
-                                clearSelection()
-                            } else {
-                                isDeleteArmed = true
-                            }
-                        }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
-                    } else {
-                        val isFavorites = section == Section.FAVORITES
-                        if (Settings.groupedAlbums || isFavorites) IconButton(onClick = { sheet = if (isFavorites) AppSheet.FAVORITE_ALBUM_STACK else AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
-                        IconButton(onClick = { sheet = AppSheet.ALBUM_GROUP }) { LockIcon(Palette.textBody) }
-                        // Whole albums at once, so it takes a second tap even though the trash can give them back; a Favorites album only lets its photos go, but cannot be brought back.
-                        IconButton(onClick = {
-                            if (isDeleteArmed) {
-                                if (isFavorites) {
-                                    val names = selectedAlbums.map { it.name }.toSet()
-                                    Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name !in names })
+            val bottomBar = when {
+                isRearranging -> BottomBar.REARRANGING
+                isSelectingCovers -> BottomBar.COVERS
+                isSelecting -> BottomBar.PHOTOS
+                else -> BottomBar.NAVIGATION
+            }
+            // The bar pops from one kind to the next instead of cutting, as the top buttons do.
+            AnimatedContent(
+                targetState = bottomBar,
+                transitionSpec = { BAR_ENTER.togetherWith(BAR_EXIT).using(SizeTransform(clip = false)) },
+                contentAlignment = Alignment.BottomCenter,
+                label = "bottomBar",
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
+            ) { shownBar ->
+                if (shownBar == BottomBar.REARRANGING) {
+                    Box(Modifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
+                        CheckIcon(accent)
+                    }
+                } else if (shownBar == BottomBar.COVERS) {
+                    Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
+                        val deleteModifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier
+                        if (selectedGroups.isNotEmpty()) {
+                            IconButton(onClick = { sheet = AppSheet.GROUP_MOVE_OUT }) { LockIcon(Palette.textBody, isOpen = true) }
+                            // Private groups are outside the system trash, so deleting them takes a second tap.
+                            IconButton(onClick = {
+                                if (isDeleteArmed) {
+                                    selectedGroups.forEach { actions.deleteGroup(it) }
+                                    clearSelection()
                                 } else {
-                                    actions.trash(selectedAlbums.flatMap { it.items })
+                                    isDeleteArmed = true
                                 }
+                            }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+                        } else {
+                            val isFavorites = section == Section.FAVORITES
+                            if (Settings.groupedAlbums) IconButton(onClick = { sheet = if (isFavorites) AppSheet.FAVORITE_ALBUM_STACK else AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
+                            IconButton(onClick = { sheet = AppSheet.ALBUM_GROUP }) { LockIcon(Palette.textBody) }
+                            // Hides every selected album from Recent, or shows them again once all of them are hidden.
+                            val hiddenKeys = selectedAlbums.map { if (isFavorites) hiddenFavoriteKey(it.name) else it.relativePath }.toSet()
+                            val isAllHidden = Settings.hiddenFromRecent.containsAll(hiddenKeys)
+                            IconButton(onClick = {
+                                Settings.updateHiddenFromRecent(if (isAllHidden) Settings.hiddenFromRecent - hiddenKeys else Settings.hiddenFromRecent + hiddenKeys)
                                 clearSelection()
-                            } else {
-                                isDeleteArmed = true
-                            }
-                        }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+                            }) { EyeIcon(Palette.textBody, isCrossed = !isAllHidden) }
+                            // Whole albums at once, so it takes a second tap even though the trash can give them back; a Favorites album only lets its photos go, but cannot be brought back.
+                            IconButton(onClick = {
+                                if (isDeleteArmed) {
+                                    if (isFavorites) {
+                                        val names = selectedAlbums.map { it.name }.toSet()
+                                        Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name !in names })
+                                    } else {
+                                        actions.trash(selectedAlbums.flatMap { it.items })
+                                    }
+                                    clearSelection()
+                                } else {
+                                    isDeleteArmed = true
+                                }
+                            }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+                        }
                     }
-                }
-            } else if (isSelecting) {
-                Row(barModifier.glass(Shapes.capsule).padding(5.dp)) {
-                  if (place is AlbumsPlace.Trash) {
-                    IconButton(onClick = {
-                        actions.restore(selectedItems)
-                        clearSelection()
-                    }) { RestoreIcon(accent) }
-                    // Out of the trash there is no coming back, so it takes a second tap.
-                    IconButton(
-                        onClick = {
-                            if (isDeleteArmed) {
-                                actions.deleteForever(selectedItems)
-                                clearSelection()
-                            } else {
-                                isDeleteArmed = true
-                            }
-                        },
-                        modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
-                    ) { TrashIcon(Palette.danger) }
-                  } else {
-                    IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
-                    val isInFavoriteAlbum = section == Section.FAVORITES && openFavorite != null
-                    if (selectedItems.size == 1 && (openAlbum != null || openPrivateGroup != null || isInFavoriteAlbum)) {
+                } else if (shownBar == BottomBar.PHOTOS) {
+                    Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
+                      if (place is AlbumsPlace.Trash) {
                         IconButton(onClick = {
-                            when {
-                                openAlbum != null -> viewModel.setAlbumCover(openAlbum.id, selectedItems.first())
-                                openPrivateGroup != null -> viewModel.setGroupCover(openPrivateGroup.name, selectedItems.first())
-                                openFavorite != null -> viewModel.setAlbumCover(openFavorite.id, selectedItems.first())
-                            }
-                            actions.announce("Set as cover")
+                            actions.restore(selectedItems)
                             clearSelection()
-                        }) { ImageIcon(Palette.textBody) }
-                    }
-                    if (isInPrivate) {
-                        IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { MoveIcon(Palette.textBody) }
-                        IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { LockIcon(Palette.textBody, isOpen = true) }
+                        }) { RestoreIcon(accent) }
+                        // Out of the trash there is no coming back, so it takes a second tap.
                         IconButton(
                             onClick = {
                                 if (isDeleteArmed) {
-                                    actions.deletePrivate(selectedItems)
+                                    actions.deleteForever(selectedItems)
                                     clearSelection()
                                 } else {
                                     isDeleteArmed = true
@@ -886,33 +891,73 @@ private fun Library(viewModel: GalleryViewModel) {
                             },
                             modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
                         ) { TrashIcon(Palette.danger) }
-                    } else {
-                        // The same bar as in albums; inside Favorites, moving goes between its own albums.
-                        IconButton(onClick = { sheet = if (section == Section.FAVORITES) AppSheet.FAVORITE_ALBUM_PICK else AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
-                        IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { LockIcon(Palette.textBody) }
-                        IconButton(onClick = {
-                            actions.trash(selectedItems)
-                            clearSelection()
-                        }) { TrashIcon(Palette.danger) }
+                      } else {
+                        IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+                        val isInFavoriteAlbum = section == Section.FAVORITES && openFavorite != null
+                        if (selectedItems.size == 1 && (openAlbum != null || openPrivateGroup != null || isInFavoriteAlbum)) {
+                            IconButton(onClick = {
+                                when {
+                                    openAlbum != null -> viewModel.setAlbumCover(openAlbum.id, selectedItems.first())
+                                    openPrivateGroup != null -> viewModel.setGroupCover(openPrivateGroup.name, selectedItems.first())
+                                    openFavorite != null -> viewModel.setAlbumCover(openFavorite.id, selectedItems.first())
+                                }
+                                actions.announce("Set as cover")
+                                clearSelection()
+                            }) { ImageIcon(Palette.textBody) }
+                        }
+                        if (isInPrivate) {
+                            IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { MoveIcon(Palette.textBody) }
+                            IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { LockIcon(Palette.textBody, isOpen = true) }
+                            IconButton(
+                                onClick = {
+                                    if (isDeleteArmed) {
+                                        actions.deletePrivate(selectedItems)
+                                        clearSelection()
+                                    } else {
+                                        isDeleteArmed = true
+                                    }
+                                },
+                                modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                            ) { TrashIcon(Palette.danger) }
+                        } else {
+                            // The same bar as in albums; inside Favorites, moving goes between its own albums.
+                            IconButton(onClick = { sheet = if (section == Section.FAVORITES) AppSheet.FAVORITE_ALBUM_PICK else AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
+                            IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { LockIcon(Palette.textBody) }
+                            IconButton(onClick = {
+                                actions.trash(selectedItems)
+                                clearSelection()
+                            }) { TrashIcon(Palette.danger) }
+                        }
+                      }
                     }
-                  }
-                }
-            } else {
-                SectionBar(
-                    active = section,
-                    onSelect = { selected ->
-                        if (selected == section) {
-                            when {
-                                selected == Section.ALBUMS -> albumsPlace = if (isPrivateMode) AlbumsPlace.PrivateGroups else AlbumsPlace.Folders
-                                selected == Section.FAVORITES && isPrivateMode && openPrivateFavoriteGroup != null -> openPrivateFavoriteGroup = null
-                                selected == Section.FAVORITES && !isPrivateMode && openFavoriteAlbum != null -> openFavoriteAlbum = null
-                                else -> scrollToNewestRequest++
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Inside Private the bar is Private's own, so it says so, with the way out beside it.
+                        AnimatedVisibility(isPrivateMode, enter = TOP_ENTER, exit = TOP_EXIT) {
+                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.pressable(onClick = leavePrivate).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(accent, size = 16.dp) }
+                                Box(Modifier.background(accent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                    BasicText("PRIVATE", style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                                }
                             }
                         }
-                        section = selected
-                    },
-                    modifier = barModifier,
-                )
+                        SectionBar(
+                            active = section,
+                            accentOf = { if (isPrivateMode) Palette.privateRed else it.accent },
+                            onSelect = { selected ->
+                                if (selected == section) {
+                                    when {
+                                        selected == Section.ALBUMS -> albumsPlace = if (isPrivateMode) AlbumsPlace.PrivateGroups else AlbumsPlace.Folders
+                                        selected == Section.FAVORITES && isPrivateMode && openPrivateFavoriteGroup != null -> openPrivateFavoriteGroup = null
+                                        selected == Section.FAVORITES && !isPrivateMode && openFavoriteAlbum != null -> openFavoriteAlbum = null
+                                        else -> scrollToNewestRequest++
+                                    }
+                                }
+                                section = selected
+                            },
+                        )
+                    }
+                }
             }
 
             // The selection's pickers. Moving out of Private goes to an album; moving within it goes to a group.
@@ -1004,8 +1049,8 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                    general = {
-                        SheetRow("Ungroup", trailing = stackPaths.size.toString(), icon = { CloseIcon(it) }) {
+                    groups = {
+                        SheetRow("Ungroup all", trailing = stackPaths.size.toString(), icon = { CloseIcon(it) }) {
                             Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != sheetStack })
                             sheet = AppSheet.NONE
                         }
@@ -1052,14 +1097,14 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                    group = GroupRow(
+                    group = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) GroupRow(
                         name = Settings.favoriteStacks.firstOrNull { it.paths.contains(albumName) }?.name,
                         onMove = { sheet = AppSheet.FAVORITE_ALBUM_STACK },
                         onRemove = {
                             Settings.updateFavoriteStacks(Settings.favoriteStacks.withoutAlbum(albumName))
                             sheet = AppSheet.NONE
                         },
-                    ),
+                    ) else null,
                     onPrivate = { sheet = AppSheet.ALBUM_GROUP },
                     isHiddenFromRecent = isHiddenFromRecent,
                     onToggleRecent = {
@@ -1094,8 +1139,8 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                    general = {
-                        SheetRow("Ungroup", trailing = stackNames.size.toString(), icon = { CloseIcon(it) }) {
+                    groups = {
+                        SheetRow("Ungroup all", trailing = stackNames.size.toString(), icon = { CloseIcon(it) }) {
                             Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != sheetStack })
                             sheet = AppSheet.NONE
                         }
@@ -1116,6 +1161,8 @@ private fun Library(viewModel: GalleryViewModel) {
 
             SettingsSheet(
                 visible = sheet == AppSheet.SETTINGS,
+                isCovers = folderMemory == null,
+                onReview = reviewAction,
                 onDismiss = { sheet = AppSheet.NONE },
                 // Only the grids of the view whose setting changed take the new count.
                 onColumnsChanged = { columns ->
@@ -1137,7 +1184,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                    general = {
+                    groups = {
                         SheetRow(
                             if (isMenuDeleteArmed) "Tap again: delete ${sheetGroup?.items?.size ?: 0} photos forever" else "Delete group",
                             color = Palette.danger,
@@ -1539,24 +1586,26 @@ private fun ViewerSource?.isPrivateSource(): Boolean =
 private const val PRIVATE_FAVORITE_GRID = "\tgrid"
 private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 
-// The top layer: the month you are looking at, or — while selecting — the count and the way out of the selection. Leaving a folder is the system back gesture.
+// The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
-        // Unclipped, so the count hanging under the month pill shows past the row.
+        // Unclipped, so the count hanging over the month pill shows past the row.
         transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Room above for the count that hangs over the month pill.
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 8.dp + COUNT_ROOM, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (isSelecting) {
                 TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
                 Box(Modifier.weight(1f))
                 Chip("$selectedCount selected")
             } else {
-                // The month sits at the left end and types itself over as it changes; the buttons gather at the right.
+                // Back sits at the far left, then the month, which types itself over as it changes; the buttons gather at the right.
+                ShownTopButton(onBack, isGapAfter = true) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(month.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
                     var lastMonth by remember { mutableStateOf(month) }
                     var lastCount by remember { mutableStateOf(photoCount) }
@@ -1564,14 +1613,18 @@ private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onReview:
                         lastMonth = month
                         lastCount = photoCount
                     }
-                    BelowCentred(below = { TypewriterText(lastCount.toString(), style = Type.microLabel.copy(color = Palette.textMuted)) }) {
+                    AboveCentred(above = {
+                        // On black, so the count reads over any photo scrolling under it.
+                        Box(Modifier.background(Palette.viewerGround, Shapes.capsule).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                            TypewriterText(lastCount.toString(), style = Type.microLabel.copy(color = Palette.textMuted))
+                        }
+                    }) {
                         Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
                             TypewriterText(lastMonth.uppercase(), style = Type.microLabel)
                         }
                     }
                 }
                 Box(Modifier.weight(1f))
-                ShownTopButton(onReview) { ReviewIcon(LocalAccent.current) }
                 ShownTopButton(onAdd) { PlusIcon(LocalAccent.current) }
                 // The icon shows where a tap goes: the grid of every favourite, or the albums.
                 ShownTopButton(onToggleView) {
@@ -1585,20 +1638,27 @@ private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onReview:
     }
 }
 
-// `content` with `below` centred under it, hanging outside its bounds, so the row around it keeps the height of the content alone.
+// `content` with `above` centred over it, hanging outside its bounds, so the row around it keeps the height of the content alone.
 @Composable
-private fun BelowCentred(below: @Composable () -> Unit, content: @Composable () -> Unit) {
-    Layout(contents = listOf(content, below)) { (contentMeasurables, belowMeasurables), constraints ->
+private fun AboveCentred(above: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Layout(contents = listOf(content, above)) { (contentMeasurables, aboveMeasurables), constraints ->
         val main = contentMeasurables.first().measure(constraints)
-        val hanging = belowMeasurables.first().measure(Constraints())
+        val hanging = aboveMeasurables.first().measure(Constraints())
         layout(main.width, main.height) {
             main.place(0, 0)
-            hanging.place((main.width - hanging.width) / 2, main.height + BELOW_GAP.roundToPx())
+            hanging.place((main.width - hanging.width) / 2, -hanging.height - ABOVE_GAP.roundToPx())
         }
     }
 }
 
-private val BELOW_GAP = 6.dp
+private val ABOVE_GAP = 4.dp
+
+// What the bottom bar is showing: the sections, a selection's actions, or the end of rearranging.
+private enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }
+
+// The bottom bar swaps with a smaller pop than a single button, being wide.
+private val BAR_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0.8f)
+private val BAR_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn), targetScale = 0.8f)
 
 // Top buttons pop: they grow in past full size and settle, and shrink away to nothing, in place rather than sliding.
 private val TOP_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
@@ -1606,12 +1666,12 @@ private val TOP_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn
 
 // A top button that is there only while it has something to do; it keeps its last action while it leaves.
 @Composable
-private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit) {
+private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, isGapAfter: Boolean = false, icon: @Composable () -> Unit) {
     var lastClick by remember { mutableStateOf(onClick) }
     if (onClick != null) lastClick = onClick
     AnimatedVisibility(onClick != null, enter = TOP_ENTER, exit = TOP_EXIT) {
         // The gap rides inside, so it comes and goes with the button.
-        Box(Modifier.padding(start = 8.dp)) { TopButton({ lastClick?.invoke() }, icon) }
+        Box(if (isGapAfter) Modifier.padding(end = 8.dp) else Modifier.padding(start = 8.dp)) { TopButton({ lastClick?.invoke() }, icon) }
     }
 }
 

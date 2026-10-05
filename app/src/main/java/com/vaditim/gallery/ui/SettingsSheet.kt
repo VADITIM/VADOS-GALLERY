@@ -46,14 +46,21 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 
-// The settings, as a sheet in two tabs: what the app does, and how it looks. The look tab keeps the glass settings, so their effect can be watched on the sheet itself while they are dragged.
-private enum class SettingsTab(val label: String) { GENERAL("GENERAL"), INTERFACE("INTERFACE") }
+// The settings, as a sheet in three tabs: the place you are in, what the app does everywhere, and how it looks. The look tab keeps the glass settings, so their effect can be watched on the sheet itself while they are dragged.
+private enum class SettingsTab { PLACE, GENERAL, INTERFACE }
 
+// The first tab is named after the view it changes, since each view keeps its own grid and album settings.
+private fun SettingsTab.label(): String = when (this) {
+    SettingsTab.PLACE -> Settings.view.label.uppercase()
+    SettingsTab.GENERAL -> "GENERAL"
+    SettingsTab.INTERFACE -> "INTERFACE"
+}
+
+// `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any.
 @Composable
-fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
-    var tab by remember { mutableStateOf(SettingsTab.GENERAL) }
-    // Named at the right with the view it changes, since each view keeps its own grid and album settings.
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, trailingLabel = Settings.view.label.uppercase()) {
+fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
+    var tab by remember { mutableStateOf(SettingsTab.PLACE) }
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss) {
         SettingsTabs(tab, onSelect = { tab = it })
         AnimatedContent(
             targetState = tab,
@@ -66,7 +73,15 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
         ) { shown ->
             Column {
                 when (shown) {
-                    SettingsTab.GENERAL -> {
+                    SettingsTab.PLACE -> if (isCovers) {
+                        SettingsHeader("Albums")
+                        // Grouped albums lie as rows, so the column count only counts with grouping off.
+                        val canGroup = Settings.view.canGroup
+                        if (canGroup) SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
+                        SheetRow("Album columns", trailing = Settings.albumColumns.toString(), isEnabled = !(canGroup && Settings.groupedAlbums)) {
+                            Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
+                        }
+                    } else {
                         SettingsHeader("Photos")
                         SheetRow("Image columns", trailing = Settings.defaultColumns.toString()) {
                             val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
@@ -78,16 +93,17 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
                         }
                         SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
                         SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
-                        if (Settings.view.hasCovers) SettingsHeader("Albums")
-                        // Only Albums groups its folders; grouped albums lie as rows, so the column count only exists with grouping off.
-                        if (Settings.view == SettingsView.ALBUMS) SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
-                        if (Settings.view.hasCovers && !Settings.groupedAlbums) {
-                            SheetRow("Album columns", trailing = Settings.albumColumns.toString()) {
-                                Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
-                            }
-                        }
+                    }
+                    SettingsTab.GENERAL -> {
                         SettingsHeader("Videos")
                         SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
+                        if (onReview != null) {
+                            SettingsHeader("Review")
+                            SheetRow("Review photos", trailing = Settings.view.label, icon = { ReviewIcon(it) }) {
+                                onDismiss()
+                                onReview()
+                            }
+                        }
                     }
                     SettingsTab.INTERFACE -> {
                         SettingsHeader("Overlays")
@@ -102,7 +118,7 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
     }
 }
 
-// The two tabs as one capsule; the accent fill slides under the chosen one.
+// The tabs as one capsule; the accent fill slides under the chosen one.
 @Composable
 private fun SettingsTabs(active: SettingsTab, onSelect: (SettingsTab) -> Unit) {
     val accent = LocalAccent.current
@@ -124,7 +140,7 @@ private fun SettingsTabs(active: SettingsTab, onSelect: (SettingsTab) -> Unit) {
                     Modifier.weight(1f).pressable(onClick = { onSelect(tab) }, pressedScale = 0.96f).padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    BasicText(tab.label, style = Type.navigation.copy(color = if (tab == active) Palette.sunkenDeep else Palette.textMuted))
+                    BasicText(tab.label(), style = Type.navigation.copy(color = if (tab == active) Palette.sunkenDeep else Palette.textMuted))
                 }
             }
         }

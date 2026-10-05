@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -115,10 +116,13 @@ fun SheetHeader(text: String) {
     MicroLabel(text, Modifier.padding(start = 20.dp, top = 18.dp, bottom = 2.dp))
 }
 
+private const val DISABLED_ALPHA = 0.38f
+
 @Composable
-fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, icon: (@Composable (Color) -> Unit)? = null, onClick: () -> Unit) {
+fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, icon: (@Composable (Color) -> Unit)? = null, isEnabled: Boolean = true, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().rowDivider().pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
+        // A row that does not apply right now stays in its place, greyed, so the list does not jump as it comes and goes.
+        Modifier.fillMaxWidth().rowDivider().then(if (isEnabled) Modifier.pressable(onClick = onClick, pressedScale = 0.98f) else Modifier.alpha(DISABLED_ALPHA)).padding(horizontal = 20.dp, vertical = 15.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
