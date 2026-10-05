@@ -936,13 +936,46 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Inside Private the bar is Private's own, so it says so, with the way out beside it.
-                        AnimatedVisibility(isPrivateMode, enter = TOP_ENTER, exit = TOP_EXIT) {
+                        // Inside Private or Locations the bar belongs to that place, so it says so, with the way out beside it.
+                        val isInLocations = place == AlbumsPlace.Locations || place is AlbumsPlace.Location
+                        val placePill = when {
+                            isPrivateMode -> "PRIVATE"
+                            isInLocations -> "LOCATIONS"
+                            else -> null
+                        }
+                        var lastPill by remember { mutableStateOf(placePill ?: "") }
+                        if (placePill != null) lastPill = placePill
+                        AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
                             Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.pressable(onClick = leavePrivate).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(accent, size = 16.dp) }
+                                Box(Modifier.pressable(onClick = {
+                                    when {
+                                        isPrivateMode -> leavePrivate()
+                                        place is AlbumsPlace.Location -> albumsPlace = AlbumsPlace.Locations
+                                        else -> albumsPlace = AlbumsPlace.Folders
+                                    }
+                                }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(accent, size = 16.dp) }
                                 Box(Modifier.background(accent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                    BasicText("PRIVATE", style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                                    BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
                                 }
+                            }
+                        }
+                        // Empties the whole trash for good, so it takes a second tap.
+                        AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
+                            Box(
+                                Modifier.padding(bottom = 8.dp)
+                                    .pressable(onClick = {
+                                        if (isDeleteArmed) {
+                                            actions.deleteForever(trash)
+                                            isDeleteArmed = false
+                                        } else {
+                                            isDeleteArmed = true
+                                        }
+                                    })
+                                    .glass(Shapes.capsule)
+                                    .then(if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            ) {
+                                BasicText("DELETE NOW", style = Type.microLabel.copy(color = Palette.danger))
                             }
                         }
                         SectionBar(

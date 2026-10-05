@@ -1,1 +1,2 @@
-- Fixed the app crashing on launch since 0.91.
+- Locations show a LOCATIONS pill with a back button above the nav, like Private.
+- Trash has a Delete now button above the nav that empties it for good (tap twice).
