@@ -38,7 +38,7 @@ the Apple order. The thumb is at the bottom of the screen and so is the photo ju
 
 - A new photo arriving while the grid is at its newest end keeps the grid pinned there.
 - A grid scrolled back in time stays where it is when something new arrives.
-- Tapping the bar entry of the section already shown scrolls home, to the newest end.
+- Tapping the bar entry of the section already shown scrolls home, to the newest end. Coming back to a section from another keeps it where it was left.
 - Each grid remembers its own position when you switch sections and come back.
 
 ### RECENT

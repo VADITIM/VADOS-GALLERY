@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
+import com.vaditim.gallery.SettingsView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,7 +71,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
     val haptic = LocalHapticFeedback.current
     ProvideEntrance {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(Settings.coverColumns),
+        columns = GridCells.Fixed(coverColumns()),
         state = state,
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -78,19 +80,28 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
             bottom = contentPadding.calculateBottomPadding() + 12.dp,
         ),
         horizontalArrangement = Arrangement.spacedBy(COVER_GAP),
-        verticalArrangement = Arrangement.spacedBy(if (Settings.coverColumns == 1) 12.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (coverColumns() == 1) 12.dp else 20.dp),
         modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
         content = content,
     )
     }
 }
 
+// The view a screen belongs to, held by each section while it leaves, so a section change never re-lays the outgoing covers with the incoming view's settings.
+val LocalSettingsView = compositionLocalOf<SettingsView?> { null }
+
+@Composable
+fun currentSettingsView(): SettingsView = LocalSettingsView.current ?: Settings.view
+
+@Composable
+fun coverColumns(): Int = Settings.coverColumnsIn(currentSettingsView())
+
 // Whether cover names take the section colour, as the albums made inside Favorites do; real folders keep plain names.
 val LocalAccentedCoverNames = staticCompositionLocalOf { false }
 
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = Settings.coverColumns == 1) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = coverColumns() == 1) {
     val request = rememberCoverRequest(cover)
     val nameColor = if (LocalAccentedCoverNames.current) LocalAccent.current else Palette.textBright
     if (isList) {
@@ -190,7 +201,7 @@ fun SpanCell(span: Int, modifier: Modifier = Modifier, content: @Composable () -
 // The "make a new one" card at the end of a grid of covers: albums and private groups both end with one.
 @Composable
 fun AddCard(label: String, onClick: () -> Unit) {
-    if (Settings.coverColumns == 1) {
+    if (coverColumns() == 1) {
         Row(Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) {
                 BasicText("+", style = Type.title.copy(color = LocalAccent.current))

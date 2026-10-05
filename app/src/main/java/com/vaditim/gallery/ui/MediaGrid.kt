@@ -187,8 +187,10 @@ fun MediaGrid(
     }
 
     // Tapping the section the bar already shows takes you home, which here is the newest end.
+    // Only a tap made while this grid is shown scrolls it; coming back to it keeps where it was left.
+    val requestOnArrival = remember { scrollToNewestRequest }
     LaunchedEffect(scrollToNewestRequest) {
-        if (scrollToNewestRequest > 0 && entries.isNotEmpty()) state.animateScrollToItem(entries.lastIndex)
+        if (scrollToNewestRequest != requestOnArrival && entries.isNotEmpty()) state.animateScrollToItem(entries.lastIndex)
     }
 
     if (items.isEmpty()) {

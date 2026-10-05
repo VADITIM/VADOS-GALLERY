@@ -86,7 +86,7 @@ private fun entriesOf(albums: List<Album>, stacks: List<AlbumStack>): List<Album
 fun AlbumsScreen(
     albums: List<Album>,
     title: String = "Albums",
-    stacks: List<AlbumStack> = if (Settings.groupedAlbums) Settings.albumStacks else emptyList(),
+    stacks: List<AlbumStack> = if (Settings.groupedAlbumsIn(currentSettingsView())) Settings.albumStacks else emptyList(),
     state: LazyGridState,
     onOpen: (Album) -> Unit,
     onLongPress: (Album) -> Unit,
@@ -123,7 +123,7 @@ fun AlbumsScreen(
     val glide = if (movingGroups.isEmpty()) tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut) else null
 
     // Every group is a row of its own, so the albums before it end their row early.
-    val spans = remember(entries, Settings.coverColumns) { spansOf(entries, Settings.coverColumns) }
+    val spans = coverColumns().let { columns -> remember(entries, columns) { spansOf(entries, columns) } }
 
     CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {

@@ -128,7 +128,8 @@ object Settings {
         }.orEmpty()
 
     // With Grouped albums on, the albums lie as rows beside the groups, so the column count only applies with it off.
-    val coverColumns: Int get() = if (groupedAlbums && view.canGroup) 1 else albumColumns
+    val coverColumns: Int get() = coverColumnsIn(view)
+    fun coverColumnsIn(view: SettingsView): Int = if (groupedAlbumsIn(view) && view.canGroup) 1 else albumColumnsIn(view)
 
     fun updateGroundBrightness(value: Float) {
         groundBrightness = value.coerceIn(0f, 1f)

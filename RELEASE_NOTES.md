@@ -1,4 +1,2 @@
-- Restore in Trash asks first: restore where it was, or restore into an album.
-- Deleting no longer needs a second tap on the button: a Confirm pill appears above the nav instead.
-- Opening a group pushes the rows below it out of the way as it opens, so nothing overlaps.
-- Closing a group sweeps its name back in, like the heading does when it opens.
+- Coming back to Recent keeps it where you left it; tapping Recent again still scrolls to the newest.
+- Switching between Recent and Albums or Favorites no longer makes the albums jump around.

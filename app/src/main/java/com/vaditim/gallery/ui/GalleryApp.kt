@@ -537,8 +537,14 @@ private fun Library(viewModel: GalleryViewModel) {
                 label = "section",
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { (shown, isPrivateShown) ->
+                // While this section is the one shown it follows the current view; leaving, it keeps the last one it had.
+                var ownView by remember { mutableStateOf(settingsView) }
+                if (shown == section && isPrivateShown == (isPrivateMode && section != Section.ALBUMS)) ownView = settingsView
                 // Each section keeps its own accent while it leaves, so the outgoing one never takes on the next one's colour.
-                CompositionLocalProvider(LocalAccent provides if (isPrivateShown || (shown == Section.ALBUMS && isPrivateMode)) Palette.privateRed else shown.accent) {
+                CompositionLocalProvider(
+                    LocalAccent provides if (isPrivateShown || (shown == Section.ALBUMS && isPrivateMode)) Palette.privateRed else shown.accent,
+                    LocalSettingsView provides ownView,
+                ) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(
                         items = privateRecent,
