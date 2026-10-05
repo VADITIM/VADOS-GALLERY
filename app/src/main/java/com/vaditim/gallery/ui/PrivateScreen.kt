@@ -52,9 +52,6 @@ import com.vaditim.gallery.vault.PrivateGroup
 import kotlin.random.Random
 
 
-// The entry to Private, at the foot of the albums list where Apple keeps Hidden: present, never in the way.
-@Composable
-fun PrivateEntry(onClick: () -> Unit) = FolderEntry("Private", Palette.privateRed, icon = { LockIcon(it) }, onClick = onClick)
 
 @Composable
 fun PrivateGroupsScreen(

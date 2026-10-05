@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -29,24 +31,32 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 
-// A row at the foot of Albums (Locations, Trash, Private): its icon and name in its place's colour.
+// A tile at the foot of Albums (Private, Locations, Trash), as big as an album cover: its icon in the middle, its name in its place's colour below.
 @Composable
-fun FolderEntry(title: String, color: Color, icon: @Composable (Color) -> Unit, onClick: () -> Unit, count: Int? = null) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .pressable(onClick = onClick, pressedScale = 0.97f)
-            .clip(Shapes.panel)
-            .background(Palette.surface)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        icon(color)
-        BasicText(title, style = Type.cardTitle.copy(color = color), modifier = Modifier.weight(1f))
-        if (count != null && count > 0) BasicText(count.toString(), style = Type.value)
+fun FolderEntry(title: String, color: Color, icon: @Composable (Color) -> Unit, onClick: () -> Unit, modifier: Modifier = Modifier, count: Int? = null) {
+    Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) {
+            icon(color)
+        }
+        Row(Modifier.padding(start = 4.dp, top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicText(title, style = Type.cardTitle.copy(color = color), maxLines = 1)
+            if (count != null && count > 0) BasicText(count.toString(), style = Type.value)
+        }
     }
 }
+
+// The three tiles at the foot of Albums, a row of three whatever the albums' own columns are.
+@Composable
+fun FolderEntries(onPrivate: () -> Unit, onLocations: () -> Unit, onTrash: () -> Unit, trashCount: Int) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COVER_GAP)) {
+        FolderEntry("Private", Palette.privateRed, icon = { LockIcon(it, size = FOLDER_ICON) }, onClick = onPrivate, modifier = Modifier.weight(1f))
+        FolderEntry("Locations", Palette.locationBlue, icon = { PinIcon(it, size = FOLDER_ICON) }, onClick = onLocations, modifier = Modifier.weight(1f))
+        FolderEntry("Trash", Palette.trashGray, icon = { TrashIcon(it, size = FOLDER_ICON) }, onClick = onTrash, modifier = Modifier.weight(1f), count = trashCount)
+    }
+}
+
+// A little larger than the icons on buttons, so it holds the middle of a cover.
+private val FOLDER_ICON = 34.dp
 
 // A hairline with room around it between the albums and the rows after them, so the rows read as their own places.
 @Composable

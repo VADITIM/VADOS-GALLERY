@@ -1,5 +1,3 @@
-# v0.99
+# v0.100
 
-- Groups in Albums sit as close together as they did before v0.94.
-- Opening or closing a group still pushes the groups below instead of overlapping them.
-- The Private button in Albums has a lock icon, like Locations and Trash have theirs.
+- Private, Locations and Trash at the end of Albums are now three album-sized tiles in one row, each with its icon larger in the middle.
