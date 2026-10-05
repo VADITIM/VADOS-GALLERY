@@ -186,7 +186,8 @@ fun ViewerScreen(
                 // No back button: the system back gesture or a swipe down closes the viewer.
                 horizontalArrangement = Arrangement.End,
             ) {
-                ChromePiece(isChromeShown, isFromTop = true, order = 0, pull = { maxOf(pull, lift) }) {
+                // The date stays through a swipe up: the details rise below it and it is still there once they are open.
+                ChromePiece(isChromeShown, isFromTop = true, order = 0, pull = { pull }) {
                     Row(
                         Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,

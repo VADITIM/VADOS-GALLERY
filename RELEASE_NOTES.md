@@ -1,2 +1,3 @@
-- Review: the photo fills the whole screen again, on black outside its own shape; the upcoming photos, buttons, count and progress float over it.
-- Review: a soft shade at the bottom keeps the controls readable over bright photos.
+# 0.66
+
+- Swiping up for details no longer moves the date at the top; it stays in place.
