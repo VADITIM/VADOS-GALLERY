@@ -126,8 +126,6 @@ class TimelineGrab {
     var labelSlack = 0f
     var trackTop = 0f
     var trackHeight = 0f
-    // Which edge the finger holds, so the month bubble shows beside it.
-    var isHeldAtStart by mutableStateOf(false)
 
     fun takes(root: Offset): Boolean {
         val timeline = timeline?.takeIf { isActive && it.isAttached } ?: return false
@@ -135,11 +133,8 @@ class TimelineGrab {
         // Only the window's stretch of each edge takes a finger.
         if (local.y < trackTop - labelSlack || local.y > trackTop + trackHeight + labelSlack) return false
         val isOnStrip = local.x >= timeline.size.width - stripWidth || local.x <= stripWidth
-        if (isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }) {
-            isHeldAtStart = local.x < timeline.size.width / 2f
-            return true
-        }
-        return false
+        // The timeline is drawn on the left, but either edge takes hold of it, so it reaches under either thumb.
+        return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
     }
 
     fun trackY(root: Offset): Float = (timeline?.windowToLocal(root)?.y ?: 0f) - trackTop
@@ -164,7 +159,7 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         }
     }
 
-// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a short window, drawn on both edges of the grid. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, months shrink away from it and years hold the window's ends. Held at either edge, the marker is the finger and the label under it is where the grid goes.
+// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a short window, drawn along the grid's left edge, and taken hold of from either edge. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, months shrink away from it and years hold the window's ends. Held at either edge, the marker is the finger and the label under it is where the grid goes.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
@@ -293,12 +288,12 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
 
         // Only the labels that show are composed; the set changes a label at a time, never per frame.
         val shownSlots by remember(labels, top, track) { derivedStateOf { labels.indices.filter { placement.presence[it] > 0f } } }
-        for (isStart in listOf(true, false)) {
-            val side = if (isStart) Alignment.TopStart else Alignment.TopEnd
+        run {
+            val side = Alignment.TopStart
             shownSlots.forEach { slot ->
                 val label = labels[slot]
-                val grabKey = label to isStart
-                key(label, isStart) {
+                val grabKey = label
+                key(label) {
                     DisposableEffect(grabKey) { onDispose { grab.labels.remove(grabKey) } }
                     val isMonth = label.month != null
                     val isCurrent = if (isMonth) label.month == shownMark else label.year == shownMark?.month?.year
@@ -312,13 +307,13 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                         modifier = Modifier
                             .align(side)
                             .offset { IntOffset(0, (placement.places[slot] - labelHalf).roundToInt()) }
-                            .padding(start = if (isStart) STRIP_WIDTH - 4.dp else 0.dp, end = if (isStart) 0.dp else STRIP_WIDTH - 4.dp)
+                            .padding(start = STRIP_WIDTH - 4.dp)
                             // The label itself can be taken hold of, not only the strip beside it.
                             .onGloballyPositioned { grab.labels[grabKey] = it }
                             .graphicsLayer {
                                 alpha = placement.presence.getOrElse(slot) { 0f }
-                                // Shrinks toward its own edge of the screen, so every label keeps that side on the line.
-                                transformOrigin = TransformOrigin(if (isStart) 0f else 1f, 0.5f)
+                                // Shrinks toward the edge of the screen, so every label keeps its left side on the line.
+                                transformOrigin = TransformOrigin(0f, 0.5f)
                                 scaleX = label.sizeAt(slot - position())
                                 scaleY = scaleX
                             }
@@ -334,7 +329,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                 Modifier
                     .align(side)
                     .offset { IntOffset(0, (markerY(position()) - thumbHalf).roundToInt()) }
-                    .padding(start = if (isStart) 6.dp else 0.dp, end = if (isStart) 0.dp else 6.dp)
+                    .padding(start = 6.dp)
                     .size(width = 4.dp, height = THUMB_HEIGHT)
                     .clip(Shapes.capsule)
                     .background(if (isHeld) accent else Palette.textMuted),
@@ -342,15 +337,14 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         }
 
         heldMark?.let { mark ->
-            val isStart = grab.isHeldAtStart
             BasicText(
                 BUBBLE_FORMAT.format(mark.month).uppercase(Locale.ENGLISH),
                 style = Type.microLabel.copy(color = Palette.textBright),
                 maxLines = 1,
                 modifier = Modifier
-                    .align(if (isStart) Alignment.TopStart else Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .offset { IntOffset(0, (markerY(position()) - labelHalf * 1.6f).roundToInt()) }
-                    .padding(start = if (isStart) 76.dp else 0.dp, end = if (isStart) 0.dp else 76.dp)
+                    .padding(start = 76.dp)
                     .graphicsLayer { alpha = reveal }
                     .glass(Shapes.capsule)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
