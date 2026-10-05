@@ -150,7 +150,7 @@ private val AlbumsPlace.isPrivate: Boolean
 private enum class AppSheet {
     NONE,
     NEW_ALBUM,
-    SETTINGS, ALBUM_RENAME, GROUP_RENAME, CONFIRM_PRIVATE, SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
+    SETTINGS, TRASH_RESTORE, ALBUM_RENAME, GROUP_RENAME, CONFIRM_PRIVATE, SELECTION_MOVE, SELECTION_NEW_ALBUM, SELECTION_GROUP, SELECTION_NEW_GROUP,
     ALBUM_MENU, ALBUM_GROUP, ALBUM_NEW_GROUP,
     GROUP_MENU, GROUP_MOVE_OUT, GROUP_MOVE_OUT_NEW_ALBUM,
     PRIVATE_NEW_GROUP,
@@ -240,7 +240,8 @@ private fun Library(viewModel: GalleryViewModel) {
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     // Albums (by folder path) or private groups (by name) picked in a cover grid; only one of the two grids is ever on screen.
     var selectedCovers by remember { mutableStateOf(emptySet<String>()) }
-    var isDeleteArmed by remember { mutableStateOf(false) }
+    // A delete that waits for the Confirm above the bar; anything else the user does lets it go.
+    var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
     var sheetGroup by remember { mutableStateOf<PrivateGroup?>(null) }
@@ -385,12 +386,12 @@ private fun Library(viewModel: GalleryViewModel) {
     val selection = Selection(selectedIds) { item ->
         selectedIds = if (item.id in selectedIds) selectedIds - item.id else selectedIds + item.id
         Haptics.tick(context)
-        isDeleteArmed = false
+        pendingDelete = null
     }
     val clearSelection = {
         selectedIds = emptySet()
         selectedCovers = emptySet()
-        isDeleteArmed = false
+        pendingDelete = null
         sheet = AppSheet.NONE
     }
     LaunchedEffect(section, albumsPlace, favoritesView, isPrivateMode, openPrivateFavoriteGroup, isPrivateFavoritesGrouped) {
@@ -411,7 +412,7 @@ private fun Library(viewModel: GalleryViewModel) {
     val toggleCovers: (List<String>) -> Unit = { keys ->
         selectedCovers = if (keys.all { it in selectedCovers }) selectedCovers - keys.toSet() else selectedCovers + keys
         Haptics.tick(context)
-        isDeleteArmed = false
+        pendingDelete = null
     }
 
     // Leaving the app locks Private again, and drops anyone standing in it back to the albums list.
@@ -817,13 +818,31 @@ private fun Library(viewModel: GalleryViewModel) {
                 isSelecting -> BottomBar.PHOTOS
                 else -> BottomBar.NAVIGATION
             }
+            Column(
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+            // A delete waits here, above everything else over the bar, until it is confirmed.
+            AnimatedVisibility(pendingDelete != null, enter = TOP_ENTER, exit = TOP_EXIT) {
+                Box(
+                    Modifier.padding(bottom = 8.dp)
+                        .pressable(onClick = {
+                            val delete = pendingDelete
+                            pendingDelete = null
+                            delete?.invoke()
+                        })
+                        .background(Palette.danger, Shapes.capsule)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                }
+            }
             // The bar pops from one kind to the next instead of cutting, as the top buttons do.
             AnimatedContent(
                 targetState = bottomBar,
                 transitionSpec = { BAR_ENTER.togetherWith(BAR_EXIT).using(SizeTransform(clip = false)) },
                 contentAlignment = Alignment.BottomCenter,
                 label = "bottomBar",
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
             ) { shownBar ->
                 if (shownBar == BottomBar.REARRANGING) {
                     Box(Modifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
@@ -831,16 +850,14 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 } else if (shownBar == BottomBar.COVERS) {
                     Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
-                        val deleteModifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier
+                        val deleteModifier = if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier
                         if (selectedGroups.isNotEmpty()) {
                             IconButton(onClick = { sheet = AppSheet.GROUP_MOVE_OUT }) { LockIcon(Palette.textBody, isOpen = true) }
-                            // Private groups are outside the system trash, so deleting them takes a second tap.
+                            // Private groups are outside the system trash, so deleting them waits for Confirm.
                             IconButton(onClick = {
-                                if (isDeleteArmed) {
+                                pendingDelete = {
                                     selectedGroups.forEach { actions.deleteGroup(it) }
                                     clearSelection()
-                                } else {
-                                    isDeleteArmed = true
                                 }
                             }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
                         } else {
@@ -854,9 +871,9 @@ private fun Library(viewModel: GalleryViewModel) {
                                 Settings.updateHiddenFromRecent(if (isAllHidden) Settings.hiddenFromRecent - hiddenKeys else Settings.hiddenFromRecent + hiddenKeys)
                                 clearSelection()
                             }) { EyeIcon(Palette.textBody, isCrossed = !isAllHidden) }
-                            // Whole albums at once, so it takes a second tap even though the trash can give them back; a Favorites album only lets its photos go, but cannot be brought back.
+                            // Whole albums at once, so it waits for Confirm even though the trash can give them back; a Favorites album only lets its photos go, but cannot be brought back.
                             IconButton(onClick = {
-                                if (isDeleteArmed) {
+                                pendingDelete = {
                                     if (isFavorites) {
                                         val names = selectedAlbums.map { it.name }.toSet()
                                         Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name !in names })
@@ -864,8 +881,6 @@ private fun Library(viewModel: GalleryViewModel) {
                                         actions.trash(selectedAlbums.flatMap { it.items })
                                     }
                                     clearSelection()
-                                } else {
-                                    isDeleteArmed = true
                                 }
                             }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
                         }
@@ -873,21 +888,16 @@ private fun Library(viewModel: GalleryViewModel) {
                 } else if (shownBar == BottomBar.PHOTOS) {
                     Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
                       if (place is AlbumsPlace.Trash) {
-                        IconButton(onClick = {
-                            actions.restore(selectedItems)
-                            clearSelection()
-                        }) { RestoreIcon(accent) }
-                        // Out of the trash there is no coming back, so it takes a second tap.
+                        IconButton(onClick = { sheet = AppSheet.TRASH_RESTORE }) { RestoreIcon(accent) }
+                        // Out of the trash there is no coming back, so it waits for Confirm.
                         IconButton(
                             onClick = {
-                                if (isDeleteArmed) {
+                                pendingDelete = {
                                     actions.deleteForever(selectedItems)
                                     clearSelection()
-                                } else {
-                                    isDeleteArmed = true
                                 }
                             },
-                            modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                            modifier = if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
                         ) { TrashIcon(Palette.danger) }
                       } else {
                         IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
@@ -914,14 +924,12 @@ private fun Library(viewModel: GalleryViewModel) {
                             IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { LockIcon(Palette.textBody, isOpen = true) }
                             IconButton(
                                 onClick = {
-                                    if (isDeleteArmed) {
+                                    pendingDelete = {
                                         actions.deletePrivate(selectedItems)
                                         clearSelection()
-                                    } else {
-                                        isDeleteArmed = true
                                     }
                                 },
-                                modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                                modifier = if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
                             ) { TrashIcon(Palette.danger) }
                         } else {
                             // The same bar as in albums; inside Favorites, moving goes between its own albums.
@@ -959,20 +967,13 @@ private fun Library(viewModel: GalleryViewModel) {
                                 }
                             }
                         }
-                        // Empties the whole trash for good, so it takes a second tap.
+                        // Empties the whole trash for good, so it waits for Confirm.
                         AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
                             Box(
                                 Modifier.padding(bottom = 8.dp)
-                                    .pressable(onClick = {
-                                        if (isDeleteArmed) {
-                                            actions.deleteForever(trash)
-                                            isDeleteArmed = false
-                                        } else {
-                                            isDeleteArmed = true
-                                        }
-                                    })
+                                    .pressable(onClick = { pendingDelete = { actions.deleteForever(trash) } })
                                     .glass(Shapes.capsule)
-                                    .then(if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier)
+                                    .then(if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier)
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             ) {
                                 BasicText("DELETE NOW", style = Type.microLabel.copy(color = Palette.danger))
@@ -996,15 +997,35 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 }
             }
+            }
+
+            // Restoring asks where to: back where each came from, or into one album.
+            OverlaySheet(visible = sheet == AppSheet.TRASH_RESTORE, label = "RESTORE", onDismiss = { sheet = AppSheet.NONE }) {
+                Column {
+                    SheetRow("Restore", icon = { RestoreIcon(it) }) {
+                        actions.restore(selectedItems)
+                        clearSelection()
+                    }
+                    SheetRow("Restore to album", icon = { MoveIcon(it) }) { sheet = AppSheet.SELECTION_MOVE }
+                }
+            }
 
             // The selection's pickers. Moving out of Private goes to an album; moving within it goes to a group.
             AlbumPickerSheet(
                 visible = sheet == AppSheet.SELECTION_MOVE,
-                label = if (isInPrivate) "MOVE OUT TO" else "MOVE TO",
+                label = when {
+                    isInPrivate -> "MOVE OUT TO"
+                    place is AlbumsPlace.Trash -> "RESTORE TO"
+                    else -> "MOVE TO"
+                },
                 albums = albums,
                 excludedAlbumId = openAlbum?.id,
                 onPick = { album ->
-                    if (isInPrivate) actions.unhide(selectedItems, album) else actions.move(selectedItems, album)
+                    when {
+                        isInPrivate -> actions.unhide(selectedItems, album)
+                        place is AlbumsPlace.Trash -> actions.restoreTo(selectedItems, album)
+                        else -> actions.move(selectedItems, album)
+                    }
                     clearSelection()
                 },
                 onNewAlbum = { sheet = AppSheet.SELECTION_NEW_ALBUM },
@@ -1420,9 +1441,13 @@ private fun Library(viewModel: GalleryViewModel) {
                 )
                 AppSheet.SELECTION_NEW_ALBUM -> NameSheet(
                     label = "NEW ALBUM",
-                    action = "MOVE HERE",
+                    action = if (place is AlbumsPlace.Trash) "RESTORE HERE" else "MOVE HERE",
                     onConfirm = { name ->
-                        if (isInPrivate) actions.unhide(selectedItems, newAlbumPath(name), name) else actions.move(selectedItems, newAlbumPath(name), name)
+                        when {
+                            isInPrivate -> actions.unhide(selectedItems, newAlbumPath(name), name)
+                            place is AlbumsPlace.Trash -> actions.restoreTo(selectedItems, newAlbumPath(name), name)
+                            else -> actions.move(selectedItems, newAlbumPath(name), name)
+                        }
                         clearSelection()
                     },
                     onDismiss = { sheet = AppSheet.NONE },

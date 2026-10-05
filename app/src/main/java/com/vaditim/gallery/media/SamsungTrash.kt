@@ -21,9 +21,9 @@ class SamsungTrash(private val context: Context) {
             .toList()
     }
 
-    suspend fun restore(item: MediaItem): Boolean = withContext(Dispatchers.IO) {
+    suspend fun restore(item: MediaItem, relativePath: String = RESTORED_PATH): Boolean = withContext(Dispatchers.IO) {
         val source = File(item.absolutePath)
-        val directory = File(Environment.getExternalStorageDirectory(), RESTORED_PATH).apply { mkdirs() }
+        val directory = File(Environment.getExternalStorageDirectory(), relativePath).apply { mkdirs() }
         val target = uniqueFile(directory, restoredName(source, item.mimeType))
         val isMoved = source.renameTo(target) || (runCatching { source.copyTo(target) }.isSuccess && source.delete())
         if (isMoved) {

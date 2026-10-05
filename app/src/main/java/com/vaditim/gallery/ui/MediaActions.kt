@@ -166,6 +166,19 @@ class MediaActions(
         }
     }
 
+    fun restoreTo(items: List<MediaItem>, album: Album) = restoreTo(items, album.relativePath, album.name)
+
+    // Out of the trash straight into a chosen folder: Samsung's files are moved there, Android's rows come back first and then move.
+    fun restoreTo(items: List<MediaItem>, relativePath: String, albumName: String) {
+        if (items.isEmpty()) return
+        val (samsungItems, systemItems) = items.partition { isSamsungTrash(it) }
+        runSamsungTrash(samsungItems, "Restored to $albumName") { samsungTrash.restore(it, relativePath) }
+        if (systemItems.isEmpty()) return
+        startRequest(MediaStore.createTrashRequest(context.contentResolver, systemItems.map { it.uri }, false)) { isDone ->
+            if (isDone) move(systemItems, relativePath, albumName) else notify("Restore was not allowed")
+        }
+    }
+
     fun deleteForever(items: List<MediaItem>) {
         if (items.isEmpty()) return
         val (samsungItems, systemItems) = items.partition { isSamsungTrash(it) }

@@ -20,12 +20,14 @@ import androidx.compose.ui.text.style.TextOverflow
 
 // The VAS bar-sweep (components/08-text-reveal.md): an accent bar grows across the text, the text opens under it, and the bar retracts off the far edge. Leaving is a cut, never the sweep reversed. `presence` lets a gesture take the text away with the finger.
 @Composable
-fun LabelReveal(text: String, isShown: Boolean, style: TextStyle, modifier: Modifier = Modifier, presence: () -> Float = { 1f }) {
+fun LabelReveal(text: String, isShown: Boolean, style: TextStyle, modifier: Modifier = Modifier, presence: () -> Float = { 1f }, isRevealedAtStart: Boolean = false) {
     val accent = LocalAccent.current
     val bar = remember { Animatable(0f) }
-    val opened = remember { Animatable(0f) }
+    // Text already standing when it first appears (scrolled back into view) shows at once; only a change sweeps.
+    val opened = remember { Animatable(if (isRevealedAtStart && isShown) 1f else 0f) }
     var isRetracting by remember { mutableStateOf(false) }
     LaunchedEffect(isShown) {
+        if (isShown && opened.value == 1f && !isRetracting) return@LaunchedEffect
         if (isShown) {
             isRetracting = false
             opened.snapTo(0f)

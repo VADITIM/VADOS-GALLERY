@@ -3,6 +3,9 @@ package com.vaditim.gallery.ui
 import androidx.activity.compose.BackHandler
 import kotlin.math.abs
 import com.vaditim.gallery.vas.LabelReveal
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.layout.Arrangement
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,7 +118,9 @@ fun AlbumsScreen(
     )
     // Albums and closed groups move as wholes; an open group's albums move inside it.
     val reorder = rememberReorder(state, entries.map { it.key }) { from, to -> arrange(entries.toMutableList().apply { add(to, removeAt(from)) }) }
-    val glide = tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut)
+    // While a group opens or closes, the rows under it follow its height frame by frame instead of gliding after it, so nothing overlaps.
+    var movingGroups by remember { mutableStateOf(emptySet<String>()) }
+    val glide = if (movingGroups.isEmpty()) tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut) else null
 
     // Every group is a row of its own, so the albums before it end their row early.
     val spans = remember(entries, Settings.coverColumns) { spansOf(entries, Settings.coverColumns) }
@@ -148,7 +153,11 @@ fun AlbumsScreen(
                     GroupRow(
                         stack = entry,
                         isOpen = isOpen,
-                        onOpenChange = { open -> onOpenStacksChange(if (open) openStacks + entry.name else openStacks - entry.name) },
+                        onOpenChange = { open ->
+                            movingGroups = movingGroups + entry.name
+                            onOpenStacksChange(if (open) openStacks + entry.name else openStacks - entry.name)
+                        },
+                        onMotion = { isMoving -> movingGroups = if (isMoving) movingGroups + entry.name else movingGroups - entry.name },
                         isPicking = isPicking,
                         selectedPaths = selectedPaths,
                         onToggle = onToggle,
@@ -233,6 +242,7 @@ private fun GroupRow(
     isRearranging: Boolean,
     isMovable: Boolean,
     onArrangeGroup: (List<Album>) -> Unit,
+    onMotion: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val albums = stack.albums
@@ -246,7 +256,12 @@ private fun GroupRow(
         val target = if (isOpen) 1f else 0f
         // Started part way, by a pull, it takes only the share of the time that is left.
         time.animateTo(target, tween((Motion.STACK_MS * abs(target - time.value)).roundToInt(), easing = LinearEasing))
+        // The cards land a little after the time ends when they overshoot, so the rows below are freed only once they have.
+        delay(Motion.STATE_MS.toLong())
+        onMotion(false)
     }
+    // A group scrolled away mid-motion must not keep the rows below from gliding.
+    DisposableEffect(stack.name) { onDispose { onMotion(false) } }
     val isShut = !isOpen && time.value == 0f
     val isArranging = isRearranging && isOpen
     val geometry = remember { GroupGeometry() }
@@ -281,6 +296,7 @@ private fun GroupRow(
                         scope.launch {
                             time.animateTo(1f, tween((Motion.STATE_MS * (1f - time.value)).roundToInt(), easing = Motion.powerTwoOut))
                             isPulled = false
+                            onMotion(false)
                         }
                         Unit
                     }
@@ -288,6 +304,7 @@ private fun GroupRow(
                         onDragStart = {
                             pulled = 0f
                             isPulled = true
+                            onMotion(true)
                         },
                         onDragEnd = {
                             if (1f - time.value > PULL_CLOSE) {
@@ -312,8 +329,13 @@ private fun GroupRow(
                 if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(albums) else onStackLongPress() } }),
                 verticalArrangement = Arrangement.Center,
             ) {
-                BasicText(stack.name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                BasicText(albums.sumOf { it.items.size }.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
+                // Closing, the name sweeps back in as the heading does on opening, over its own width.
+                LabelReveal(stack.name, isShown = !isOpen, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), isRevealedAtStart = true)
+                BasicText(
+                    albums.sumOf { it.items.size }.toString(),
+                    style = Type.value.copy(fontSize = 15.sp),
+                    modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = (1f - Motion.powerThreeInOut.transform(time.value) * 2f).coerceIn(0f, 1f) },
+                )
             }
             albums.forEachIndexed { index, album ->
                 key(album.id) {
@@ -376,7 +398,7 @@ private fun GroupRow(
                     )
                 }
             }
-            LabelReveal(stack.name, isShown = isOpen, style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current), presence = { time.value })
+            LabelReveal(stack.name, isShown = isOpen, style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current), presence = { time.value }, isRevealedAtStart = true)
             // Folding the group back sits at the right end of its heading; shut, it is not there at all, so it never takes a tap meant for opening the group.
             Box { if (!isShut) CollapseButton(onClick = { onOpenChange(false) }) }
         },
@@ -402,27 +424,33 @@ private fun GroupRow(
         val headingSpace = headingHeight + GROUP_HEADING_GAP.roundToPx()
         val openHeight = headingSpace + rows * rowHeight + (rows - 1).coerceAtLeast(0) * rowGap
         val openness = Motion.powerThreeInOut.transform(time.value)
-        val height = (small + (openHeight - small) * openness).roundToInt()
+        val placements = cards.mapIndexed { index, card ->
+            val p = progressOf(index)
+            val depth = min(index, STACK_DEPTH)
+            val isHeld = albums[index].id == heldId
+            val open = Offset(0f, headingSpace.toFloat()) + when {
+                isHeld -> geometry.slot(index) + heldOffset
+                else -> geometry.slot(slotStates[index].value)
+            }
+            // Lying in the stack, the card's picture is centred on the stack's own, shifted by its depth.
+            val shut = Offset(small / 2f + stackShift(depth).toPx() - cell / 2f, small / 2f - cell / 2f)
+            val shutScale = small.toFloat() / cell * stackScale(depth)
+            CardPlacement(shut.x + (open.x - shut.x) * p, shut.y + (open.y - shut.y) * p, shutScale + (1f - shutScale) * p, p, depth, isHeld)
+        }
+        // The row is as tall as its cards reach at this frame, so the rows below are pushed by the cards themselves, never crossed by them.
+        val reach = cards.indices.maxOfOrNull { index ->
+            val placement = placements[index]
+            if (placements[index].isHeld) 0f else placement.y + cell / 2f + (cards[index].height - cell / 2f) * placement.scale
+        } ?: 0f
+        val height = maxOf(small.toFloat(), (headingSpace * openness), reach).roundToInt()
         layout(width, height) {
-            header.placeWithLayer(labelStart, 0) { alpha = (1f - openness * 2f).coerceIn(0f, 1f) }
+            header.place(labelStart, 0)
             heading.place(0, (headingHeight - heading.height) / 2)
             back.placeWithLayer(width - back.width, (headingHeight - back.height) / 2) { alpha = openness }
             cards.forEachIndexed { index, card ->
-                val p = progressOf(index)
-                val depth = min(index, STACK_DEPTH)
-                val isHeld = albums[index].id == heldId
-                val open = Offset(0f, headingSpace.toFloat()) + when {
-                    isHeld -> geometry.slot(index) + heldOffset
-                    else -> geometry.slot(slotStates[index].value)
-                }
-                // Lying in the stack, the card's picture is centred on the stack's own, shifted by its depth.
-                val shut = Offset(small / 2f + stackShift(depth).toPx() - cell / 2f, small / 2f - cell / 2f)
-                val x = shut.x + (open.x - shut.x) * p
-                val y = shut.y + (open.y - shut.y) * p
+                val (x, y, scale, p, depth, isHeld) = placements[index]
                 card.placeWithLayer(x.roundToInt(), y.roundToInt(), zIndex = if (isHeld) 100f else (count - index).toFloat()) {
                     transformOrigin = TransformOrigin(0.5f, cell / 2f / card.height)
-                    val shutScale = small.toFloat() / cell * stackScale(depth)
-                    val scale = shutScale + (1f - shutScale) * p
                     scaleX = scale
                     scaleY = scale
                     rotationZ = stackTilt(depth) * (1f - p)
@@ -434,6 +462,9 @@ private fun GroupRow(
         }
     }
 }
+
+// Where a group's card stands at this frame, worked out before the layout so the row's height can follow the cards.
+private data class CardPlacement(val x: Float, val y: Float, val scale: Float, val progress: Float, val depth: Int, val isHeld: Boolean)
 
 // How many cards show under the top one while a group lies shut.
 private const val STACK_DEPTH = 3

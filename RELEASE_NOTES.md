@@ -1,2 +1,4 @@
-- Locations show a LOCATIONS pill with a back button above the nav, like Private.
-- Trash has a Delete now button above the nav that empties it for good (tap twice).
+- Restore in Trash asks first: restore where it was, or restore into an album.
+- Deleting no longer needs a second tap on the button: a Confirm pill appears above the nav instead.
+- Opening a group pushes the rows below it out of the way as it opens, so nothing overlaps.
+- Closing a group sweeps its name back in, like the heading does when it opens.
