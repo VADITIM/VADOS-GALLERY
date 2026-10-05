@@ -60,7 +60,7 @@ private fun SettingsTab.label(): String = when (this) {
 @Composable
 fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
     var tab by remember { mutableStateOf(SettingsTab.PLACE) }
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss) {
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isFloating = true) {
         SettingsTabs(tab, onSelect = { tab = it })
         AnimatedContent(
             targetState = tab,

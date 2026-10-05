@@ -39,8 +39,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.drop
-import android.os.SystemClock
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.withFrameNanos
+import kotlin.math.abs
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -209,10 +210,30 @@ fun MediaGrid(
     val currentSelection by rememberUpdatedState(selection)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    // When the grid last came to rest, so a hold that only stopped a fling never selects.
-    val scrollStoppedAt = remember(state) { longArrayOf(0L) }
+    // How fast the grid is moving, in pixels per second: a hold on a fast fling only stops it, but one on a grid that merely drifts still selects.
+    val scrollSpeed = remember(state) { floatArrayOf(0f) }
     LaunchedEffect(state) {
-        snapshotFlow { state.isScrollInProgress }.drop(1).collect { isMoving -> if (!isMoving) scrollStoppedAt[0] = SystemClock.uptimeMillis() }
+        snapshotFlow { state.isScrollInProgress }.collectLatest { isMoving ->
+            if (!isMoving) {
+                scrollSpeed[0] = 0f
+                return@collectLatest
+            }
+            var lastKey: Any? = null
+            var lastOffset = 0
+            var lastNanos = 0L
+            while (true) {
+                withFrameNanos { nanos ->
+                    val first = state.layoutInfo.visibleItemsInfo.firstOrNull()
+                    // Measured on the same row from one frame to the next; when the first row changes, the last speed stands.
+                    if (first != null && first.key == lastKey && nanos > lastNanos) {
+                        scrollSpeed[0] = abs(first.offset.y - lastOffset) * 1_000_000_000f / (nanos - lastNanos)
+                    }
+                    lastKey = first?.key
+                    lastOffset = first?.offset?.y ?: 0
+                    lastNanos = nanos
+                }
+            }
+        }
     }
     val timelineGrab = remember { TimelineGrab() }
     Box(modifier.fillMaxSize().timelineGrab(timelineGrab)) {
@@ -223,7 +244,7 @@ fun MediaGrid(
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = Modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, { scrollStoppedAt[0] }),
+        modifier = Modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, { scrollSpeed[0] }),
     ) {
         items(
             entries,
@@ -316,12 +337,12 @@ private fun Modifier.dragSelect(
     photosById: Map<Long, List<MediaItem>>,
     selection: () -> Selection?,
     scope: CoroutineScope,
-    scrollStoppedAt: () -> Long,
+    scrollSpeed: () -> Float,
 ): Modifier = pointerInput(state, photosById) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        // Taken by the timeline, or landing on a moving grid (or just after it stopped): that finger is scrolling, not selecting.
-        if (down.isConsumed || state.isScrollInProgress || down.uptimeMillis - scrollStoppedAt() < Motion.SELECT_AFTER_SCROLL_MS) return@awaitEachGesture
+        // Taken by the timeline, or landing on a grid that is really moving: that finger is stopping a scroll, not selecting. A slight drift does not count.
+        if (down.isConsumed || scrollSpeed() > Motion.SELECT_FAST_SCROLL_PX_PER_S) return@awaitEachGesture
         val isHeld = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis + Motion.SELECT_HOLD_EXTRA_MS) {
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)

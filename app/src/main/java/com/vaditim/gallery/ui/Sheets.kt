@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
@@ -55,7 +57,7 @@ import com.vaditim.gallery.vault.PrivateGroup
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, content: @Composable () -> Unit) {
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
@@ -72,7 +74,8 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                 .fillMaxSize()
                 .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f))) }
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
-            contentAlignment = Alignment.BottomCenter,
+            // A floating sheet hangs from a fixed edge near the top, centred, so a change in its height only ever moves its bottom.
+            contentAlignment = if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
             Column(
                 Modifier
@@ -87,8 +90,9 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                             scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.98f),
                     )
                     .graphicsLayer { if (isFollowing()) translationY = (1f - reveal()) * (size.height + 12.dp.toPx()) }
-                    .navigationBarsPadding()
+                    .then(if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
                     .padding(12.dp)
+                    .then(if (isFloating) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
                     .fillMaxWidth()
                     .glass(Shapes.sheet, ground)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
@@ -106,6 +110,9 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
 }
 
 private val SCRIM = Color(0x4D000000)
+// Where a floating sheet hangs: this far under the status bar, no wider than this.
+private val FLOATING_TOP = 72.dp
+private val FLOATING_WIDTH = 420.dp
 
 // A hairline under a row of a sheet, inset to the row's text, so rows read as separate lines.
 fun Modifier.rowDivider(): Modifier = drawBehind {

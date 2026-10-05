@@ -57,8 +57,8 @@ object Motion {
 
     // Holding a tile to select waits this much past the system's long press, so a resting thumb does not select by accident.
     const val SELECT_HOLD_EXTRA_MS = 120L
-    // A finger that lands while the grid is moving, or this soon after it stopped, is stopping a scroll, not starting a selection.
-    const val SELECT_AFTER_SCROLL_MS = 350L
+    // A finger that lands while the grid moves faster than this (pixels per second) is stopping a scroll, not starting a selection; slower, it is a slight drift and selects.
+    const val SELECT_FAST_SCROLL_PX_PER_S = 400f
 
     // Text that changes types itself over: the old letters go back one by one at the quicker pace, the new ones come in at the slower, with a block caret blinking while it runs (as in VADOS Bubble).
     const val TYPE_MS = 60L
