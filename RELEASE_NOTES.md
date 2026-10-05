@@ -1,4 +1,4 @@
-# 0.71
+# 0.72
 
-- Timeline labels get smaller, dimmer and closer together the further they are from the marker, so the years and months near it are easy to read.
-- Jumping with the timeline no longer animates the photos.
+- The timeline is shorter and curves harder: months shrink steadily away from the marker and fade out, instead of stopping at one small size.
+- Years are bigger again and stay readable along the whole timeline, so they work as markers.
