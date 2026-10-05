@@ -10,7 +10,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,11 +63,9 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
-// Fewer photos than this scroll by hand quickly enough; the timeline would only cover tiles.
-private const val MIN_PHOTOS = 90
 // The window the timeline shows through is this share of the grid's height, centred on it.
-private const val TRACK_SHARE = 0.36f
-// The strip a finger takes hold of along the right edge, besides the labels themselves; narrow so tiles under it stay tappable.
+private const val TRACK_SHARE = 0.26f
+// The strip a finger takes hold of along each edge, besides the labels themselves; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
 // Room around a label that still counts as taking hold of it.
 private val LABEL_GRAB_SLACK = 6.dp
@@ -75,9 +73,8 @@ private val LABEL_HEIGHT = 18.dp
 private val THUMB_HEIGHT = 22.dp
 // The room a full-size label takes on the strip; smaller labels take a share of it, so the strip draws together away from the marker.
 private val LABEL_STEP = 22.dp
-// How far past the window's edge a label is still on its way in: it fades, shrinks and slides out to the side over this.
-private val EDGE_FADE = 36.dp
-private val EDGE_SLIDE = 18.dp
+// Months are gone this far before the window's edge, which belongs to the years.
+private val MONTH_EDGE = 28.dp
 // Labels shrink, and draw closer together, by this rate for each step away from the marker and keep shrinking; the near ones read clearly and the far months fade to nothing.
 private const val FALLOFF = 0.34f
 // Years never shrink below this, so far from the marker the strip reads as the years alone.
@@ -129,14 +126,20 @@ class TimelineGrab {
     var labelSlack = 0f
     var trackTop = 0f
     var trackHeight = 0f
+    // Which edge the finger holds, so the month bubble shows beside it.
+    var isHeldAtStart by mutableStateOf(false)
 
     fun takes(root: Offset): Boolean {
         val timeline = timeline?.takeIf { isActive && it.isAttached } ?: return false
         val local = timeline.windowToLocal(root)
-        // Labels fading in beyond the window are on their way, not there to take.
+        // Only the window's stretch of each edge takes a finger.
         if (local.y < trackTop - labelSlack || local.y > trackTop + trackHeight + labelSlack) return false
-        val isOnStrip = local.x >= timeline.size.width - stripWidth
-        return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
+        val isOnStrip = local.x >= timeline.size.width - stripWidth || local.x <= stripWidth
+        if (isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }) {
+            isHeldAtStart = local.x < timeline.size.width / 2f
+            return true
+        }
+        return false
     }
 
     fun trackY(root: Offset): Float = (timeline?.windowToLocal(root)?.y ?: 0f) - trackTop
@@ -161,12 +164,12 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         }
     }
 
-// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a window half the screen tall. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, and labels come in over the window's edges. Held, the marker is the finger and the label under it is where the grid goes.
+// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a short window, drawn on both edges of the grid. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, months shrink away from it and years hold the window's ends. Held at either edge, the marker is the finger and the label under it is where the grid goes.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
     val photoCount = remember(entries) { entries.count { it is GridEntry.Photo } }
-    val isShown = photoCount >= MIN_PHOTOS && marks.isNotEmpty()
+    val isShown = photoCount > 0 && marks.isNotEmpty()
     DisposableEffect(grab, isShown) {
         grab.isActive = isShown
         onDispose { grab.isActive = false }
@@ -226,7 +229,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         derivedStateOf { heldMark ?: (floor(gridPosition + 0.001f).toInt() downTo 0).firstNotNullOfOrNull { labels.getOrNull(it)?.month } }
     }
 
-    BoxWithConstraints(modifier.fillMaxHeight().onGloballyPositioned { grab.timeline = it }) {
+    BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { grab.timeline = it }) {
         val height = constraints.maxHeight.toFloat()
         val track = height * TRACK_SHARE
         val top = (height - track) / 2f
@@ -234,8 +237,8 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val labelHalf = with(density) { LABEL_HEIGHT.toPx() } / 2f
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
         val step = with(density) { LABEL_STEP.toPx() }
-        val fade = with(density) { EDGE_FADE.toPx() }
-        val slide = with(density) { EDGE_SLIDE.toPx() }
+        val monthEdge = with(density) { MONTH_EDGE.toPx() }
+        val yearGap = step * YEAR_SMALLEST
         val last = (labels.size - 1).coerceAtLeast(1)
         // A short strip sits in the middle of the window and mostly the marker moves; a long one runs the marker down the window as the strip slides.
         val span = minOf(step * (labels.size - 1), track)
@@ -251,79 +254,103 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             for (slot in anchor - 1 downTo 0) places[slot] = places[slot + 1] - gap(slot)
             return places
         }
-        val places by remember(labels, top, track) { derivedStateOf { placesAt(position()) } }
-        fun labelY(slot: Int): Float = places.getOrElse(slot) { 0f }
-
-        // Only the labels in or near the window are composed; the range moves a step at a time, never per frame.
-        val window by remember(labels, top, track) {
-            derivedStateOf {
-                val at = places
-                var from = position().roundToInt().coerceIn(0, labels.lastIndex)
-                var to = from
-                while (from > 0 && at[from - 1] > top - fade) from--
-                while (to < labels.lastIndex && at[to + 1] < top + track + fade) to++
-                from..to
+        val yearSlots = remember(labels) { labels.indices.filter { labels[it].month == null } }
+        // Where each label is drawn and how present it is. Months shrink away and are gone before the window's edges; the years inside show whole, and the nearest year past either edge stays held on that edge, pushed off it by the next year coming in.
+        class Placement(val places: FloatArray, val presence: FloatArray)
+        fun placementAt(at: Float): Placement {
+            val places = placesAt(at)
+            val presence = FloatArray(labels.size)
+            val bottom = top + track
+            labels.forEachIndexed { slot, label ->
+                if (label.month == null) return@forEachIndexed
+                val shrink = ((label.sizeAt(slot - at) - MONTH_GONE) / MONTH_FADE).coerceIn(0f, 1f)
+                val edge = (minOf(places[slot] - top, bottom - places[slot]) / monthEdge).coerceIn(0f, 1f)
+                presence[slot] = shrink * edge
             }
-        }
-        window.forEach { slot ->
-            val label = labels[slot]
-            key(label) {
-                DisposableEffect(label) { onDispose { grab.labels.remove(label) } }
-                val isMonth = label.month != null
-                val isCurrent = if (isMonth) label.month == shownMark else label.year == shownMark?.month?.year
-                BasicText(
-                    if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString(),
-                    style = Type.value.copy(
-                        fontSize = if (isMonth) 10.sp else 13.sp,
-                        color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
-                    ),
-                    maxLines = 1,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset { IntOffset(0, (labelY(slot) - labelHalf).roundToInt()) }
-                        .padding(end = STRIP_WIDTH - 4.dp)
-                        // The label itself can be taken hold of, not only the strip beside it.
-                        .onGloballyPositioned { grab.labels[label] = it }
-                        .graphicsLayer {
-                            val y = labelY(slot)
-                            val size = label.sizeAt(slot - position())
-                            // Inside the window a label is whole; past its edge it is pulled away to the side as it fades.
-                            val inside = ((minOf(y - top, top + track - y) + fade) / fade).coerceIn(0f, 1f)
-                            val presence = if (isMonth) ((size - MONTH_GONE) / MONTH_FADE).coerceIn(0f, 1f) else 1f
-                            alpha = inside * presence
-                            translationX = (1f - inside) * slide
-                            // Shrinks toward the edge of the screen, so every label keeps its right side on the line.
-                            transformOrigin = TransformOrigin(1f, 0.5f)
-                            scaleX = size * (0.8f + 0.2f * inside)
-                            scaleY = scaleX
-                        }
-                        .clip(Shapes.capsule)
-                        .background(Palette.panel)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
+            var above = -1
+            var below = -1
+            for (slot in yearSlots) {
+                val y = places[slot]
+                when {
+                    y < top -> above = slot
+                    y > bottom -> if (below < 0) below = slot
+                    else -> presence[slot] = 1f
+                }
             }
+            if (above >= 0) {
+                val next = yearSlots.firstOrNull { places[it] >= top }?.let { places[it] } ?: Float.MAX_VALUE
+                places[above] = minOf(top, next - yearGap)
+                presence[above] = (1f - (top - places[above]) / yearGap).coerceIn(0f, 1f)
+            }
+            if (below >= 0) {
+                val previous = yearSlots.lastOrNull { places[it] <= bottom }?.let { places[it] } ?: -Float.MAX_VALUE
+                places[below] = maxOf(bottom, previous + yearGap)
+                presence[below] = (1f - (places[below] - bottom) / yearGap).coerceIn(0f, 1f)
+            }
+            return Placement(places, presence)
         }
+        val placement by remember(labels, top, track) { derivedStateOf { placementAt(position()) } }
 
-        // Where the grid is, running down the window with it; under the finger while held.
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (markerY(position()) - thumbHalf).roundToInt()) }
-                .padding(end = 6.dp)
-                .size(width = 4.dp, height = THUMB_HEIGHT)
-                .clip(Shapes.capsule)
-                .background(if (isHeld) accent else Palette.textMuted),
-        )
+        // Only the labels that show are composed; the set changes a label at a time, never per frame.
+        val shownSlots by remember(labels, top, track) { derivedStateOf { labels.indices.filter { placement.presence[it] > 0f } } }
+        for (isStart in listOf(true, false)) {
+            val side = if (isStart) Alignment.TopStart else Alignment.TopEnd
+            shownSlots.forEach { slot ->
+                val label = labels[slot]
+                val grabKey = label to isStart
+                key(label, isStart) {
+                    DisposableEffect(grabKey) { onDispose { grab.labels.remove(grabKey) } }
+                    val isMonth = label.month != null
+                    val isCurrent = if (isMonth) label.month == shownMark else label.year == shownMark?.month?.year
+                    BasicText(
+                        if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString(),
+                        style = Type.value.copy(
+                            fontSize = if (isMonth) 10.sp else 13.sp,
+                            color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
+                        ),
+                        maxLines = 1,
+                        modifier = Modifier
+                            .align(side)
+                            .offset { IntOffset(0, (placement.places[slot] - labelHalf).roundToInt()) }
+                            .padding(start = if (isStart) STRIP_WIDTH - 4.dp else 0.dp, end = if (isStart) 0.dp else STRIP_WIDTH - 4.dp)
+                            // The label itself can be taken hold of, not only the strip beside it.
+                            .onGloballyPositioned { grab.labels[grabKey] = it }
+                            .graphicsLayer {
+                                alpha = placement.presence.getOrElse(slot) { 0f }
+                                // Shrinks toward its own edge of the screen, so every label keeps that side on the line.
+                                transformOrigin = TransformOrigin(if (isStart) 0f else 1f, 0.5f)
+                                scaleX = label.sizeAt(slot - position())
+                                scaleY = scaleX
+                            }
+                            .clip(Shapes.capsule)
+                            .background(Palette.panel)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
+            // Where the grid is, running down the window with it; under the finger while held.
+            Box(
+                Modifier
+                    .align(side)
+                    .offset { IntOffset(0, (markerY(position()) - thumbHalf).roundToInt()) }
+                    .padding(start = if (isStart) 6.dp else 0.dp, end = if (isStart) 0.dp else 6.dp)
+                    .size(width = 4.dp, height = THUMB_HEIGHT)
+                    .clip(Shapes.capsule)
+                    .background(if (isHeld) accent else Palette.textMuted),
+            )
+        }
 
         heldMark?.let { mark ->
+            val isStart = grab.isHeldAtStart
             BasicText(
                 BUBBLE_FORMAT.format(mark.month).uppercase(Locale.ENGLISH),
                 style = Type.microLabel.copy(color = Palette.textBright),
                 maxLines = 1,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(if (isStart) Alignment.TopStart else Alignment.TopEnd)
                     .offset { IntOffset(0, (markerY(position()) - labelHalf * 1.6f).roundToInt()) }
-                    .padding(end = 76.dp)
+                    .padding(start = if (isStart) 76.dp else 0.dp, end = if (isStart) 0.dp else 76.dp)
                     .graphicsLayer { alpha = reveal }
                     .glass(Shapes.capsule)
                     .padding(horizontal = 14.dp, vertical = 8.dp),

@@ -1,5 +1,5 @@
-# 0.73
+# 0.74
 
-- The viewer's More menu no longer has Edit.
-- Move to album and Move to private now share one row: the album move on the left, a slash, and the lock for Private on the right.
-- Selecting in Favorites shows the same bar as in albums; its move button moves photos between your Favorites albums.
+- The timeline is shorter. Months fade out before its ends, and the years just past each end stay pinned there, so you always see which years come before and after.
+- The timeline now shows on both the left and right edges, and you can grab either.
+- Every photo grid has the timeline now: albums, groups, locations, Favorites and Private, not only Recent.
