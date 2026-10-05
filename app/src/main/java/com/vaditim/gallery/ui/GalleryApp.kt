@@ -68,7 +68,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1239,8 +1238,18 @@ private fun Library(viewModel: GalleryViewModel) {
                 )
             }
 
-            review?.let { source ->
-                key(source) {
+            // Review rises into view from slightly below and settles, and sinks back out on closing, rather than appearing at once.
+            AnimatedContent(
+                targetState = review,
+                transitionSpec = {
+                    (fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)) +
+                        scaleIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), initialScale = 0.94f) +
+                        slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)) { it / 12 })
+                        .togetherWith(fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.96f))
+                },
+                label = "review",
+            ) { source ->
+                if (source != null) {
                     ReviewScreen(
                         items = itemsFor(source),
                         isPrivate = source.isPrivateSource(),

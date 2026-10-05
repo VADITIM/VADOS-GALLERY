@@ -1,9 +1,8 @@
-# 0.68
+# 0.69
 
-- Settings are split into two tabs: General (photos, albums, videos, each under its own header) and Interface (overlay blur and opacity, and the app background).
-- New: background brightness, from black to a dark charcoal.
-- Album columns only show when Grouped albums is off; grouped albums lie as rows.
-- Favorites can be sorted into albums and groups of their own, without touching your real albums; a button at the top switches between all favourites and those albums.
-- Switching sections no longer flashes the next section's colour on the one leaving.
-- Stopping a scroll with your thumb no longer selects a photo, and holding to select takes a touch longer.
-- The timeline can be grabbed by its labels, not only the thin strip at the edge.
+- The timeline shows every month now, on one strip that slides as you scroll: the marker moves through the middle half of the screen and labels glide in at its edges. Held, the label under your finger is where the grid goes, with no more labels jumping away.
+- Jumping months with the timeline moves the grid with a quick slide, so the change is visible.
+- New layout setting: Months (each day's first photo stamped with its date and calendar week) or Weeks (months split into calendar weeks).
+- Calendar weeks appear wherever a date does: the viewer, the details and review.
+- Review's Done button is always there, even with nothing marked.
+- Review now slides in and out instead of appearing at once.

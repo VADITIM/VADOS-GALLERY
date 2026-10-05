@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -13,30 +14,31 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
@@ -48,17 +50,21 @@ import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.glass
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
+import kotlin.math.sign
 
 // Fewer photos than this scroll by hand quickly enough; the timeline would only cover tiles.
 private const val MIN_PHOTOS = 90
-// The timeline is always this share of the grid's height, centred on it.
+// The window the timeline shows through is this share of the grid's height, centred on it.
 private const val TRACK_SHARE = 0.5f
 // The strip a finger takes hold of along the right edge, besides the labels themselves; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
@@ -66,13 +72,17 @@ private val STRIP_WIDTH = 24.dp
 private val LABEL_GRAB_SLACK = 6.dp
 private val LABEL_HEIGHT = 18.dp
 private val THUMB_HEIGHT = 22.dp
-// Labels are never further apart than this; with few of them the timeline is shorter, centred where it always is.
-private val MAX_GAP = 24.dp
-private val YEAR_FORMAT = DateTimeFormatter.ofPattern("yyyy", Locale.ENGLISH)
+// Every label, year or month, one step apart on the strip; the strip never changes length, so nothing under the finger moves away from it.
+private val LABEL_STEP = 22.dp
+// How far past the window's edge a label is still on its way in: it fades, shrinks and slides out to the side over this.
+private val EDGE_FADE = 36.dp
+private val EDGE_SLIDE = 18.dp
+// How far the grid travels as it lands on another month, so the jump reads as one.
+private val JUMP_TRAVEL = 36.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 private val BUBBLE_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
-// Where a month starts in the grid: the index of its header when there is one, so a jump lands with the header in view.
+// Where a month starts in the grid: the index of its first header when there is one, so a jump lands with the header in view.
 private data class TimelineMark(val index: Int, val month: YearMonth)
 
 private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
@@ -82,7 +92,9 @@ private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
         if (entry !is GridEntry.Photo) return@forEachIndexed
         val month = YearMonth.from(Instant.ofEpochMilli(entry.item.timestampMillis).atZone(ZoneId.systemDefault()))
         if (month != last) {
-            val start = if (index > 0 && entries[index - 1] is GridEntry.Header) index - 1 else index
+            // A month header and a week header can both stand in front of the first photo.
+            var start = index
+            while (start > 0 && entries[start - 1] is GridEntry.Header) start--
             marks += TimelineMark(start, month)
             last = month
         }
@@ -90,28 +102,18 @@ private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
     return marks
 }
 
-// One label on the timeline: a year, or one of the months of the year under the finger.
+// One step of the strip: a year, or a month under the year before it.
 private data class TimelineLabel(val year: Int, val month: TimelineMark?)
 
-// Every year, and right after the held one its months; all of them the same distance apart.
-// At rest the year being shown carries just the month being shown beneath it.
-private fun labelsOf(years: List<Int>, monthsByYear: Map<Int, List<TimelineMark>>, heldYear: Int?, restMark: TimelineMark? = null): List<TimelineLabel> =
-    years.flatMap { year ->
-        val months = when {
-            year == heldYear -> monthsByYear[year].orEmpty()
-            heldYear == null && year == restMark?.month?.year -> listOf(restMark)
-            else -> emptyList()
-        }
-        listOf(TimelineLabel(year, null)) + months.map { TimelineLabel(year, it) }
-    }
+private fun labelsOf(marks: List<TimelineMark>): List<TimelineLabel> =
+    marks.groupBy { it.month.year }.toSortedMap().flatMap { (year, months) -> listOf(TimelineLabel(year, null)) + months.map { TimelineLabel(year, it) } }
 
 // The timeline's hold, worked from the box holding the grid: a sibling over the grid would block every tile under it, but the parent sees each touch first and takes only those on the strip or on a label.
 class TimelineGrab {
     var timeline: LayoutCoordinates? = null
     var holder: LayoutCoordinates? = null
     val labels = HashMap<Any, LayoutCoordinates>()
-    var begin: () -> Unit = {}
-    // Finger height within the timeline's track.
+    // Finger height within the timeline's window.
     var follow: (Float) -> Unit = {}
     var release: () -> Unit = {}
     var isActive = false
@@ -119,11 +121,15 @@ class TimelineGrab {
     var labelSlack = 0f
     var trackTop = 0f
     var trackHeight = 0f
+    // The grid's lurch on landing on another month, from -1 (arriving from above) through 0 (still) to 1 (from below).
+    val jump = Animatable(0f)
 
     fun takes(root: Offset): Boolean {
         val timeline = timeline?.takeIf { isActive && it.isAttached } ?: return false
         val local = timeline.windowToLocal(root)
-        val isOnStrip = local.x >= timeline.size.width - stripWidth && local.y >= trackTop && local.y <= trackTop + trackHeight
+        // Labels fading in beyond the window are on their way, not there to take.
+        if (local.y < trackTop - labelSlack || local.y > trackTop + trackHeight + labelSlack) return false
+        val isOnStrip = local.x >= timeline.size.width - stripWidth
         return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
     }
 
@@ -138,7 +144,6 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
             if (!grab.takes(coordinates.localToWindow(down.position))) return@awaitEachGesture
             // Taken before the grid sees it, so the held finger neither scrolls the list, taps a tile nor starts a selection.
             down.consume()
-            grab.begin()
             grab.follow(grab.trackY(coordinates.localToWindow(down.position)))
             do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -150,7 +155,14 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         }
     }
 
-// Half the screen tall and centred, oldest at the top like the grid: the years at rest, evenly apart. Held, the year under the finger opens into its months and everything respaces evenly; the grid follows the finger month by month.
+// The grid lurches toward where it came from and settles, so a jump to another month is seen rather than blinked through.
+fun Modifier.timelineJump(grab: TimelineGrab): Modifier = graphicsLayer {
+    val jump = grab.jump.value
+    translationY = jump * JUMP_TRAVEL.toPx()
+    alpha = 1f - 0.45f * kotlin.math.abs(jump)
+}
+
+// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a window half the screen tall. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, and labels come in over the window's edges. Held, the marker is the finger and the label under it is where the grid goes.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
@@ -161,34 +173,72 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         onDispose { grab.isActive = false }
     }
     if (!isShown) return
-    val monthsByYear = remember(marks) { marks.groupBy { it.month.year } }
-    val years = remember(marks) { monthsByYear.keys.sorted() }
+    val labels = remember(marks) { labelsOf(marks) }
+    val slotOfMark = remember(labels) { labels.withIndex().filter { it.value.month != null }.associate { it.value.month!! to it.index } }
     val haptic = LocalHapticFeedback.current
     val accent = LocalAccent.current
-    var heldYear by remember { mutableStateOf<Int?>(null) }
+    val scope = rememberCoroutineScope()
     var heldMark by remember { mutableStateOf<TimelineMark?>(null) }
-    var fingerY by remember { mutableStateOf<Float?>(null) }
+    // Where the finger holds the strip, in steps; read only while held.
+    var heldPosition by remember { mutableFloatStateOf(0f) }
     val isHeld = heldMark != null
     val reveal by animateFloatAsState(if (isHeld) 1f else 0f, tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline")
+    // Taking hold or letting go hands the strip between the finger and the grid; this carries the difference away so neither jumps.
+    val handover = remember { Animatable(0f) }
     // The newest index asked for; scrolls are conflated, so a fast slide never queues up jumps.
     val target = remember { mutableIntStateOf(-1) }
     LaunchedEffect(state) {
+        var landed = -1
         snapshotFlow { target.intValue }.collect { index ->
-            if (index < 0) return@collect
+            if (index < 0) {
+                landed = -1
+                return@collect
+            }
+            val from = if (landed >= 0) landed else state.firstVisibleItemIndex
             state.scrollToItem(index)
             // The month's first photo (or its header) belongs at the top, just under the header room, not merely somewhere on screen.
             state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { if (it.offset.y != 0) state.scrollBy(it.offset.y.toFloat()) }
+            landed = index
+            val direction = sign((index - from).toFloat())
+            if (direction != 0f) {
+                scope.launch {
+                    grab.jump.snapTo(direction)
+                    grab.jump.animateTo(0f, tween(Motion.TIMELINE_JUMP_MS, easing = Motion.powerTwoOut))
+                }
+            }
         }
     }
-    // The month the grid is showing, for the marker at rest.
-    val viewMark by remember(state, marks) {
+    // Where the grid stands on the strip, in steps, between the month at its top and the next: a scrollbar's reading, so the very end of the grid reaches the newest month.
+    val gridPosition by remember(state, entries, marks, slotOfMark) {
         derivedStateOf {
             val visible = state.layoutInfo.visibleItemsInfo
-            val middle = if (visible.isEmpty()) 0 else (visible.first().index + visible.last().index) / 2
-            marks.lastOrNull { it.index <= middle } ?: marks.first()
+            if (visible.isEmpty()) return@derivedStateOf 0f
+            val firstIndex = state.firstVisibleItemIndex
+            val first = visible.firstOrNull { it.index == firstIndex } ?: visible.first()
+            val rowCount = visible.count { it.offset.y == first.offset.y }.coerceAtLeast(1)
+            val top = firstIndex + state.firstVisibleItemScrollOffset.toFloat() / first.size.height.coerceAtLeast(1) * rowCount
+            val bottom = (visible.last().index + 1).toFloat()
+            val screenful = (bottom - top).coerceAtLeast(0f)
+            val reach = (top / (entries.size - screenful).coerceAtLeast(1f)).coerceIn(0f, 1f)
+            val reading = top + screenful * reach
+            val at = marks.indexOfLast { it.index <= reading }.coerceAtLeast(0)
+            val mark = marks[at]
+            val next = marks.getOrNull(at + 1)
+            val start = slotOfMark[mark] ?: 0
+            if (next == null) {
+                start.toFloat()
+            } else {
+                val fraction = ((reading - mark.index) / (next.index - mark.index).coerceAtLeast(1)).coerceIn(0f, 1f)
+                start + fraction * ((slotOfMark[next] ?: start) - start)
+            }
         }
     }
-    val labels = labelsOf(years, monthsByYear, heldYear, viewMark)
+    val position = { (if (heldMark != null) heldPosition else gridPosition) + handover.value }
+    // The month shown: the one the finger chose while held, otherwise the one at the grid's top.
+    val shownMark by remember(labels) {
+        // Past a month the grid reads between it and the next; the year label on the way still belongs to the month before.
+        derivedStateOf { heldMark ?: (floor(gridPosition + 0.001f).toInt() downTo 0).firstNotNullOfOrNull { labels.getOrNull(it)?.month } }
+    }
 
     BoxWithConstraints(modifier.fillMaxHeight().onGloballyPositioned { grab.timeline = it }) {
         val height = constraints.maxHeight.toFloat()
@@ -197,32 +247,53 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val density = LocalDensity.current
         val labelHalf = with(density) { LABEL_HEIGHT.toPx() } / 2f
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
-        val maxGap = with(density) { MAX_GAP.toPx() }
-        fun gapFor(count: Int): Float = if (count <= 1) 0f else minOf(maxGap, track / (count - 1))
-        // Evenly apart and centred on the track, so a few years sit close together in the middle rather than spread over half the screen.
-        fun slotY(slot: Int, count: Int): Float = track / 2f + (slot - (count - 1) / 2f) * gapFor(count)
-        fun yOf(label: TimelineLabel, within: List<TimelineLabel>): Float = top + slotY(within.indexOf(label), within.size)
+        val step = with(density) { LABEL_STEP.toPx() }
+        val fade = with(density) { EDGE_FADE.toPx() }
+        val slide = with(density) { EDGE_SLIDE.toPx() }
+        val last = (labels.size - 1).coerceAtLeast(1)
+        // A short strip sits still in the middle of the window and only the marker moves; a long one is longer than the window, and slides.
+        val span = minOf(step * (labels.size - 1), track)
+        val spanTop = top + (track - span) / 2f
+        fun markerY(at: Float): Float = spanTop + span * (at / last)
+        fun labelY(slot: Int, at: Float): Float = markerY(at) + (slot - at) * step
 
-        labels.forEach { label ->
+        // Only the labels in or near the window are composed; the range moves a step at a time, never per frame.
+        val window by remember(labels, top, track) {
+            derivedStateOf {
+                val at = position()
+                val from = floor(at + (top - fade - markerY(at)) / step).toInt().coerceAtLeast(0)
+                val to = ceil(at + (top + track + fade - markerY(at)) / step).toInt().coerceAtMost(labels.lastIndex)
+                from..to
+            }
+        }
+        window.forEach { slot ->
+            val label = labels[slot]
             key(label) {
                 DisposableEffect(label) { onDispose { grab.labels.remove(label) } }
-                val y by animateFloatAsState(yOf(label, labels), tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut), label = "timeline-label")
                 val isMonth = label.month != null
-                val isCurrent = if (isHeld) (if (isMonth) label.month == heldMark else heldYear == label.year) else !isMonth && label.year == viewMark.month.year
+                val isCurrent = if (isMonth) label.month == shownMark else label.year == shownMark?.month?.year
                 BasicText(
                     if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString(),
                     style = Type.value.copy(
                         fontSize = if (isMonth) 10.sp else 11.sp,
-                        color = if (isCurrent) accent else if (isMonth && isHeld) Palette.textMuted else Palette.textBright,
+                        color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
                     ),
                     maxLines = 1,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset { IntOffset(0, (y - labelHalf).roundToInt()) }
+                        .offset { IntOffset(0, (labelY(slot, position()) - labelHalf).roundToInt()) }
                         .padding(end = STRIP_WIDTH - 4.dp)
-                        // The label itself can be taken hold of, not only the strip beside it; a month hidden at rest is not there to take.
-                        .onGloballyPositioned { if (!isMonth || isHeld || label.month == viewMark) grab.labels[label] = it else grab.labels.remove(label) }
-                        .graphicsLayer { alpha = if (isMonth && isHeld) reveal else 1f }
+                        // The label itself can be taken hold of, not only the strip beside it.
+                        .onGloballyPositioned { grab.labels[label] = it }
+                        .graphicsLayer {
+                            val y = labelY(slot, position())
+                            // Inside the window a label is whole; past its edge it is pulled away to the side as it fades.
+                            val inside = ((minOf(y - top, top + track - y) + fade) / fade).coerceIn(0f, 1f)
+                            alpha = inside
+                            translationX = (1f - inside) * slide
+                            scaleX = 0.8f + 0.2f * inside
+                            scaleY = scaleX
+                        }
                         .clip(Shapes.capsule)
                         .background(Palette.panel)
                         .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -230,13 +301,11 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             }
         }
 
-        // Where the grid is now: on its year at rest, on the finger while held.
-        val restY = labels.indexOfFirst { it.month == viewMark }.let { top + slotY(it.coerceAtLeast(0), labels.size) }
-        val markerY by animateFloatAsState(fingerY ?: restY, tween(Motion.PRESS_MS), label = "timeline-marker")
+        // Where the grid is, running down the window with it; under the finger while held.
         Box(
             Modifier
                 .align(Alignment.TopEnd)
-                .offset { IntOffset(0, (markerY - thumbHalf).roundToInt()) }
+                .offset { IntOffset(0, (markerY(position()) - thumbHalf).roundToInt()) }
                 .padding(end = 6.dp)
                 .size(width = 4.dp, height = THUMB_HEIGHT)
                 .clip(Shapes.capsule)
@@ -250,7 +319,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, (markerY - labelHalf * 1.6f).roundToInt()) }
+                    .offset { IntOffset(0, (markerY(position()) - labelHalf * 1.6f).roundToInt()) }
                     .padding(end = 76.dp)
                     .graphicsLayer { alpha = reveal }
                     .glass(Shapes.capsule)
@@ -258,34 +327,26 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             )
         }
 
-        // Only the timeline's own half of the edge and its labels take a finger; above and below it the grid scrolls as usual.
-        // A year opening or closing respaces the labels under a still finger, so after a switch the finger has to travel a little before another one counts.
-        val gesture = remember { object { var switchedAt = Float.NaN } }
+        // Hands the strip from one reading to the other, starting from where it was drawn.
+        fun handOver(from: Float, to: Float) {
+            // Started at once, so the frame that swaps the reading already carries the difference.
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                handover.snapTo(from - to)
+                handover.animateTo(0f, tween(Motion.TIMELINE_REVEAL_MS, easing = Motion.powerTwoOut))
+            }
+        }
+
         grab.stripWidth = with(density) { STRIP_WIDTH.toPx() }
         grab.labelSlack = with(density) { LABEL_GRAB_SLACK.toPx() }
         grab.trackTop = top
         grab.trackHeight = track
-        grab.begin = { gesture.switchedAt = Float.NaN }
         grab.follow = follow@{ y ->
-            val shown = labelsOf(years, monthsByYear, heldYear)
-            val gap = gapFor(shown.size)
-            // The finger can be anywhere on the half-screen strip; past the first or last label it stays on that label.
-            val clamped = y.coerceIn(slotY(0, shown.size), slotY(shown.lastIndex, shown.size))
-            fingerY = top + clamped
-            val slot = if (shown.size <= 1) 0 else ((clamped - slotY(0, shown.size)) / gap).roundToInt().coerceIn(0, shown.lastIndex)
-            val label = shown[slot]
-            val canSwitch = gesture.switchedAt.isNaN() || abs(clamped - gesture.switchedAt) > gap
-            val mark = when {
-                label.month != null -> label.month
-                label.year == heldYear -> heldMark ?: monthsByYear[label.year]?.first()
-                heldYear == null || canSwitch -> {
-                    val isGoingDown = heldYear?.let { label.year > it } ?: false
-                    heldYear = label.year
-                    gesture.switchedAt = clamped
-                    monthsByYear[label.year]?.let { if (isGoingDown) it.first() else it.last() }
-                }
-                else -> heldMark
-            } ?: return@follow
+            val at = if (span <= 0f) 0f else ((top + y - spanTop) / span * last).coerceIn(0f, labels.lastIndex.toFloat())
+            if (heldMark == null) handOver(position(), at)
+            heldPosition = at
+            val label = labels[at.roundToInt().coerceIn(0, labels.lastIndex)]
+            // A year stands for its first month.
+            val mark = label.month ?: labels.getOrNull(at.roundToInt() + 1)?.month ?: return@follow
             if (mark != heldMark) {
                 if (heldMark != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                 heldMark = mark
@@ -293,10 +354,12 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             }
         }
         grab.release = {
-            heldMark = null
-            heldYear = null
-            fingerY = null
-            target.intValue = -1
+            if (heldMark != null) {
+                val from = position()
+                heldMark = null
+                target.intValue = -1
+                handOver(from, gridPosition)
+            }
         }
     }
 }

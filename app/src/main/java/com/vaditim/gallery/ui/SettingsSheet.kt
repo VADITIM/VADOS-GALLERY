@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.vaditim.gallery.Settings
+import com.vaditim.gallery.PhotoLayout
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
@@ -70,6 +71,9 @@ fun SettingsSheet(visible: Boolean, onDismiss: () -> Unit, onColumnsChanged: (In
                             val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
                             Settings.updateDefaultColumns(next)
                             onColumnsChanged(next)
+                        }
+                        SheetRow("Layout", trailing = Settings.photoLayout.label) {
+                            Settings.updatePhotoLayout(PhotoLayout.entries[(Settings.photoLayout.ordinal + 1) % PhotoLayout.entries.size])
                         }
                         SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
                         SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }

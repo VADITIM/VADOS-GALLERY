@@ -611,7 +611,7 @@ private fun ChromePiece(isShown: Boolean, isFromTop: Boolean, order: Int, pull: 
 }
 
 private fun formatStamp(item: MediaItem): String =
-    STAMP_FORMAT.format(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH)
+    STAMP_FORMAT.format(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH) + " · " + calendarWeekLabel(dayOf(item.timestampMillis))
 
 private fun formatSize(bytes: Long): String =
     if (bytes >= 1_000_000) "%.1f MB".format(bytes / 1_000_000.0) else "%d KB".format(bytes / 1000)

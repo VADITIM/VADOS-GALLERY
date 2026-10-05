@@ -247,14 +247,14 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             }
             Spacer(Modifier.weight(1f))
 
-            // Done deletes everything marked so far in one go. Inside Private that is final, so there it takes a second tap.
-            AnimatedVisibility(!isChoosing && marked.isNotEmpty(), enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+            // Done deletes everything marked so far in one go, or with nothing marked simply ends the sitting. Inside Private deleting is final, so there it takes a second tap.
+            AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
                 val doneColor = if (isDoneArmed) Palette.danger else Palette.textBright
                 Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
                     Row(
                         Modifier
                             .pressable(onClick = {
-                                if (isPrivate && !isDoneArmed) {
+                                if (isPrivate && marked.isNotEmpty() && !isDoneArmed) {
                                     isDoneArmed = true
                                 } else {
                                     onDelete(marked)
@@ -268,8 +268,15 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        TrashIcon(Palette.danger, size = 18.dp)
-                        BasicText(if (isDoneArmed) "TAP AGAIN · ${marked.size}" else "DONE · ${marked.size}", style = Type.action.copy(color = doneColor))
+                        if (marked.isEmpty()) CheckIcon(LocalAccent.current, size = 18.dp) else TrashIcon(Palette.danger, size = 18.dp)
+                        BasicText(
+                            when {
+                                marked.isEmpty() -> "DONE"
+                                isDoneArmed -> "TAP AGAIN · ${marked.size}"
+                                else -> "DONE · ${marked.size}"
+                            },
+                            style = Type.action.copy(color = doneColor),
+                        )
                     }
                 }
             }
@@ -350,7 +357,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
 private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int, isChoosing: Boolean, markedCount: Int, modifier: Modifier = Modifier) {
     val accent = LocalAccent.current
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (shown != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(shown.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH))
+        if (shown != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(shown.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH) + " · " + calendarWeekLabel(dayOf(shown.timestampMillis)))
         // The room is kept even when nothing is marked, so the lines below never jump.
         BasicText("$markedCount marked", style = Type.value.copy(color = Palette.danger), modifier = Modifier.graphicsLayer { alpha = if (markedCount > 0) 1f else 0f })
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

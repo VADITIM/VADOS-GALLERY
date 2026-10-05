@@ -33,6 +33,8 @@ object Settings {
         private set
     var showMonthHeaders by mutableStateOf(true)
         private set
+    var photoLayout by mutableStateOf(PhotoLayout.MONTHS)
+        private set
     var autoplayVideos by mutableStateOf(true)
         private set
     var albumColumns by mutableIntStateOf(DEFAULT_ALBUM_COLUMNS)
@@ -76,6 +78,7 @@ object Settings {
         glassOpacity = preferences.getFloat("opacity", DEFAULT_OPACITY)
         defaultColumns = preferences.getInt("columns", DEFAULT_COLUMNS)
         showMonthHeaders = preferences.getBoolean("monthHeaders", true)
+        photoLayout = PhotoLayout.entries.firstOrNull { it.name == preferences.getString("photoLayout", null) } ?: PhotoLayout.MONTHS
         autoplayVideos = preferences.getBoolean("autoplay", true)
         albumColumns = preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
@@ -152,6 +155,11 @@ object Settings {
     fun updateShowMonthHeaders(value: Boolean) {
         showMonthHeaders = value
         preferences.edit().putBoolean("monthHeaders", value).apply()
+    }
+
+    fun updatePhotoLayout(value: PhotoLayout) {
+        photoLayout = value
+        preferences.edit().putString("photoLayout", value.name).apply()
     }
 
     fun updateAlbumColumns(value: Int) {
@@ -247,3 +255,6 @@ fun List<AlbumStack>.renamed(old: String, new: String): List<AlbumStack> {
 
 fun List<AlbumStack>.withoutAlbum(path: String): List<AlbumStack> =
     map { it.copy(paths = it.paths - path) }.filter { it.paths.isNotEmpty() }
+
+// How a photo grid is cut: whole months with each day's first photo stamped, or months split into calendar weeks.
+enum class PhotoLayout(val label: String) { MONTHS("Months"), WEEKS("Weeks") }
