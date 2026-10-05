@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -28,10 +29,13 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import kotlinx.coroutines.delay
 
-// A change that can still be taken back for a few seconds: what happened, and how to reverse it.
-class UndoOffer(val message: String, val revert: () -> Unit)
+// The undo button's height and the padding around it, which a pill without one keeps.
+private val PILL_HEIGHT = 52.dp
 
-// The pill that stands above the bar after a delete or a move. It keeps the last offer while sliding out, so its text does not vanish mid-animation.
+// A change shown for a few seconds: what happened, and how to reverse it when it can be; one that cannot (a new cover) only says so.
+class UndoOffer(val message: String, val revert: (() -> Unit)? = null)
+
+// The pill that stands above the bar after a delete, a move or a new cover. It keeps the last offer while sliding out, so its text does not vanish mid-animation.
 @Composable
 fun UndoPill(offer: UndoOffer?, onUndo: (UndoOffer) -> Unit, onExpired: (UndoOffer) -> Unit, modifier: Modifier = Modifier) {
     var shown by remember { mutableStateOf(offer) }
@@ -50,13 +54,15 @@ fun UndoPill(offer: UndoOffer?, onUndo: (UndoOffer) -> Unit, onExpired: (UndoOff
     ) {
         val current = shown ?: return@AnimatedVisibility
         // A solid pane rather than glass: the pill also floats over the viewer, where the blur source would be the grid hidden behind the photo.
+        val canRevert = current.revert != null
         Row(
-            Modifier.clip(Shapes.capsule).background(Palette.panelSolid).padding(start = 18.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+            // Without the button the pill keeps the same height and evens its ends.
+            Modifier.heightIn(min = PILL_HEIGHT).clip(Shapes.capsule).background(Palette.panelSolid).padding(start = 18.dp, end = if (canRevert) 4.dp else 18.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             BasicText(current.message, style = Type.value.copy(color = Palette.textBright), maxLines = 1)
-            IconButton(onClick = { onUndo(current) }) { RestoreIcon(LocalAccent.current) }
+            if (canRevert) IconButton(onClick = { onUndo(current) }) { RestoreIcon(LocalAccent.current) }
         }
     }
 }

@@ -56,7 +56,12 @@ class MediaActions(
     fun undo(offer: UndoOffer) {
         if (undoOffer !== offer) return
         undoOffer = null
-        offer.revert()
+        offer.revert?.invoke()
+    }
+
+    // Says what just happened in the same pill, with nothing to take back.
+    fun notify(message: String) {
+        undoOffer = UndoOffer(message)
     }
 
     fun expireUndo(offer: UndoOffer) {
