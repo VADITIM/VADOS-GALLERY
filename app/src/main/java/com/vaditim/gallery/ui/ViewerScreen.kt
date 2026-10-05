@@ -238,12 +238,9 @@ fun ViewerScreen(
 
             OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
                 if (isPrivate) {
-                    SheetRow("Move to group", icon = { MoveIcon(it) }) { overlay = Overlay.HIDE }
-                    SheetRow("Move out to album", icon = { LockIcon(it, isOpen = true) }) { overlay = Overlay.MOVE }
+                    SplitSheetRow("Move to group", icon = { MoveIcon(it) }, onClick = { overlay = Overlay.HIDE }, sideIcon = { LockIcon(it, isOpen = true) }, onSide = { overlay = Overlay.MOVE })
                 } else {
-                    SheetRow("Move to album", icon = { MoveIcon(it) }) { overlay = Overlay.MOVE }
-                    SheetRow("Move to private", icon = { LockIcon(it) }) { overlay = Overlay.HIDE }
-                    SheetRow("Edit", icon = { SlidersIcon(it) }) { overlay = Overlay.NONE; actions.edit(current) }
+                    SplitSheetRow("Move to album", icon = { MoveIcon(it) }, onClick = { overlay = Overlay.MOVE }, sideIcon = { LockIcon(it) }, onSide = { overlay = Overlay.HIDE })
                 }
                 if (video != null) {
                     SheetRow("Save frame", icon = { ImageIcon(it) }) {

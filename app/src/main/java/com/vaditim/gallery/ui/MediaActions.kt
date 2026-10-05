@@ -76,17 +76,6 @@ class MediaActions(
         context.startActivity(Intent.createChooser(send, null))
     }
 
-    fun edit(item: MediaItem) {
-        val edit = Intent(Intent.ACTION_EDIT)
-            .setDataAndType(item.uri, item.mimeType)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-        try {
-            context.startActivity(Intent.createChooser(edit, null))
-        } catch (exception: ActivityNotFoundException) {
-            notify("No editor installed")
-        }
-    }
-
     // A crop or trim saved as a copy beside the original. The returned job is cancelled when the editor is left mid-save.
     fun crop(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit, onFinished: (Boolean) -> Unit): Job = scope.launch {
         val result = runCatching { if (item.isVideo) editor.editVideo(item, crop, startMs, endMs, onProgress) else editor.cropImage(item, crop) }

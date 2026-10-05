@@ -103,7 +103,7 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
 
 - The same grid as RECENT, holding only favourites.
 - Favourite state lives in MediaStore (`IS_FAVORITE`), so it is shared with any other app that reads it.
-- **Favorites albums.** Inside Favorites, favourites can be gathered into albums of their own, and those albums into groups; none of it touches folders or anything outside Favorites. A button in the top row switches between every favourite in one grid and the albums (the same cover grid, groups, rearranging and "New album" as ALBUMS). A selection of favourites adds to an album (or a new one); inside an album the selection can also leave it. An album holds favourites only, so an unfavourited photo leaves it and an emptied album disappears. Long-press an album: rename, rearrange, group, add photos (from the favourites), delete (the album only, second tap).
+- **Favorites albums.** Inside Favorites, favourites can be gathered into albums of their own, and those albums into groups; none of it touches folders or anything outside Favorites. A button in the top row switches between every favourite in one grid and the albums (the same cover grid, groups, rearranging and "New album" as ALBUMS). Selecting favourites shows the same action bar as albums (share, move, private, trash); move there picks among the Favorites albums (or a new one). An album holds favourites only, so an unfavourited photo leaves it and an emptied album disappears. Long-press an album: rename, rearrange, group, add photos (from the favourites), delete (the album only, second tap).
 
 ## The viewer
 
@@ -135,9 +135,7 @@ Four entries. That is the whole menu.
 
 | Entry | What it does |
 |---|---|
-| **MOVE TO ALBUM** | Picks an album and moves the item there — the file actually moves on disk |
-| **MOVE TO PRIVATE** | Picks a private group (or makes one) and hides the item there |
-| **EDIT** | Hands the photo to an installed editor (Samsung's photo editor, or any other) |
+| **MOVE TO ALBUM / 🔒** | One row: the left 70% picks an album and moves the item there — the file actually moves on disk; after a slash, the lock icon alone over the right 30% picks a private group (or makes one) and hides the item there. Inside Private: move to group / open lock to move out |
 | **DETAILS** | Name, date, resolution, size, folder |
 
 ### Cut, on purpose

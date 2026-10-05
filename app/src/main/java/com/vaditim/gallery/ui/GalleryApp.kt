@@ -743,17 +743,8 @@ private fun Library(viewModel: GalleryViewModel) {
                             modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
                         ) { TrashIcon(Palette.danger) }
                     } else {
-                        if (section == Section.FAVORITES) {
-                            IconButton(onClick = { sheet = AppSheet.FAVORITE_ALBUM_PICK }) { AlbumsIcon(Palette.textBody) }
-                            if (openFavorite != null) {
-                                IconButton(onClick = {
-                                    val removed = selectedItems.map { it.id }.toSet()
-                                    Settings.updateFavoriteAlbums(Settings.favoriteAlbums.map { if (it.name == openFavorite.name) it.copy(ids = it.ids.filter { id -> id !in removed }) else it })
-                                    clearSelection()
-                                }) { CloseIcon(Palette.textBody) }
-                            }
-                        }
-                        IconButton(onClick = { sheet = AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
+                        // The same bar as in albums; inside Favorites, moving goes between its own albums.
+                        IconButton(onClick = { sheet = if (section == Section.FAVORITES) AppSheet.FAVORITE_ALBUM_PICK else AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
                         IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { LockIcon(Palette.textBody) }
                         IconButton(onClick = {
                             actions.trash(selectedItems)
@@ -890,10 +881,10 @@ private fun Library(viewModel: GalleryViewModel) {
                 onDismiss = { sheet = AppSheet.NONE },
             )
 
-            // Favorites albums only gather favourites; nothing here moves or changes a photo.
+            // Favorites albums only gather favourites; moving between them never touches the photo's folder.
             NamePickerSheet(
                 visible = sheet == AppSheet.FAVORITE_ALBUM_PICK,
-                label = "ADD TO ALBUM",
+                label = "MOVE TO",
                 choices = favoriteAlbumViews.filter { it.name != openFavorite?.name }.map { it.name to it.items.size },
                 newLabel = "+ New album",
                 onPick = { name ->
