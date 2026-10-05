@@ -22,9 +22,10 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.geometry.lerp
@@ -659,6 +660,7 @@ private fun Library(viewModel: GalleryViewModel) {
 
             TopRow(
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
+                photoCount = if (folderMemory != null) gridItems.size else 0,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onReview = when {
                     section == Section.RECENT -> { { review = ViewerSource.Recent } }
@@ -1415,11 +1417,12 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 // The top layer: the month you are looking at, or — while selecting — the count and the way out of the selection. Leaving a folder is the system back gesture.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
-        transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))) },
+        // Unclipped, so the count hanging under the month pill shows past the row.
+        transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1431,9 +1434,15 @@ private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, o
                 // The month sits at the left end and types itself over as it changes; the buttons gather at the right.
                 AnimatedVisibility(month.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
                     var lastMonth by remember { mutableStateOf(month) }
-                    if (month.isNotEmpty()) lastMonth = month
-                    Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        TypewriterText(lastMonth.uppercase(), style = Type.microLabel)
+                    var lastCount by remember { mutableStateOf(photoCount) }
+                    if (month.isNotEmpty()) {
+                        lastMonth = month
+                        lastCount = photoCount
+                    }
+                    BelowCentred(below = { TypewriterText(lastCount.toString(), style = Type.microLabel.copy(color = Palette.textMuted)) }) {
+                        Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
+                            TypewriterText(lastMonth.uppercase(), style = Type.microLabel)
+                        }
                     }
                 }
                 Box(Modifier.weight(1f))
@@ -1451,8 +1460,24 @@ private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, o
     }
 }
 
-private val TOP_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0.6f) + expandHorizontally(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
-private val TOP_EXIT = fadeOut(tween(Motion.STATE_MS)) + scaleOut(tween(Motion.STATE_MS), targetScale = 0.6f) + shrinkHorizontally(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
+// `content` with `below` centred under it, hanging outside its bounds, so the row around it keeps the height of the content alone.
+@Composable
+private fun BelowCentred(below: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Layout(contents = listOf(content, below)) { (contentMeasurables, belowMeasurables), constraints ->
+        val main = contentMeasurables.first().measure(constraints)
+        val hanging = belowMeasurables.first().measure(Constraints())
+        layout(main.width, main.height) {
+            main.place(0, 0)
+            hanging.place((main.width - hanging.width) / 2, main.height + BELOW_GAP.roundToPx())
+        }
+    }
+}
+
+private val BELOW_GAP = 6.dp
+
+// Top buttons pop: they grow in past full size and settle, and shrink away to nothing, in place rather than sliding.
+private val TOP_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+private val TOP_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f)
 
 // A top button that is there only while it has something to do; it keeps its last action while it leaves.
 @Composable
@@ -1460,7 +1485,7 @@ private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, icon: @Composable ()
     var lastClick by remember { mutableStateOf(onClick) }
     if (onClick != null) lastClick = onClick
     AnimatedVisibility(onClick != null, enter = TOP_ENTER, exit = TOP_EXIT) {
-        // The gap rides inside, so it comes and goes with the button instead of jumping.
+        // The gap rides inside, so it comes and goes with the button.
         Box(Modifier.padding(start = 8.dp)) { TopButton({ lastClick?.invoke() }, icon) }
     }
 }
