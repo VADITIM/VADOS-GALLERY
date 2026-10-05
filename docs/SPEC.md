@@ -59,7 +59,7 @@ the Apple order. The thumb is at the bottom of the screen and so is the photo ju
   its photos), and *+ New album* at the end of every "move to" list — from the viewer, a selection, or
   a private group being moved out. A new album is a folder under `Pictures/`.
 - *Removed:* the **+ Add** button at the top of albums and private groups; photos go in with Move. *Add photos* stays in the long-press menu.
-- **Long-press an album:** *Add photos*, *Move album to private*, *Delete album* (second tap confirms;
+- **Long-press an album:** *Add photos*, *Move album to private*, *Delete album* (after Confirm;
   the photos go to the system trash).
 - *Planned:* a *Recently deleted* row at the very end of the list as the one way into the trash.
 
@@ -76,8 +76,8 @@ Samsung Gallery has one private album. This one has **groups**: as many private 
 - **Getting in:** the viewer's ••• → *Move to private* → pick a group or *+ New group*. Hiding does
   not need the fingerprint; looking does.
 - **Long-press a group:** *Add photos*, *Move group out to album* (an existing album or a new one, named
-  after the group by default; the emptied group is removed), *Delete group* (second tap confirms — final).
-- **Inside a private photo:** SHARE, DELETE (a second tap to confirm — private photos are outside the
+  after the group by default; the emptied group is removed), *Delete group* (after Confirm — final).
+- **Inside a private photo:** SHARE, DELETE (after Confirm — private photos are outside the
   system trash, so this one is final), and ••• → *Move to group*, *Move out to album*, *Details*.
 - **Private favourites.** A favourite that goes into Private stays a favourite — but only as a
   *private* favourite, kept in the private folder itself (`.favorites`), never in MediaStore, so it can
@@ -154,7 +154,7 @@ section bar is replaced by the selection's own bar:
 | Where | Actions |
 |---|---|
 | Recent, Favorites, an album | SHARE · MOVE (to an album) · PRIVATE (to a group) · DELETE (to the trash) |
-| A private group, Private Favorites | SHARE · GROUP (to another group) · OUT (back to an album) · DELETE (forever, second tap confirms) |
+| A private group, Private Favorites | SHARE · GROUP (to another group) · OUT (back to an album) · DELETE (forever, after Confirm) |
 
 *Planned:* dragging across thumbnails to select a run (the Apple swipe-select).
 
@@ -218,7 +218,7 @@ review, which is not a goal.
 - **Album names fit:** at three or four per row the name and count shrink until they fit (down to 9sp), then cut. One per row is a list: small cover at the start, large name and count beside it.
 - **Month chip** reads "September 25" (two-digit year) and never wraps.
 - **One cover grid.** Albums, private groups and locations share `CoverGrid`/`CoverCard`: the same columns (pinch or Settings), list layout at one column, shrinking names. Albums and private groups can be rearranged (long-press → Rearrange), by dragging a card onto another.
-- **Trash photos open** in the viewer on a tap (long press selects); the viewer there offers share, restore and delete forever (second tap).
+- **Trash photos open** in the viewer on a tap (long press selects); the viewer there offers share, restore and delete forever (after Confirm).
 
 - The blur along the top edge fades evenly: strongest at the screen edge, easing out steadily the further down it goes, over a short band (half its first height).
 - Grouped albums (a setting): albums can be put into groups, as many as wanted. A group lies in the albums grid as a stack of its covers, each card leaning a little. Tapping it lays its albums out in the grid from its place onwards, wrapping by the album columns, under the group's name as a heading, with a back arrow at the right end of that heading that stacks them back. An album's menu adds it to a group, moves it to another, or takes it out; a group's menu renames it, rearranges, or ungroups it. Turning the setting off shows every album on its own again and keeps the groups for later.
@@ -261,14 +261,14 @@ review, which is not a goal.
 - **One Favorites album per photo.** A favourite already in a Favorites album is not offered when adding to another; adding a selection to an album moves those photos out of any other.
 - **Dates opposite the timeline.** In every photo grid the month and week headers sit at the left, in the section colour and a little larger, and the day stamps at each tile's top left, across from the timeline on the right; a similar-shot stack's mark stays at the top right.
 - **Favorites albums in the section colour.** The names of the albums made inside Favorites are in its colour, setting them apart from real folders.
-- **Cover menus.** Every long-pressed album (Albums or Favorites) has the same menu, alternatives sharing one row (words on the left 70%, the other as its icon on the right 30%, split by a slash). Under ALBUMS: Hide from Recent / delete (trash; the first delete tap turns the row into the confirming delete), Remove from group when the album is in one, and Add photos at the bottom. Under EDIT: Rename; Move to group (Add to group) / private (lock), or Move album to private alone while grouping is off. Select / rearrange is always the last row. Every long-pressed group follows the same layout: GROUPS holds Ungroup all (Delete group for private groups), EDIT holds Rename (and for private groups Move group out and Add photos), and Select / rearrange closes it. Albums selected from the menu get the same actions in the bar: move to group, private, hide from Recent (or show again once all are hidden), and delete.
+- **Cover menus.** Every long-pressed album (Albums or Favorites) has the same menu, alternatives sharing one row (words on the left 70%, the other as its icon on the right 30%, split by a slash). Under ALBUMS: Hide from Recent / delete (trash; the menu closes and the delete waits for Confirm), Remove from group when the album is in one, and Add photos at the bottom. Under EDIT: Rename; Move to group (Add to group) / private (lock), or Move album to private alone while grouping is off. Select / rearrange is always the last row. Every long-pressed group follows the same layout: GROUPS holds Ungroup all (Delete group for private groups), EDIT holds Rename (and for private groups Move group out and Add photos), and Select / rearrange closes it. Albums selected from the menu get the same actions in the bar: move to group, private, hide from Recent (or show again once all are hidden), and delete.
 - **Rearranging drags at once.** While rearranging, a held card has no long press, so holding a card and then dragging always moves it.
 - **The bar inside Private.** Once in Private, the bar's sections show Private's own photos until it is left: Recent is every private photo in one grid, Albums is the private groups, and Favorites the private favourites, either as one grid or grouped by private group (each group a cover of only its favourites; the top-row toggle switches, and Private remembers its own choice apart from Favorites outside). The private favourites folder inside the groups is gone, since Favorites covers it. Back from Private's Recent or Favorites goes to its groups, and back from the groups leaves Private; locking leaves it too. Above the bar, centred, a small PRIVATE pill with a back button beside it on the left says the bar is Private's, and leaves Private. Inside Private every section takes Private's own colour (#FA3438). Review works in Private's Recent and Favorites.
 - **Colour on the cut.** A change of section or place recolours the buttons only once the outgoing view has left.
 - **Place colours.** Locations is blue (#148BC7), the trash grey and Private red (#FA3438): each takes its colour in its own view (the bar, the buttons, the headings) and on its tile at the end of Albums. There Private, Locations and Trash are three tiles in one row, each as big as an album cover with its icon (a lock, a pin, a bin) larger in the middle and its name below, set apart from the albums by a hairline with a wider gap.
 - **The bar inside Locations.** In Locations and inside a location, the same pill sits above the bar: LOCATIONS with a back button beside it on the left, which goes back to the locations from a location, and to the albums from Locations.
 - **Delete now.** Above the bar in the trash, a DELETE NOW button empties the whole trash for good, after Confirm.
-- **Confirm.** A delete that cannot be undone (from the trash, in Private, whole albums or groups from the bar) is not done at the button: a CONFIRM pill rises above the bar, over anything already there, and deletes on tap; anything else lets it go.
+- **Confirm.** Every delete button works as the trash's: in every grid's bar, every cover menu and the viewer, the delete is not done at the button: a CONFIRM pill rises above the bar (in the viewer above its buttons), over anything already there, and deletes on tap; anything else lets it go. Review's Done is its own confirmation.
 - **Restore from the trash.** Restore asks first: Restore puts each back where it was, Restore to album picks an album (or a new one) and puts the selection there.
 - **Settings per view.** Recent, Albums, Favorites, Locations, Trash and Private each keep their own image columns, layout, month headers and stacking of similar shots, and (where they show covers) their own album columns; Albums and Favorites each have their own Grouped albums (Favorites starts with it on). The settings sheet's first tab is named after the view it is changing and shows only what applies there. The General and Interface tabs stay the same everywhere. Each view starts from what the single setting was before.
 - **The bottom bar animates.** Switching between the sections bar, a selection's actions and the rearrange check pops one out and the next in, scaling and fading, rather than cutting.

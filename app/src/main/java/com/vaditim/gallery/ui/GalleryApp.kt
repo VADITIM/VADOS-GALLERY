@@ -261,11 +261,11 @@ private fun Library(viewModel: GalleryViewModel) {
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
     var sheetGroup by remember { mutableStateOf<PrivateGroup?>(null) }
     var sheetStack by remember { mutableStateOf<String?>(null) }
-    var isMenuDeleteArmed by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerTarget?>(null) }
+    // Opening anything else lets a delete waiting on Confirm go.
+    LaunchedEffect(sheet) { if (sheet != AppSheet.NONE) pendingDelete = null }
     // The folder being reviewed one photo at a time, if any.
     var review by remember { mutableStateOf<ViewerSource?>(null) }
-    LaunchedEffect(sheet) { if (sheet != AppSheet.ALBUM_MENU && sheet != AppSheet.GROUP_MENU && sheet != AppSheet.FAVORITE_ALBUM_MENU) isMenuDeleteArmed = false }
     // The Favorites album open, the one long-pressed, and its groups left open.
     var openFavoriteAlbum by remember { mutableStateOf<String?>(null) }
     var sheetFavoriteAlbum by remember { mutableStateOf<String?>(null) }
@@ -867,21 +867,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-            // A delete waits here, above everything else over the bar, until it is confirmed.
-            AnimatedVisibility(pendingDelete != null, enter = TOP_ENTER, exit = TOP_EXIT) {
-                Box(
-                    Modifier.padding(bottom = 8.dp)
-                        .pressable(onClick = {
-                            val delete = pendingDelete
-                            pendingDelete = null
-                            delete?.invoke()
-                        })
-                        .background(Palette.danger, Shapes.capsule)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep))
-                }
-            }
+            ConfirmPill(pendingDelete, onDone = { pendingDelete = null })
             // The bar pops from one kind to the next instead of cutting, as the top buttons do.
             AnimatedContent(
                 targetState = bottomBar,
@@ -895,7 +881,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 } else if (shownBar == BottomBar.COVERS) {
                     Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
-                        val deleteModifier = if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier
+                        val deleteModifier = Modifier.pendingMark(pendingDelete != null)
                         if (selectedGroups.isNotEmpty()) {
                             IconButton(onClick = { sheet = AppSheet.GROUP_MOVE_OUT }) { LockIcon(Palette.textBody, isOpen = true) }
                             // Private groups are outside the system trash, so deleting them waits for Confirm.
@@ -942,7 +928,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                     clearSelection()
                                 }
                             },
-                            modifier = if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                            modifier = Modifier.pendingMark(pendingDelete != null),
                         ) { TrashIcon(Palette.danger) }
                       } else {
                         IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
@@ -974,16 +960,22 @@ private fun Library(viewModel: GalleryViewModel) {
                                         clearSelection()
                                     }
                                 },
-                                modifier = if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                                modifier = Modifier.pendingMark(pendingDelete != null),
                             ) { TrashIcon(Palette.danger) }
                         } else {
                             // The same bar as in albums; inside Favorites, moving goes between its own albums.
                             IconButton(onClick = { sheet = if (section == Section.FAVORITES) AppSheet.FAVORITE_ALBUM_PICK else AppSheet.SELECTION_MOVE }) { MoveIcon(Palette.textBody) }
                             IconButton(onClick = { sheet = AppSheet.SELECTION_GROUP }) { LockIcon(Palette.textBody) }
-                            IconButton(onClick = {
-                                actions.trash(selectedItems)
-                                clearSelection()
-                            }) { TrashIcon(Palette.danger) }
+                            // Every delete waits for Confirm, as in the trash.
+                            IconButton(
+                                onClick = {
+                                    pendingDelete = {
+                                        actions.trash(selectedItems)
+                                        clearSelection()
+                                    }
+                                },
+                                modifier = Modifier.pendingMark(pendingDelete != null),
+                            ) { TrashIcon(Palette.danger) }
                         }
                       }
                     }
@@ -1018,7 +1010,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 Modifier.padding(bottom = 8.dp)
                                     .pressable(onClick = { pendingDelete = { actions.deleteForever(trash) } })
                                     .glass(Shapes.capsule)
-                                    .then(if (pendingDelete != null) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier)
+                                    .pendingMark(pendingDelete != null)
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             ) {
                                 BasicText("DELETE NOW", style = Type.microLabel.copy(color = Palette.danger))
@@ -1127,15 +1119,11 @@ private fun Library(viewModel: GalleryViewModel) {
                         sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
                         sheet = AppSheet.NONE
                     },
-                    isDeleteArmed = isMenuDeleteArmed,
-                    armedDeleteText = "Tap again: ${sheetAlbum?.items?.size ?: 0} photos to the trash",
+                    // The menu goes and the delete waits for Confirm above the bar, as every delete does.
                     onDelete = {
-                        if (isMenuDeleteArmed) {
-                            sheetAlbum?.let { actions.trash(it.items) }
-                            sheet = AppSheet.NONE
-                        } else {
-                            isMenuDeleteArmed = true
-                        }
+                        val album = sheetAlbum
+                        sheet = AppSheet.NONE
+                        pendingDelete = { album?.let { actions.trash(it.items) } }
                     },
                 )
             }
@@ -1219,15 +1207,9 @@ private fun Library(viewModel: GalleryViewModel) {
                         picker = PickerTarget.IntoFavoriteAlbum(albumName)
                         sheet = AppSheet.NONE
                     },
-                    isDeleteArmed = isMenuDeleteArmed,
-                    armedDeleteText = "Tap again: delete album",
                     onDelete = {
-                        if (isMenuDeleteArmed) {
-                            Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name != albumName })
-                            sheet = AppSheet.NONE
-                        } else {
-                            isMenuDeleteArmed = true
-                        }
+                        sheet = AppSheet.NONE
+                        pendingDelete = { Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name != albumName }) }
                     },
                 )
             }
@@ -1290,16 +1272,13 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
                     groups = {
                         SheetRow(
-                            if (isMenuDeleteArmed) "Tap again: delete ${sheetGroup?.items?.size ?: 0} photos forever" else "Delete group",
+                            "Delete group",
                             color = Palette.danger,
                             icon = { TrashIcon(it) },
                         ) {
-                            if (isMenuDeleteArmed) {
-                                sheetGroup?.let { actions.deleteGroup(it) }
-                                sheet = AppSheet.NONE
-                            } else {
-                                isMenuDeleteArmed = true
-                            }
+                            val group = sheetGroup
+                            sheet = AppSheet.NONE
+                            pendingDelete = { group?.let { actions.deleteGroup(it) } }
                         }
                     },
                     edit = {

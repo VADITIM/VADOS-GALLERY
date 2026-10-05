@@ -131,7 +131,9 @@ fun ViewerScreen(
     val pagerState = rememberPagerState(initialPage = startIndex.coerceIn(0, items.lastIndex)) { items.size }
     var isChromeVisible by remember { mutableStateOf(true) }
     var overlay by remember { mutableStateOf(Overlay.NONE) }
-    var isDeleteArmed by remember { mutableStateOf(false) }
+    // A delete waiting on Confirm above the buttons, as in the grids.
+    var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
+    LaunchedEffect(overlay) { if (overlay != Overlay.NONE) pendingDelete = null }
     // The group a photo is about to go into, held while the confirmation is open.
     var pendingGroup by remember { mutableStateOf<String?>(null) }
     var cropping by remember { mutableStateOf<MediaItem?>(null) }
@@ -145,7 +147,7 @@ fun ViewerScreen(
     val context = LocalContext.current
     val isCurrentMotion by produceState(MotionPhoto.knownFor(current) == true, current.id) { value = MotionPhoto.isMotion(context, current) }
     LaunchedEffect(current.id) {
-        isDeleteArmed = false
+        pendingDelete = null
         onCurrentChanged(current.id)
     }
 
@@ -203,6 +205,7 @@ fun ViewerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                ChromePiece(isChromeShown, isFromTop = false, order = 2, pull = { maxOf(pull, lift) }) { ConfirmPill(pendingDelete, onDone = { pendingDelete = null }) }
                 if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
                 ChromePiece(isChromeShown, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }) {
                 Row(
@@ -213,21 +216,22 @@ fun ViewerScreen(
                     IconButton(onClick = { actions.share(listOf(current)) }) { ShareIcon(Palette.textBody) }
                     if (isTrash) {
                         IconButton(onClick = { actions.restore(listOf(current)) }) { RestoreIcon(LocalAccent.current) }
-                        // Out of the trash there is no coming back, so it takes a second tap.
                         IconButton(
-                            onClick = { if (isDeleteArmed) actions.deleteForever(listOf(current)) else isDeleteArmed = true },
-                            modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                            onClick = { pendingDelete = { actions.deleteForever(listOf(current)) } },
+                            modifier = Modifier.pendingMark(pendingDelete != null),
                         ) { TrashIcon(Palette.danger) }
                     } else {
                     IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) Palette.favorite else Palette.textBody) }
                     if (isPrivate) {
-                        // Private photos are outside the system trash, so a delete here is final and takes a second tap to mean it.
                         IconButton(
-                            onClick = { if (isDeleteArmed) actions.deletePrivate(listOf(current)) else isDeleteArmed = true },
-                            modifier = if (isDeleteArmed) Modifier.background(Palette.danger.copy(alpha = 0.22f), Shapes.capsule) else Modifier,
+                            onClick = { pendingDelete = { actions.deletePrivate(listOf(current)) } },
+                            modifier = Modifier.pendingMark(pendingDelete != null),
                         ) { TrashIcon(Palette.danger) }
                     } else {
-                        IconButton(onClick = { actions.trash(listOf(current)) }) { TrashIcon(Palette.danger) }
+                        IconButton(
+                            onClick = { pendingDelete = { actions.trash(listOf(current)) } },
+                            modifier = Modifier.pendingMark(pendingDelete != null),
+                        ) { TrashIcon(Palette.danger) }
                     }
                     IconButton(onClick = { overlay = Overlay.MORE }) { MoreIcon(Palette.textBody) }
                     }

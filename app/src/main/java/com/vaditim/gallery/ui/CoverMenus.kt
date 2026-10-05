@@ -17,24 +17,17 @@ fun AlbumMenuRows(
     isHiddenFromRecent: Boolean,
     onToggleRecent: () -> Unit,
     onAddPhotos: () -> Unit,
-    isDeleteArmed: Boolean,
-    armedDeleteText: String,
     onDelete: () -> Unit,
 ) {
     SheetHeader("Albums")
-    // Once armed the whole row is the delete, so the second tap cannot land on the other half.
-    if (isDeleteArmed) {
-        SheetRow(armedDeleteText, color = Palette.danger, icon = { TrashIcon(it) }, onClick = onDelete)
-    } else {
-        SplitSheetRow(
-            if (isHiddenFromRecent) "Show in Recent" else "Hide from Recent",
-            icon = { EyeIcon(it, isCrossed = !isHiddenFromRecent) },
-            onClick = onToggleRecent,
-            sideIcon = { TrashIcon(it) },
-            onSide = onDelete,
-            sideColor = Palette.danger,
-        )
-    }
+    SplitSheetRow(
+        if (isHiddenFromRecent) "Show in Recent" else "Hide from Recent",
+        icon = { EyeIcon(it, isCrossed = !isHiddenFromRecent) },
+        onClick = onToggleRecent,
+        sideIcon = { TrashIcon(it) },
+        onSide = onDelete,
+        sideColor = Palette.danger,
+    )
     if (group?.name != null) SheetRow("Remove from group", trailing = group.name, icon = { CloseIcon(it) }, onClick = group.onRemove)
     SheetRow("Add photos", icon = { PlusIcon(it) }, onClick = onAddPhotos)
     SheetHeader("Edit")
