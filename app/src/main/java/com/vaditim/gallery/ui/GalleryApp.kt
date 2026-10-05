@@ -120,6 +120,8 @@ sealed interface ViewerSource {
     data class InAlbum(val albumId: Long) : ViewerSource
     data class InPrivateGroup(val name: String) : ViewerSource
     data object PrivateFavorites : ViewerSource
+    data object PrivateRecent : ViewerSource
+    data class InPrivateFavoriteGroup(val name: String) : ViewerSource
     data object Trash : ViewerSource
     data class InLocation(val key: String) : ViewerSource
     data class InFavoriteAlbum(val name: String) : ViewerSource
@@ -133,14 +135,13 @@ private sealed interface AlbumsPlace {
     data class Folder(val albumId: Long) : AlbumsPlace
     data object PrivateGroups : AlbumsPlace
     data class PrivateFolder(val name: String) : AlbumsPlace
-    data object PrivateFavorites : AlbumsPlace
     data object Locations : AlbumsPlace
     data class Location(val key: String) : AlbumsPlace
     data object Trash : AlbumsPlace
 }
 
 private val AlbumsPlace.isPrivate: Boolean
-    get() = this is AlbumsPlace.PrivateGroups || this is AlbumsPlace.PrivateFolder || this is AlbumsPlace.PrivateFavorites
+    get() = this is AlbumsPlace.PrivateGroups || this is AlbumsPlace.PrivateFolder
 
 // The sheets the app itself opens — for a selection or for a long-pressed album. The viewer has its own.
 private enum class AppSheet {
@@ -256,6 +257,13 @@ private fun Library(viewModel: GalleryViewModel) {
     val recentMemory = remember { GridMemory() }
     val favoritesMemory = remember { GridMemory() }
     val privateFavoritesMemory = remember { GridMemory() }
+    val privateRecentMemory = remember { GridMemory() }
+    val privateFavoriteGroupMemories = remember { mutableMapOf<String, GridMemory>() }
+    val privateFavoriteGroupsListState = rememberLazyGridState()
+    // Inside Private the bar's sections show Private's own photos: Recent all of them, Favorites its favourites, Albums its groups. Entered from Albums, left by backing out of the groups or by locking.
+    var isPrivateMode by remember { mutableStateOf(false) }
+    // The private group opened from Private's Favorites, as a grid of only its favourites.
+    var openPrivateFavoriteGroup by remember { mutableStateOf<String?>(null) }
     // The trash keeps every shot on its own, since each one there is about to go.
     val trashMemory = remember { GridMemory(isStacking = false) }
     // Photos about to go into Private, held while the confirmation is open.
@@ -313,7 +321,16 @@ private fun Library(viewModel: GalleryViewModel) {
     val place = if (section == Section.ALBUMS) albumsPlace else null
     val openAlbum = (place as? AlbumsPlace.Folder)?.let { folder -> albums.firstOrNull { it.id == folder.albumId } }
     val openPrivateGroup = (place as? AlbumsPlace.PrivateFolder)?.let { folder -> privateContents.groups.firstOrNull { it.name == folder.name } }
-    val isInPrivate = place?.isPrivate == true
+    val isInPrivate = isPrivateMode
+    // Every private photo, oldest first like the library, and the favourites gathered by the group they are in.
+    val privateRecent = remember(privateContents) { privateContents.groups.flatMap { it.items }.sortedWith(compareBy<MediaItem> { it.timestampMillis }.thenBy { it.id }) }
+    val privateFavoriteGroups = remember(privateContents, arrangedGroups) {
+        val favoriteIds = privateContents.favorites.map { it.id }.toSet()
+        arrangedGroups.mapNotNull { group -> group.items.filter { it.id in favoriteIds }.takeIf { it.isNotEmpty() }?.let { group.copy(items = it) } }
+    }
+    val openPrivateFavorite = openPrivateFavoriteGroup?.let { name -> privateFavoriteGroups.firstOrNull { it.name == name } }
+    LaunchedEffect(openPrivateFavorite == null) { if (openPrivateFavorite == null) openPrivateFavoriteGroup = null }
+    val isPrivateFavoritesGrouped = Settings.privateFavoritesAsGroups && openPrivateFavorite == null
     val openLocation = (place as? AlbumsPlace.Location)?.let { shown -> locations.firstOrNull { it.key == shown.key } }
     // A Favorites album's path is its name, so both cover grids pick by path.
     val selectedAlbums = when {
@@ -331,6 +348,12 @@ private fun Library(viewModel: GalleryViewModel) {
 
     // The items of the grid on screen, which is what a selection is made of.
     val gridItems: List<MediaItem> = when {
+        isPrivateMode && section == Section.RECENT -> privateRecent
+        isPrivateMode && section == Section.FAVORITES -> when {
+            openPrivateFavorite != null -> openPrivateFavorite.items
+            isPrivateFavoritesGrouped -> emptyList()
+            else -> privateContents.favorites
+        }
         section == Section.RECENT -> recent
         section == Section.FAVORITES -> when {
             openFavorite != null -> openFavorite.items
@@ -341,7 +364,6 @@ private fun Library(viewModel: GalleryViewModel) {
         openPrivateGroup != null -> openPrivateGroup.items
         openLocation != null -> openLocation.items
         place is AlbumsPlace.Trash -> trash
-        place is AlbumsPlace.PrivateFavorites -> privateContents.favorites
         else -> emptyList()
     }
     val selectedItems = gridItems.filter { it.id in selectedIds }
@@ -357,9 +379,18 @@ private fun Library(viewModel: GalleryViewModel) {
         isDeleteArmed = false
         sheet = AppSheet.NONE
     }
-    LaunchedEffect(section, albumsPlace, favoritesView) {
+    LaunchedEffect(section, albumsPlace, favoritesView, isPrivateMode, openPrivateFavoriteGroup, isPrivateFavoritesGrouped) {
         clearSelection()
         isRearranging = false
+    }
+    // Inside Private, back from its Recent or Favorites goes to its groups, and from a group opened in its Favorites back to those; backing out of the groups leaves Private.
+    BackHandler(enabled = isPrivateMode && section != Section.ALBUMS) {
+        if (section == Section.FAVORITES && openPrivateFavoriteGroup != null) {
+            openPrivateFavoriteGroup = null
+        } else {
+            section = Section.ALBUMS
+            albumsPlace = AlbumsPlace.PrivateGroups
+        }
     }
     BackHandler(enabled = isRearranging) { isRearranging = false }
     BackHandler(enabled = isSelecting || isSelectingCovers) { clearSelection() }
@@ -373,6 +404,8 @@ private fun Library(viewModel: GalleryViewModel) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.lockPrivate() }
     LaunchedEffect(isPrivateUnlocked) {
         if (!isPrivateUnlocked) {
+            isPrivateMode = false
+            openPrivateFavoriteGroup = null
             if (albumsPlace.isPrivate) albumsPlace = AlbumsPlace.Folders
             if (viewer?.source.isPrivateSource()) viewer = null
             if (review.isPrivateSource()) review = null
@@ -388,13 +421,20 @@ private fun Library(viewModel: GalleryViewModel) {
 
     val openPrivate = {
         if (isPrivateUnlocked) {
+            isPrivateMode = true
             albumsPlace = AlbumsPlace.PrivateGroups
         } else {
             PrivateLock.unlock(context) {
                 viewModel.unlockPrivate()
+                isPrivateMode = true
                 albumsPlace = AlbumsPlace.PrivateGroups
             }
         }
+    }
+    val leavePrivate = {
+        isPrivateMode = false
+        openPrivateFavoriteGroup = null
+        albumsPlace = AlbumsPlace.Folders
     }
 
     fun itemsFor(source: ViewerSource): List<MediaItem> = when (source) {
@@ -403,17 +443,24 @@ private fun Library(viewModel: GalleryViewModel) {
         is ViewerSource.InAlbum -> albums.firstOrNull { it.id == source.albumId }?.items.orEmpty()
         is ViewerSource.InPrivateGroup -> if (isPrivateUnlocked) privateContents.groups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
         ViewerSource.PrivateFavorites -> if (isPrivateUnlocked) privateContents.favorites else emptyList()
+        ViewerSource.PrivateRecent -> if (isPrivateUnlocked) privateRecent else emptyList()
+        is ViewerSource.InPrivateFavoriteGroup -> if (isPrivateUnlocked) privateFavoriteGroups.firstOrNull { it.name == source.name }?.items.orEmpty() else emptyList()
         is ViewerSource.InLocation -> locations.firstOrNull { it.key == source.key }?.items.orEmpty()
         is ViewerSource.InFavoriteAlbum -> favoriteAlbumViews.firstOrNull { it.name == source.name }?.items.orEmpty()
         ViewerSource.Trash -> trash
     }
 
     val folderMemory = when {
+        isPrivateMode && section == Section.RECENT -> privateRecentMemory
+        isPrivateMode && section == Section.FAVORITES -> when {
+            openPrivateFavorite != null -> privateFavoriteGroupMemories.getOrPut(openPrivateFavorite.name) { GridMemory() }
+            isPrivateFavoritesGrouped -> null
+            else -> privateFavoritesMemory
+        }
         openAlbum != null -> albumMemories.getOrPut(openAlbum.id) { GridMemory() }
         openPrivateGroup != null -> privateMemories.getOrPut(openPrivateGroup.name) { GridMemory() }
         openLocation != null -> locationMemories.getOrPut(openLocation.key) { GridMemory() }
         place is AlbumsPlace.Trash -> trashMemory
-        place is AlbumsPlace.PrivateFavorites -> privateFavoritesMemory
         section == Section.RECENT -> recentMemory
         section == Section.FAVORITES -> when {
             openFavorite != null -> favoriteAlbumMemories.getOrPut(openFavorite.name) { GridMemory() }
@@ -464,8 +511,9 @@ private fun Library(viewModel: GalleryViewModel) {
     CompositionLocalProvider(LocalAccent provides accent, LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
             // A section change is a cut, not a dissolve: the outgoing section is gone fast and at once, the incoming one lands from just below on the overshoot.
+            // Recent and Favorites inside Private are their own screens, so going in or out of Private changes them as a section change does.
             AnimatedContent(
-                targetState = section,
+                targetState = section to (isPrivateMode && section != Section.ALBUMS),
                 transitionSpec = {
                     (fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut)) +
                         slideInVertically(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.backOut)) { it / 40 })
@@ -473,10 +521,57 @@ private fun Library(viewModel: GalleryViewModel) {
                 },
                 label = "section",
                 modifier = Modifier.fillMaxSize().hazeSource(hazeState),
-            ) { shown ->
+            ) { (shown, isPrivateShown) ->
                 // Each section keeps its own accent while it leaves, so the outgoing one never takes on the next one's colour.
                 CompositionLocalProvider(LocalAccent provides shown.accent) {
-                when (shown) {
+                if (isPrivateShown && shown == Section.RECENT) {
+                    MediaGrid(
+                        items = privateRecent,
+                        memory = privateRecentMemory,
+                        onOpen = { viewer = ViewerRequest(ViewerSource.PrivateRecent, it) },
+                        contentPadding = insetPadding,
+                        selection = selection,
+                        scrollToNewestRequest = scrollToNewestRequest,
+                        emptyCaption = "No photos yet.",
+                    )
+                } else if (isPrivateShown && shown == Section.FAVORITES) {
+                    AnimatedContent(
+                        targetState = openPrivateFavoriteGroup ?: if (Settings.privateFavoritesAsGroups) PRIVATE_FAVORITE_GROUPS else PRIVATE_FAVORITE_GRID,
+                        transitionSpec = {
+                            (fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut)) +
+                                scaleIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut), initialScale = 0.96f))
+                                .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
+                        },
+                        label = "privateFavorites",
+                    ) { shownView ->
+                        when (shownView) {
+                            PRIVATE_FAVORITE_GRID -> MediaGrid(
+                                items = privateContents.favorites,
+                                memory = privateFavoritesMemory,
+                                onOpen = { viewer = ViewerRequest(ViewerSource.PrivateFavorites, it) },
+                                contentPadding = insetPadding,
+                                selection = selection,
+                                scrollToNewestRequest = scrollToNewestRequest,
+                                emptyCaption = "Nothing favourited yet.",
+                            )
+                            PRIVATE_FAVORITE_GROUPS -> PrivateFavoriteGroupsScreen(
+                                groups = privateFavoriteGroups,
+                                onOpen = { openPrivateFavoriteGroup = it.name },
+                                contentPadding = insetPadding,
+                                state = privateFavoriteGroupsListState,
+                            )
+                            else -> privateFavoriteGroups.firstOrNull { it.name == shownView }?.let { group ->
+                                MediaGrid(
+                                    items = group.items,
+                                    memory = privateFavoriteGroupMemories.getOrPut(group.name) { GridMemory() },
+                                    onOpen = { viewer = ViewerRequest(ViewerSource.InPrivateFavoriteGroup(group.name), it) },
+                                    contentPadding = insetPadding,
+                                    selection = selection,
+                                )
+                            }
+                        }
+                    }
+                } else when (shown) {
                     Section.RECENT -> MediaGrid(
                         items = recent,
                         memory = recentMemory,
@@ -575,10 +670,9 @@ private fun Library(viewModel: GalleryViewModel) {
                                 sheetGroup = group
                                 sheet = AppSheet.GROUP_MENU
                             },
-                            onOpenFavorites = { albumsPlace = AlbumsPlace.PrivateFavorites },
                             onOpenSelection = { viewer = ViewerRequest(ViewerSource.PrivateFavorites, it) },
                             onNewGroup = { sheet = AppSheet.PRIVATE_NEW_GROUP },
-                            onBack = { albumsPlace = AlbumsPlace.Folders },
+                            onBack = leavePrivate,
                             contentPadding = insetPadding,
                             state = privateGroupsListState,
                             isViewerOpen = shownViewer != null,
@@ -593,14 +687,6 @@ private fun Library(viewModel: GalleryViewModel) {
                                 selection = selection,
                             )
                         }
-                        AlbumsPlace.PrivateFavorites -> PrivateItemsScreen(
-                            items = privateContents.favorites,
-                            memory = privateFavoritesMemory,
-                            onOpen = { viewer = ViewerRequest(ViewerSource.PrivateFavorites, it) },
-                            onBack = { albumsPlace = AlbumsPlace.PrivateGroups },
-                            contentPadding = insetPadding,
-                            selection = selection,
-                        )
                     } }
                     Section.FAVORITES -> AnimatedContent(
                         targetState = favoritesView,
@@ -668,25 +754,36 @@ private fun Library(viewModel: GalleryViewModel) {
                 photoCount = if (folderMemory != null) gridItems.size else 0,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onReview = when {
+                    isPrivateMode && section == Section.RECENT -> { { review = ViewerSource.PrivateRecent } }
+                    isPrivateMode && section == Section.FAVORITES -> when {
+                        openPrivateFavorite != null -> { { review = ViewerSource.InPrivateFavoriteGroup(openPrivateFavorite.name) } }
+                        isPrivateFavoritesGrouped -> null
+                        else -> { { review = ViewerSource.PrivateFavorites } }
+                    }
                     section == Section.RECENT -> { { review = ViewerSource.Recent } }
                     section == Section.FAVORITES && favoritesView == FavoritesView.All -> { { review = ViewerSource.Favorites } }
                     openAlbum != null -> { { review = ViewerSource.InAlbum(openAlbum.id) } }
                     openPrivateGroup != null -> { { review = ViewerSource.InPrivateGroup(openPrivateGroup.name) } }
-                    place is AlbumsPlace.PrivateFavorites -> { { review = ViewerSource.PrivateFavorites } }
                     openLocation != null -> { { review = ViewerSource.InLocation(openLocation.key) } }
                     section == Section.FAVORITES && openFavorite != null -> { { review = ViewerSource.InFavoriteAlbum(openFavorite.name) } }
                     else -> null
                 },
                 // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
                 onAdd = when {
+                    isPrivateMode && section != Section.ALBUMS -> null
                     openAlbum != null -> { { picker = PickerTarget.IntoAlbum(openAlbum.relativePath, openAlbum.name) } }
                     openPrivateGroup != null -> { { picker = PickerTarget.IntoGroup(openPrivateGroup.name) } }
                     section == Section.FAVORITES && openFavorite != null -> { { picker = PickerTarget.IntoFavoriteAlbum(openFavorite.name) } }
                     else -> null
                 },
                 // Favorites switches between every favourite in one grid and the albums made inside it.
-                onToggleView = if (section == Section.FAVORITES && openFavorite == null) { { Settings.updateFavoritesAsAlbums(!Settings.favoritesAsAlbums) } } else null,
-                isAlbumsView = Settings.favoritesAsAlbums,
+                // Inside Private the same button switches Private's own Favorites, which remembers its choice apart.
+                onToggleView = when {
+                    isPrivateMode && section == Section.FAVORITES -> if (openPrivateFavorite == null) { { Settings.updatePrivateFavoritesAsGroups(!Settings.privateFavoritesAsGroups) } } else null
+                    section == Section.FAVORITES && openFavorite == null -> { { Settings.updateFavoritesAsAlbums(!Settings.favoritesAsAlbums) } }
+                    else -> null
+                },
+                isAlbumsView = if (isPrivateMode) Settings.privateFavoritesAsGroups else Settings.favoritesAsAlbums,
                 onCancelSelection = clearSelection,
                 onSettings = { sheet = AppSheet.SETTINGS },
             )
@@ -794,8 +891,9 @@ private fun Library(viewModel: GalleryViewModel) {
                     onSelect = { selected ->
                         if (selected == section) {
                             when {
-                                selected == Section.ALBUMS -> albumsPlace = AlbumsPlace.Folders
-                                selected == Section.FAVORITES && openFavoriteAlbum != null -> openFavoriteAlbum = null
+                                selected == Section.ALBUMS -> albumsPlace = if (isPrivateMode) AlbumsPlace.PrivateGroups else AlbumsPlace.Folders
+                                selected == Section.FAVORITES && isPrivateMode && openPrivateFavoriteGroup != null -> openPrivateFavoriteGroup = null
+                                selected == Section.FAVORITES && !isPrivateMode && openFavoriteAlbum != null -> openFavoriteAlbum = null
                                 else -> scrollToNewestRequest++
                             }
                         }
@@ -1008,7 +1106,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 visible = sheet == AppSheet.SETTINGS,
                 onDismiss = { sheet = AppSheet.NONE },
                 onColumnsChanged = { columns ->
-                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values).forEach { it.columns = columns }
+                    (listOf(recentMemory, favoritesMemory, privateFavoritesMemory, privateRecentMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values + privateFavoriteGroupMemories.values).forEach { it.columns = columns }
                 },
             )
 
@@ -1411,13 +1509,20 @@ private fun ViewerSource.reviewKey(): String = when (this) {
     is ViewerSource.InPrivateGroup -> "group:$name"
     is ViewerSource.InLocation -> "location:$key"
     ViewerSource.PrivateFavorites -> "private-favorites"
+    ViewerSource.PrivateRecent -> "private-recent"
+    is ViewerSource.InPrivateFavoriteGroup -> "private-favorite-group:$name"
     ViewerSource.Recent -> "recent"
     ViewerSource.Favorites -> "favorites"
     ViewerSource.Trash -> "trash"
     is ViewerSource.InFavoriteAlbum -> "favorite-album:$name"
 }
 
-private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites
+private fun ViewerSource?.isPrivateSource(): Boolean =
+    this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites || this == ViewerSource.PrivateRecent || this is ViewerSource.InPrivateFavoriteGroup
+
+// What Private's Favorites shows besides an opened group, keyed apart from any group name (a group's name never holds a tab).
+private const val PRIVATE_FAVORITE_GRID = "\tgrid"
+private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 
 // The top layer: the month you are looking at, or — while selecting — the count and the way out of the selection. Leaving a folder is the system back gesture.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.

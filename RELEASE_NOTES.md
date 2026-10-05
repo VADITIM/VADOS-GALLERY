@@ -1,3 +1,5 @@
-# 0.86
+# 0.87
 
-- Renaming an album now only changes its name in the app. The folder on your phone stays as it is, so the camera and other apps keep saving into it.
+- Inside Private, the bottom bar now works for Private: Recent shows every private photo, Favorites shows private favourites (as one grid or grouped, remembered separately from normal Favorites), and Albums shows the private groups.
+- The Favorites folder inside Private is gone; use the Favorites button instead.
+- Back from Private's Recent or Favorites goes to its groups; back from there leaves Private.

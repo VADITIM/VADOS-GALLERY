@@ -66,6 +66,8 @@ object Settings {
     var favoriteAlbumOrder by mutableStateOf<List<String>>(emptyList())
         private set
     var favoritesAsAlbums by mutableStateOf(false)
+    // Private's Favorites keeps its own choice between one grid and its groups, apart from the Favorites outside.
+    var privateFavoritesAsGroups by mutableStateOf(false)
         private set
 
     // Album folders kept out of Recent; they still open as albums.
@@ -97,6 +99,7 @@ object Settings {
         favoriteStacks = readStacks("favoriteStacks")
         favoriteAlbumOrder = preferences.getString("favoriteAlbumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         favoritesAsAlbums = preferences.getBoolean("favoritesAsAlbums", false)
+        privateFavoritesAsGroups = preferences.getBoolean("privateFavoritesAsGroups", false)
         albumStacks = preferences.getString("albumStacks", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
             val parts = line.split('\t')
             AlbumStack(parts.first(), parts.drop(1).filter { it.isNotEmpty() })
@@ -138,6 +141,11 @@ object Settings {
     fun updateFavoritesAsAlbums(value: Boolean) {
         favoritesAsAlbums = value
         preferences.edit().putBoolean("favoritesAsAlbums", value).apply()
+    }
+
+    fun updatePrivateFavoritesAsGroups(value: Boolean) {
+        privateFavoritesAsGroups = value
+        preferences.edit().putBoolean("privateFavoritesAsGroups", value).apply()
     }
 
     fun updateBlur(value: Float) {

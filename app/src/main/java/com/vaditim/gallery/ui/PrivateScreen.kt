@@ -51,7 +51,6 @@ import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.vault.PrivateGroup
 import kotlin.random.Random
 
-private const val COVER_PIXELS = 512
 
 // The entry to Private, at the foot of the albums list where Apple keeps Hidden: present, never in the way.
 @Composable
@@ -74,7 +73,6 @@ fun PrivateGroupsScreen(
     favorites: List<MediaItem>,
     onOpen: (PrivateGroup) -> Unit,
     onLongPress: (PrivateGroup) -> Unit,
-    onOpenFavorites: () -> Unit,
     onOpenSelection: (Int) -> Unit,
     onNewGroup: () -> Unit,
     onBack: () -> Unit,
@@ -115,8 +113,18 @@ fun PrivateGroupsScreen(
             )
         }
         item(contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New group", onClick = onNewGroup) } }
-        item(span = { GridItemSpan(maxLineSpan) }, contentType = "favorites") {
-            Box(Modifier.entrance()) { FavoritesFolder(favorites.lastOrNull(), favorites.size, onClick = onOpenFavorites) }
+    }
+}
+
+// Private's Favorites by group: each private group holding favourites, as a cover of only those.
+@Composable
+fun PrivateFavoriteGroupsScreen(groups: List<PrivateGroup>, onOpen: (PrivateGroup) -> Unit, contentPadding: PaddingValues, state: LazyGridState) {
+    CoverGrid(state, contentPadding) {
+        item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
+            BasicText("Favorites", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+        }
+        items(groups, key = { it.name }, contentType = { "group" }) { group ->
+            CoverCard(group.name, group.cover, group.items.size, onClick = { onOpen(group) }, modifier = Modifier.entrance())
         }
     }
 }
@@ -192,33 +200,7 @@ private fun LoopingPreview(item: MediaItem, isCovered: Boolean) {
     }
 }
 
-// The private favourites, always the first thing in Private: a wide row, so it reads as a folder apart from the groups below it.
-@Composable
-private fun FavoritesFolder(cover: MediaItem?, count: Int, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val request = remember(cover?.uri) { cover?.let { ImageRequest.Builder(context).data(it.uri).size(COVER_PIXELS).build() } }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .pressable(onClick = onClick, pressedScale = 0.97f)
-            .clip(Shapes.panel)
-            .background(Palette.panel)
-            .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(56.dp).clip(Shapes.tile).background(Palette.sunken)) {
-            if (request != null) {
-                AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            }
-        }
-        Column(Modifier.padding(start = 14.dp)) {
-            BasicText("Favorites", style = Type.cardTitle.copy(color = LocalAccent.current))
-            BasicText(count.toString(), style = Type.value, modifier = Modifier.padding(top = 2.dp))
-        }
-    }
-}
-
-// A private group, or the private favourites: the same grid either way.
+// A private group opened from Private's groups.
 @Composable
 fun PrivateItemsScreen(items: List<MediaItem>, memory: GridMemory, onOpen: (Int) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
     // While selecting, back clears the selection first (the app root handles that), so this one stands aside.
