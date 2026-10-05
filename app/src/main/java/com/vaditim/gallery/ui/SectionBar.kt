@@ -92,17 +92,21 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
                     .pressable(onClick = { onSelect(section) })
                     .padding(horizontal = 18.dp, vertical = 13.dp),
             ) {
-                // The labels type themselves in when the app opens, as the photos arrive.
-                TypewriterText(
-                    section.label,
-                    style = Type.navigation.copy(color = ink),
-                    isTypedIn = true,
-                    modifier = Modifier.graphicsLayer {
+                Box(
+                    Modifier.graphicsLayer {
                         scaleX = labelScale
                         scaleY = labelScale
                     },
-                )
+                ) {
+                    when (section) {
+                        Section.RECENT -> ClockIcon(ink, SECTION_ICON)
+                        Section.ALBUMS -> AlbumsIcon(ink, SECTION_ICON)
+                        Section.FAVORITES -> HeartIcon(isFilled = true, color = ink, size = SECTION_ICON)
+                    }
+                }
             }
         }
     }
 }
+
+private val SECTION_ICON = 22.dp

@@ -1,4 +1,5 @@
-# v0.110
+# v0.111
 
-- Opening a group: the arrow comes out of the end of the name near the end of its sweep and slides right to the end of the row.
-- Closing: the arrow slides back to the name (with the finger when pulled shut), and the name is cut the moment it reaches it.
+- The settings sheet keeps one height on every tab, so it no longer resizes when you switch.
+- The bottom bar shows icons instead of words: a clock for Recent, albums, and a filled heart for Favorites.
+- Share, trash, move to folder, info, heart and albums icons use the new filled glyphs.

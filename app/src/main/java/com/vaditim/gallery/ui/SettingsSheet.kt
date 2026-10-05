@@ -1,7 +1,6 @@
 package com.vaditim.gallery.ui
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -23,8 +22,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
@@ -62,57 +62,70 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
     var tab by remember { mutableStateOf(SettingsTab.PLACE) }
     OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isFloating = true) {
         SettingsTabs(tab, onSelect = { tab = it })
-        AnimatedContent(
-            targetState = tab,
-            transitionSpec = {
-                fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut))
-                    .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
-                    .using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS, easing = Motion.powerTwoOut) })
-            },
-            label = "settings-tab",
-        ) { shown ->
-            Column {
-                when (shown) {
-                    SettingsTab.PLACE -> if (isCovers) {
-                        SettingsHeader("Albums")
-                        // Grouped albums lie as rows, so the column count only counts with grouping off.
-                        val canGroup = Settings.view.canGroup
-                        if (canGroup) SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
-                        SheetRow("Album columns", trailing = Settings.albumColumns.toString(), isEnabled = !(canGroup && Settings.groupedAlbums)) {
-                            Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
-                        }
-                    } else {
-                        SettingsHeader("Photos")
-                        SheetRow("Image columns", trailing = Settings.defaultColumns.toString()) {
-                            val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
-                            Settings.updateDefaultColumns(next)
-                            onColumnsChanged(next)
-                        }
-                        SheetRow("Layout", trailing = Settings.photoLayout.label) {
-                            Settings.updatePhotoLayout(PhotoLayout.entries[(Settings.photoLayout.ordinal + 1) % PhotoLayout.entries.size])
-                        }
-                        SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
-                        SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
-                    }
-                    SettingsTab.GENERAL -> {
-                        SettingsHeader("Videos")
-                        SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
-                        if (onReview != null) {
-                            SettingsHeader("Review")
-                            SheetRow("Review photos", trailing = Settings.view.label, icon = { ReviewIcon(it) }) {
-                                onDismiss()
-                                onReview()
-                            }
-                        }
-                    }
-                    SettingsTab.INTERFACE -> {
-                        SettingsHeader("Overlays")
-                        SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
-                        SettingsSlider("Opacity", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
-                        SettingsHeader("Background")
-                        SettingsSlider("Brightness", Settings.groundBrightness, "${(Settings.groundBrightness * 100).toInt()}%") { Settings.updateGroundBrightness(it) }
+        // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height.
+        SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
+            val loose = constraints.copy(minHeight = 0)
+            val height = SettingsTab.entries.maxOf { measured ->
+                subcompose("measure-$measured") { SettingsTabContent(measured, isCovers, onReview, onDismiss, onColumnsChanged) }.maxOf { it.measure(loose).height }
+            }
+            val fixed = constraints.copy(minHeight = height, maxHeight = height)
+            val shown = subcompose("shown") {
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut))
+                            .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
+                    },
+                    label = "settings-tab",
+                ) { shown -> SettingsTabContent(shown, isCovers, onReview, onDismiss, onColumnsChanged) }
+            }.map { it.measure(fixed) }
+            layout(constraints.maxWidth, height) { shown.forEach { it.place(0, 0) } }
+        }
+    }
+}
+
+@Composable
+private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
+    Column {
+        when (shown) {
+            SettingsTab.PLACE -> if (isCovers) {
+                SettingsHeader("Albums")
+                // Grouped albums lie as rows, so the column count only counts with grouping off.
+                val canGroup = Settings.view.canGroup
+                if (canGroup) SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
+                SheetRow("Album columns", trailing = Settings.albumColumns.toString(), isEnabled = !(canGroup && Settings.groupedAlbums)) {
+                    Settings.updateAlbumColumns(if (Settings.albumColumns >= Settings.MAX_ALBUM_COLUMNS) Settings.MIN_COLUMNS else Settings.albumColumns + 1)
+                }
+            } else {
+                SettingsHeader("Photos")
+                SheetRow("Image columns", trailing = Settings.defaultColumns.toString()) {
+                    val next = if (Settings.defaultColumns >= Settings.MAX_COLUMNS) Settings.MIN_COLUMNS else Settings.defaultColumns + 1
+                    Settings.updateDefaultColumns(next)
+                    onColumnsChanged(next)
+                }
+                SheetRow("Layout", trailing = Settings.photoLayout.label) {
+                    Settings.updatePhotoLayout(PhotoLayout.entries[(Settings.photoLayout.ordinal + 1) % PhotoLayout.entries.size])
+                }
+                SettingsToggle("Month headers", Settings.showMonthHeaders) { Settings.updateShowMonthHeaders(it) }
+                SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
+            }
+            SettingsTab.GENERAL -> {
+                SettingsHeader("Videos")
+                SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
+                if (onReview != null) {
+                    SettingsHeader("Review")
+                    SheetRow("Review photos", trailing = Settings.view.label, icon = { ReviewIcon(it) }) {
+                        onDismiss()
+                        onReview()
                     }
                 }
+            }
+            SettingsTab.INTERFACE -> {
+                SettingsHeader("Overlays")
+                SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
+                SettingsSlider("Opacity", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
+                SettingsHeader("Background")
+                SettingsSlider("Brightness", Settings.groundBrightness, "${(Settings.groundBrightness * 100).toInt()}%") { Settings.updateGroundBrightness(it) }
             }
         }
     }
