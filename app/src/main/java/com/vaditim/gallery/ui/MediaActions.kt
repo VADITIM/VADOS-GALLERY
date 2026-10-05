@@ -60,7 +60,7 @@ class MediaActions(
     }
 
     // Says what just happened in the same pill, with nothing to take back.
-    fun notify(message: String) {
+    fun announce(message: String) {
         undoOffer = UndoOffer(message)
     }
 

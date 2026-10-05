@@ -752,7 +752,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 openPrivateGroup != null -> viewModel.setGroupCover(openPrivateGroup.name, selectedItems.first())
                                 openFavorite != null -> viewModel.setAlbumCover(openFavorite.id, selectedItems.first())
                             }
-                            actions.notify("Set as cover")
+                            actions.announce("Set as cover")
                             clearSelection()
                         }) { ImageIcon(Palette.textBody) }
                     }
