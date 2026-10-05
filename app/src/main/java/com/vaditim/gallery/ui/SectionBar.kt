@@ -92,9 +92,11 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
                     .pressable(onClick = { onSelect(section) })
                     .padding(horizontal = 18.dp, vertical = 13.dp),
             ) {
-                BasicText(
+                // The labels type themselves in when the app opens, as the photos arrive.
+                TypewriterText(
                     section.label,
                     style = Type.navigation.copy(color = ink),
+                    isTypedIn = true,
                     modifier = Modifier.graphicsLayer {
                         scaleX = labelScale
                         scaleY = labelScale

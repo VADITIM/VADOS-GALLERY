@@ -863,7 +863,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     .padding(end = 16.dp, bottom = 14.dp + with(LocalDensity.current) { navigationHeight.toDp() } + 8.dp),
             ) {
                 Box(Modifier.glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                    TypewriterText(lastCount, style = Type.microLabel.copy(fontSize = 9.sp))
+                    TypewriterText(lastCount, style = Type.microLabel.copy(fontSize = 9.sp), isTypedIn = true)
                 }
             }
             Column(
@@ -1714,7 +1714,7 @@ private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)
                 MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
                     Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        TypewriterText(lastMonth.label.uppercase(), style = Type.microLabel)
+                        TypewriterText(lastMonth.label.uppercase(), style = Type.microLabel, isTypedIn = true)
                     }
                 }
                 Box(Modifier.weight(1f))

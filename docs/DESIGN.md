@@ -71,7 +71,7 @@ One accent per section, inherited by everything inside it:
 
 | Section | Accent |
 |---|---|
-| RECENT | Terminal green `#5bfd5b` — the system's identity colour |
+| RECENT | Terminal green `#2fde75` — the system's identity colour |
 | ALBUMS | Amber `#f09b3a` |
 | FAVORITES | Hot pink `#ff2e88` |
 

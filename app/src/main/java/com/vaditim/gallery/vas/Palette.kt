@@ -31,7 +31,7 @@ object Palette {
     // Every heart is this red, whatever section it is in: a favourite reads the same everywhere.
     val favorite = Color(0xFFFF3B4E)
 
-    val terminalGreen = Color(0xFF5BFD5B)
+    val terminalGreen = Color(0xFF2FDE75)
     val amber = Color(0xFFF09B3A)
     val hotPink = Color(0xFFFF2E88)
     // Private's own accent, the same in every section while inside it.
