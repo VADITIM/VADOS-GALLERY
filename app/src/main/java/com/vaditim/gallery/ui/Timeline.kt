@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -57,7 +58,7 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.ceil
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sign
@@ -77,8 +78,9 @@ private val LABEL_STEP = 22.dp
 // How far past the window's edge a label is still on its way in: it fades, shrinks and slides out to the side over this.
 private val EDGE_FADE = 36.dp
 private val EDGE_SLIDE = 18.dp
-// How far the grid travels as it lands on another month, so the jump reads as one.
-private val JUMP_TRAVEL = 36.dp
+// Labels shrink, and draw closer together, by this share of their size for each step away from the marker, down to the smallest share; the far years and months take little room and the near ones read clearly.
+private const val FALLOFF = 0.09f
+private const val SMALLEST = 0.55f
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
 private val BUBBLE_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
@@ -102,6 +104,16 @@ private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
     return marks
 }
 
+private fun sizeAt(distance: Float): Float = (1f - FALLOFF * abs(distance)).coerceAtLeast(SMALLEST)
+
+// How far along the strip, in full steps, a label `distance` steps from the marker sits once every step between has shrunk with its labels.
+private fun travel(distance: Float): Float {
+    val reach = abs(distance)
+    val knee = (1f - SMALLEST) / FALLOFF
+    val along = if (reach <= knee) reach - FALLOFF * reach * reach / 2f else knee - FALLOFF * knee * knee / 2f + (reach - knee) * SMALLEST
+    return sign(distance) * along
+}
+
 // One step of the strip: a year, or a month under the year before it.
 private data class TimelineLabel(val year: Int, val month: TimelineMark?)
 
@@ -121,8 +133,6 @@ class TimelineGrab {
     var labelSlack = 0f
     var trackTop = 0f
     var trackHeight = 0f
-    // The grid's lurch on landing on another month, from -1 (arriving from above) through 0 (still) to 1 (from below).
-    val jump = Animatable(0f)
 
     fun takes(root: Offset): Boolean {
         val timeline = timeline?.takeIf { isActive && it.isAttached } ?: return false
@@ -155,13 +165,6 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         }
     }
 
-// The grid lurches toward where it came from and settles, so a jump to another month is seen rather than blinked through.
-fun Modifier.timelineJump(grab: TimelineGrab): Modifier = graphicsLayer {
-    val jump = grab.jump.value
-    translationY = jump * JUMP_TRAVEL.toPx()
-    alpha = 1f - 0.45f * kotlin.math.abs(jump)
-}
-
 // Every year with all its months, oldest at the top like the grid, laid on one strip seen through a window half the screen tall. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, and labels come in over the window's edges. Held, the marker is the finger and the label under it is where the grid goes.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
@@ -188,24 +191,11 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
     // The newest index asked for; scrolls are conflated, so a fast slide never queues up jumps.
     val target = remember { mutableIntStateOf(-1) }
     LaunchedEffect(state) {
-        var landed = -1
         snapshotFlow { target.intValue }.collect { index ->
-            if (index < 0) {
-                landed = -1
-                return@collect
-            }
-            val from = if (landed >= 0) landed else state.firstVisibleItemIndex
+            if (index < 0) return@collect
             state.scrollToItem(index)
             // The month's first photo (or its header) belongs at the top, just under the header room, not merely somewhere on screen.
             state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { if (it.offset.y != 0) state.scrollBy(it.offset.y.toFloat()) }
-            landed = index
-            val direction = sign((index - from).toFloat())
-            if (direction != 0f) {
-                scope.launch {
-                    grab.jump.snapTo(direction)
-                    grab.jump.animateTo(0f, tween(Motion.TIMELINE_JUMP_MS, easing = Motion.powerTwoOut))
-                }
-            }
         }
     }
     // Where the grid stands on the strip, in steps, between the month at its top and the next: a scrollbar's reading, so the very end of the grid reaches the newest month.
@@ -251,18 +241,20 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val fade = with(density) { EDGE_FADE.toPx() }
         val slide = with(density) { EDGE_SLIDE.toPx() }
         val last = (labels.size - 1).coerceAtLeast(1)
-        // A short strip sits still in the middle of the window and only the marker moves; a long one is longer than the window, and slides.
-        val span = minOf(step * (labels.size - 1), track)
+        // A short strip sits in the middle of the window and mostly the marker moves; a long one is longer than the window, and slides.
+        val span = minOf(step * travel((labels.size - 1).toFloat()), track)
         val spanTop = top + (track - span) / 2f
         fun markerY(at: Float): Float = spanTop + span * (at / last)
-        fun labelY(slot: Int, at: Float): Float = markerY(at) + (slot - at) * step
+        fun labelY(slot: Int, at: Float): Float = markerY(at) + travel(slot - at) * step
 
         // Only the labels in or near the window are composed; the range moves a step at a time, never per frame.
         val window by remember(labels, top, track) {
             derivedStateOf {
                 val at = position()
-                val from = floor(at + (top - fade - markerY(at)) / step).toInt().coerceAtLeast(0)
-                val to = ceil(at + (top + track + fade - markerY(at)) / step).toInt().coerceAtMost(labels.lastIndex)
+                var from = at.roundToInt().coerceIn(0, labels.lastIndex)
+                var to = from
+                while (from > 0 && labelY(from - 1, at) > top - fade) from--
+                while (to < labels.lastIndex && labelY(to + 1, at) < top + track + fade) to++
                 from..to
             }
         }
@@ -289,9 +281,11 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                             val y = labelY(slot, position())
                             // Inside the window a label is whole; past its edge it is pulled away to the side as it fades.
                             val inside = ((minOf(y - top, top + track - y) + fade) / fade).coerceIn(0f, 1f)
-                            alpha = inside
+                            alpha = inside * (0.4f + 0.6f * sizeAt(slot - position()))
                             translationX = (1f - inside) * slide
-                            scaleX = 0.8f + 0.2f * inside
+                            // Shrinks toward the edge of the screen, so every label keeps its right side on the line.
+                            transformOrigin = TransformOrigin(1f, 0.5f)
+                            scaleX = sizeAt(slot - position()) * (0.8f + 0.2f * inside)
                             scaleY = scaleX
                         }
                         .clip(Shapes.capsule)

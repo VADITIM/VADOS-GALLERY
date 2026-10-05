@@ -220,7 +220,7 @@ fun MediaGrid(
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(GAP),
         verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = Modifier.fillMaxSize().timelineJump(timelineGrab).pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, { scrollStoppedAt[0] }),
+        modifier = Modifier.fillMaxSize().pinchColumns(memory, haptic).dragSelect(state, photosById, { currentSelection }, scope, { scrollStoppedAt[0] }),
     ) {
         items(
             entries,

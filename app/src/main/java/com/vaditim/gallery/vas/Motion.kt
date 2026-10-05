@@ -49,8 +49,6 @@ object Motion {
 
     // The grid timeline: the bubble fading in when a finger takes hold of it, and the strip handed between finger and grid.
     const val TIMELINE_REVEAL_MS = 180
-    // The grid settling after the timeline lands it on another month: short enough to keep up with a finger sliding across months.
-    const val TIMELINE_JUMP_MS = 200
 
     // The bar-sweep reveal on a title: the bar grows, then retracts slower because that half is the one read; leaving is a quicker cut.
     const val SWEEP_GROW_MS = 420
