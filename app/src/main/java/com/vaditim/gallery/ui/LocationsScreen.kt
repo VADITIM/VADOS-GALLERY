@@ -48,10 +48,10 @@ fun FolderEntry(title: String, color: Color, icon: @Composable (Color) -> Unit, 
     }
 }
 
-// A hairline between the rows at the end of Albums, so each reads as its own place.
+// A hairline with room around it between the albums and the rows after them, so the rows read as their own places.
 @Composable
 fun FolderDivider() {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(1.dp).background(Palette.border))
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp).height(1.dp).background(Palette.border))
 }
 
 // Trashed photos, kept by Android for 30 days. A tap opens one like anywhere else; a long press selects.

@@ -655,10 +655,9 @@ private fun Library(viewModel: GalleryViewModel) {
                             contentPadding = insetPadding,
                             footer = {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    FolderDivider()
                                     FolderEntry("Locations", Palette.locationBlue, icon = { PinIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Locations })
-                                    FolderDivider()
                                     FolderEntry("Trash", Palette.trashGray, icon = { TrashIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Trash }, count = trash.size)
-                                    FolderDivider()
                                     PrivateEntry(onClick = openPrivate)
                                 }
                             },
