@@ -135,7 +135,8 @@ fun AlbumsScreen(
                             album.cover,
                             album.items.size,
                             onClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onOpen(album) },
-                            onLongClick = { if (isPicking) onToggle(listOf(album)) else if (!isRearranging) onLongPress(album) },
+                            // While rearranging a held card has no long press: one that fired would keep the finger to itself and the drag would never start.
+                            onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(listOf(album)) else onLongPress(album) } },
                             modifier = Modifier.jiggle(reorder, entry.key, isRearranging),
                             isSelected = album.relativePath in selectedPaths,
                         )
@@ -308,7 +309,7 @@ private fun GroupRow(
         content = {
             // The name and count take the whole rest of the row, so a tap anywhere beside the stack opens it; opened, the area is gone from under the cards.
             Column(
-                if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = { if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress() }),
+                if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(albums) else onStackLongPress() } }),
                 verticalArrangement = Arrangement.Center,
             ) {
                 BasicText(stack.name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -328,13 +329,13 @@ private fun GroupRow(
                                 !isRearranging -> onOpenAlbum(album)
                             }
                         },
-                        onLongClick = {
+                        onLongClick = if (isRearranging) null else { {
                             when {
-                                isShut -> if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress()
+                                isShut -> if (isPicking) onToggle(albums) else onStackLongPress()
                                 isPicking -> onToggle(listOf(album))
-                                !isRearranging -> onLongPress(album)
+                                else -> onLongPress(album)
                             }
-                        },
+                        } },
                         isSelected = isSelected,
                         isList = false,
                         // The name waits until the card is well clear of the stack, so names never print over each other.

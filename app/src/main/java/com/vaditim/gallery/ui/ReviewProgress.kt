@@ -24,6 +24,10 @@ class ReviewProgress(context: Context) {
             .apply()
     }
 
+    fun clear(key: String) {
+        preferences.edit().remove("$key.furthest").remove("$key.marked").apply()
+    }
+
     // How many of `newestFirst` lie at or before the furthest point, which is where continuing picks up.
     fun reachedCount(saved: Saved?, newestFirst: List<MediaItem>): Int {
         saved ?: return 0

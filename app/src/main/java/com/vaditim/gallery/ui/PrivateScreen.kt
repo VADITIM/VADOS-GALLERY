@@ -108,7 +108,8 @@ fun PrivateGroupsScreen(
                 group.cover,
                 group.items.size,
                 onClick = { if (isPicking) onToggle(group) else if (!isRearranging) onOpen(group) },
-                onLongClick = { if (isPicking) onToggle(group) else if (!isRearranging) onLongPress(group) },
+                // While rearranging a held card has no long press: one that fired would keep the finger to itself and the drag would never start.
+                onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(group) else onLongPress(group) } },
                 modifier = reorderable(reorder, group.name, isRearranging).entrance().jiggle(reorder, group.name, isRearranging),
                 isSelected = group.name in selectedNames,
             )

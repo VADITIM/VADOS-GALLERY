@@ -60,6 +60,11 @@ object Motion {
     // A finger that lands while the grid is moving, or this soon after it stopped, is stopping a scroll, not starting a selection.
     const val SELECT_AFTER_SCROLL_MS = 350L
 
+    // Text that changes types itself over: the old letters go back one by one at the quicker pace, the new ones come in at the slower, with a block caret blinking while it runs (as in VADOS Bubble).
+    const val TYPE_MS = 60L
+    const val UNTYPE_MS = 30L
+    const val CARET_BLINK_MS = 250L
+
     // How long a delete or a move can still be taken back from the pill above the bar.
     const val UNDO_MS = 4500
 }

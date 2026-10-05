@@ -239,6 +239,16 @@ fun PenIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, str
     }, color, style = stroke)
 }
 
+// A bar with two chevrons running back to it: back to the start.
+@Composable
+fun ResetIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(5f * u, 6f * u); lineTo(5f * u, 18f * u)
+        moveTo(13f * u, 6f * u); lineTo(8f * u, 12f * u); lineTo(13f * u, 18f * u)
+        moveTo(19f * u, 6f * u); lineTo(14f * u, 12f * u); lineTo(19f * u, 18f * u)
+    }, color, style = stroke)
+}
+
 @Composable
 fun RestoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
     drawPath(path(unit) { u ->

@@ -10,11 +10,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -92,21 +89,23 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     // Held as they were when review began, so the library refreshing underneath does not reshuffle the stack.
     val order = remember { items.asReversed().toList() }
     val saved = remember { progress.read(progressKey) }
-    // The furthest any sitting has got, as a count from the newest; starting fresh never lowers it.
-    var furthest by remember { mutableIntStateOf(progress.reachedCount(saved, order)) }
     val savedMarks = remember { saved?.markedIds.orEmpty().let { ids -> order.filter { it.id in ids } } }
-    // Null until a sitting with saved progress has chosen where to begin.
-    var startIndex by remember { mutableStateOf(if (furthest == 0 && savedMarks.isEmpty()) 0 else null) }
-    var carriedMarks by remember { mutableStateOf(emptyList<MediaItem>()) }
+    // Every sitting picks up where the last one left off; a folder gone through to the end with nothing left marked begins again from the newest.
+    val savedReach = remember { progress.reachedCount(saved, order).let { if (it >= order.size && savedMarks.isEmpty()) 0 else it } }
+    // The furthest any sitting has got, as a count from the newest.
+    var furthest by remember { mutableIntStateOf(savedReach) }
+    var startIndex by remember { mutableIntStateOf(savedReach) }
+    var carriedMarks by remember { mutableStateOf(savedMarks) }
     val decisions = remember { mutableStateListOf<Pair<MediaItem, Boolean>>() }
-    var isFinishing by remember { mutableStateOf(false) }
+    var isFinishing by remember { mutableStateOf(savedReach >= order.size && order.isNotEmpty()) }
+    var isResetArmed by remember { mutableStateOf(false) }
     var isDoneArmed by remember { mutableStateOf(false) }
     val drag = remember { Animatable(0f) }
     // How far the last decided photo has come back down over the current one, 0 to 1.
     val comeback = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     val marked = carriedMarks + decisions.filter { it.second }.map { it.first }
-    val position = (startIndex ?: 0) + decisions.size
+    val position = startIndex + decisions.size
     val isDone = position >= order.size
 
     fun saveProgress(markedNow: List<MediaItem>) {
@@ -121,6 +120,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             drag.animateTo(if (isDelete) -width * 1.4f else width * 1.4f, tween(Motion.STATE_MS, easing = Motion.powerTwoIn))
             decisions += order[position] to isDelete
             isDoneArmed = false
+            isResetArmed = false
             furthest = maxOf(furthest, position + 1)
             saveProgress(carriedMarks + decisions.filter { it.second }.map { it.first })
             Haptics.tick(context)
@@ -130,7 +130,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     }
 
     BackHandler {
-        if (startIndex == null) onClose() else if (isFinishing && !isDone) isFinishing = false else if (marked.isNotEmpty() && !isFinishing) isFinishing = true else onClose()
+        if (isFinishing && !isDone) isFinishing = false else if (marked.isNotEmpty() && !isFinishing) isFinishing = true else onClose()
     }
 
     fun undo() {
@@ -141,8 +141,27 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         scope.launch { drag.snapTo(0f) }
     }
 
-    val isChoosing = startIndex == null
-    val shown = if (isChoosing) order.getOrNull(furthest - 1) ?: savedMarks.firstOrNull() else order.getOrNull(position)
+    // Back to the newest photo with nothing marked; with photos marked it asks for a second tap, since those marks would be lost.
+    fun reset() {
+        if (carriedMarks.isNotEmpty() || decisions.any { it.second }) {
+            if (!isResetArmed) {
+                isResetArmed = true
+                return
+            }
+        }
+        if (drag.isRunning) return
+        progress.clear(progressKey)
+        decisions.clear()
+        carriedMarks = emptyList()
+        furthest = 0
+        startIndex = 0
+        isResetArmed = false
+        isDoneArmed = false
+        isFinishing = false
+        Haptics.tick(context)
+    }
+
+    val shown = order.getOrNull(position)
     Box(
         Modifier
             .fillMaxSize()
@@ -156,9 +175,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                 .fillMaxSize()
                 .onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) },
         ) {
-            if (isChoosing) {
-                shown?.let { ReviewCard(it, Modifier) }
-            } else {
+            run {
                 order.getOrNull(position + 1)?.let { next ->
                     val reveal = (abs(drag.value) / (width * DECIDE_SHARE)).coerceIn(0f, 1f)
                     ReviewCard(next, Modifier.graphicsLayer {
@@ -237,18 +254,27 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         }
         // A shade behind the controls at the bottom, so they read over any photo.
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(SHADE_SHARE).background(Brush.verticalGradient(listOf(Color.Transparent, Palette.viewerGround.copy(alpha = 0.85f)))))
-        // One layout for choosing and for swiping, floating over the photo: only the controls change between the two.
+        // The controls float over the photo.
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp)) {
             // The next photos sit in a row of their own above the card, so the photo under them can never cover them.
-            AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
-                Box(Modifier.fillMaxWidth().padding(bottom = 14.dp), contentAlignment = Alignment.TopEnd) {
-                    UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT))
+            run {
+                Box(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                    // Starting over from the newest photo; red while it waits for the second tap.
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .pressable(onClick = { reset() })
+                            .clip(Shapes.capsule)
+                            .background(if (isResetArmed) Palette.danger.copy(alpha = 0.22f) else Palette.panelSolid)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) { ResetIcon(if (isResetArmed) Palette.danger else Palette.textBright) }
+                    Box(Modifier.align(Alignment.TopEnd)) { UpcomingPile(order.drop(position + 1).take(UPCOMING_COUNT)) }
                 }
             }
             Spacer(Modifier.weight(1f))
 
             // Done deletes everything marked so far in one go, or with nothing marked simply ends the sitting. Inside Private deleting is final, so there it takes a second tap.
-            AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+            run {
                 val doneColor = if (isDoneArmed) Palette.danger else Palette.textBright
                 Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
                     Row(
@@ -281,8 +307,8 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
                 }
             }
 
-            // The decision buttons come in under the photo once swiping begins.
-            AnimatedVisibility(!isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+            // The decision buttons under the photo.
+            run {
                 Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
                     Row(
                         Modifier.clip(Shapes.capsule).background(Palette.panelSolid).padding(5.dp),
@@ -298,28 +324,13 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
 
             ReviewInfo(
                 shown = shown,
-                number = if (isChoosing) furthest else (position + 1).coerceAtMost(order.size),
+                number = (position + 1).coerceAtMost(order.size),
                 total = order.size,
                 furthest = furthest,
-                isChoosing = isChoosing,
-                markedCount = if (isChoosing) savedMarks.size else marked.size,
+                markedCount = marked.size,
                 modifier = Modifier.padding(top = 18.dp),
             )
 
-            // The choice buttons leave downward and the text above them settles into their place.
-            AnimatedVisibility(isChoosing, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
-                Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ResumeButton("START FRESH", Palette.panelSolid, Palette.textBright, Modifier.weight(1f)) {
-                        startIndex = 0
-                        saveProgress(emptyList())
-                    }
-                    if (furthest < order.size || savedMarks.isNotEmpty()) ResumeButton("CONTINUE", LocalAccent.current, Palette.viewerGround, Modifier.weight(1f)) {
-                        carriedMarks = savedMarks
-                        startIndex = furthest
-                        if (furthest >= order.size) isFinishing = true
-                    }
-                }
-            }
         }
 
         OverlaySheet(
@@ -352,9 +363,9 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     }
 }
 
-// The date, how far through the folder, and a bar for it: the same block while choosing where to begin and while swiping.
+// The date, how far through the folder, and a bar for it.
 @Composable
-private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int, isChoosing: Boolean, markedCount: Int, modifier: Modifier = Modifier) {
+private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int, markedCount: Int, modifier: Modifier = Modifier) {
     val accent = LocalAccent.current
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (shown != null) MicroLabel(REVIEW_STAMP.format(Instant.ofEpochMilli(shown.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH) + " · " + calendarWeekLabel(dayOf(shown.timestampMillis)))
@@ -364,21 +375,11 @@ private fun ReviewInfo(shown: MediaItem?, number: Int, total: Int, furthest: Int
             BasicText("$number", style = Type.title.copy(color = accent))
             BasicText("/ $total", style = Type.title.copy(color = Palette.textMuted))
             // The furthest point stays shown while swiping behind it.
-            if (!isChoosing && furthest > number) BasicText("MAX $furthest", style = Type.value.copy(color = Palette.textMuted), modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
+            if (furthest > number) BasicText("MAX $furthest", style = Type.value.copy(color = Palette.textMuted), modifier = Modifier.padding(start = 6.dp, bottom = 4.dp))
         }
         Box(Modifier.fillMaxWidth().height(4.dp).clip(Shapes.capsule).background(Palette.borderStrong)) {
             Box(Modifier.fillMaxWidth(if (total > 0) number.toFloat() / total else 0f).height(4.dp).clip(Shapes.capsule).background(accent))
         }
-    }
-}
-
-@Composable
-private fun ResumeButton(label: String, background: androidx.compose.ui.graphics.Color, color: androidx.compose.ui.graphics.Color, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier.pressable(onClick = onClick).clip(Shapes.capsule).background(background).padding(vertical = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicText(label, style = Type.action.copy(color = color))
     }
 }
 

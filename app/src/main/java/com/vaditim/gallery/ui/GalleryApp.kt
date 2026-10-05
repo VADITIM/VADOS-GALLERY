@@ -22,6 +22,10 @@ import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.geometry.Offset
@@ -657,6 +661,8 @@ private fun Library(viewModel: GalleryViewModel) {
                 month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onReview = when {
+                    section == Section.RECENT -> { { review = ViewerSource.Recent } }
+                    section == Section.FAVORITES && favoritesView == FavoritesView.All -> { { review = ViewerSource.Favorites } }
                     openAlbum != null -> { { review = ViewerSource.InAlbum(openAlbum.id) } }
                     openPrivateGroup != null -> { { review = ViewerSource.InPrivateGroup(openPrivateGroup.name) } }
                     place is AlbumsPlace.PrivateFavorites -> { { review = ViewerSource.PrivateFavorites } }
@@ -1404,25 +1410,52 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
 private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
-    Row(
-        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (selectedCount > 0) {
-            TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
-            Box(Modifier.weight(1f))
-            Chip("$selectedCount selected")
-        } else {
-            // The month sits at the left end; the buttons gather at the right.
-            if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
-            Box(Modifier.weight(1f))
-            if (onReview != null) TopButton(onReview) { ReviewIcon(LocalAccent.current) }
-            if (onAdd != null) TopButton(onAdd) { PlusIcon(LocalAccent.current) }
-            // The icon shows where a tap goes: the grid of every favourite, or the albums.
-            if (onToggleView != null) TopButton(onToggleView) { if (isAlbumsView) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current) }
-            TopButton(onSettings) { SettingsIcon(Palette.textBright) }
+    // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
+    AnimatedContent(
+        targetState = selectedCount > 0,
+        transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))) },
+        label = "topRow",
+    ) { isSelecting ->
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (isSelecting) {
+                TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
+                Box(Modifier.weight(1f))
+                Chip("$selectedCount selected")
+            } else {
+                // The month sits at the left end and types itself over as it changes; the buttons gather at the right.
+                AnimatedVisibility(month.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
+                    var lastMonth by remember { mutableStateOf(month) }
+                    if (month.isNotEmpty()) lastMonth = month
+                    Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
+                        TypewriterText(lastMonth.uppercase(), style = Type.microLabel)
+                    }
+                }
+                Box(Modifier.weight(1f))
+                ShownTopButton(onReview) { ReviewIcon(LocalAccent.current) }
+                ShownTopButton(onAdd) { PlusIcon(LocalAccent.current) }
+                // The icon shows where a tap goes: the grid of every favourite, or the albums.
+                ShownTopButton(onToggleView) {
+                    AnimatedContent(isAlbumsView, transitionSpec = { (fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS), initialScale = 0.6f)).togetherWith(fadeOut(tween(Motion.STATE_MS))) }, label = "toggle") { isAlbums ->
+                        if (isAlbums) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current)
+                    }
+                }
+                Box(Modifier.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
+            }
         }
+    }
+}
+
+private val TOP_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0.6f) + expandHorizontally(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
+private val TOP_EXIT = fadeOut(tween(Motion.STATE_MS)) + scaleOut(tween(Motion.STATE_MS), targetScale = 0.6f) + shrinkHorizontally(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
+
+// A top button that is there only while it has something to do; it keeps its last action while it leaves.
+@Composable
+private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit) {
+    var lastClick by remember { mutableStateOf(onClick) }
+    if (onClick != null) lastClick = onClick
+    AnimatedVisibility(onClick != null, enter = TOP_ENTER, exit = TOP_EXIT) {
+        // The gap rides inside, so it comes and goes with the button instead of jumping.
+        Box(Modifier.padding(start = 8.dp)) { TopButton({ lastClick?.invoke() }, icon) }
     }
 }
 
