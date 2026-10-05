@@ -180,17 +180,9 @@ class MediaActions(
         }
     }
 
-    // Renaming an album is moving every photo into a sibling folder with the new name; MediaStore keeps each row, so favourites survive. The old folder goes once it is empty.
+    // Renaming an album changes only the name shown: the folder stays as it is, so the camera and other apps keep saving where they always did.
     fun renameAlbum(album: Album, newName: String) {
-        val parent = album.relativePath.trimEnd('/').substringBeforeLast('/', "")
-        val cleanName = newName.trim().replace('/', ' ').trimStart('.').ifBlank { return }
-        val relativePath = if (parent.isEmpty()) "$cleanName/" else "$parent/$cleanName/"
-        scope.launch {
-            val moved = album.items.count { runCatching { repository.moveTo(it, relativePath) }.getOrDefault(false) }
-            if (moved == album.items.size) Settings.replaceAlbumPath(album.relativePath, relativePath)
-            File(Environment.getExternalStorageDirectory(), album.relativePath).let { folder -> if (folder.listFiles().isNullOrEmpty()) folder.delete() }
-            notify(summary(moved, album.items.size, "Renamed to $cleanName"))
-        }
+        Settings.updateAlbumName(album.relativePath, album.folderName, newName)
     }
 
     fun renameGroup(group: PrivateGroup, newName: String) =

@@ -70,6 +70,8 @@ object Settings {
 
     // Album folders kept out of Recent; they still open as albums.
     var hiddenFromRecent by mutableStateOf<Set<String>>(emptySet())
+    // An album's name as shown, by folder path; renaming only ever changes this, never the folder, so nothing that saves into it is thrown off.
+    var albumNames by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
     fun init(context: Context) {
@@ -86,6 +88,7 @@ object Settings {
         groupedAlbums = preferences.getBoolean("groupedAlbums", false)
         stackSimilar = preferences.getBoolean("stackSimilar", true)
         hiddenFromRecent = preferences.getString("hiddenFromRecent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty().toSet()
+        albumNames = preferences.getString("albumNames", null)?.split('\n')?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.orEmpty().toMap()
         groundBrightness = preferences.getFloat("groundBrightness", DEFAULT_GROUND_BRIGHTNESS)
         favoriteAlbums = preferences.getString("favoriteAlbums", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
             val parts = line.split('\t')
@@ -197,11 +200,11 @@ object Settings {
         preferences.edit().putString("albumStacks", albumStacks.joinToString("\n") { (listOf(it.name) + it.paths).joinToString("\t") }).apply()
     }
 
-    // An album renamed is a folder moved: its place in the order and in its group follow it.
-    fun replaceAlbumPath(old: String, new: String) {
-        if (old in hiddenFromRecent) updateHiddenFromRecent(hiddenFromRecent - old + new)
-        if (old in albumOrder) updateAlbumOrder(albumOrder.map { if (it == old) new else it })
-        if (albumStacks.any { old in it.paths }) updateAlbumStacks(albumStacks.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }) })
+    // A name equal to the folder's own clears the override, so the album follows the folder again.
+    fun updateAlbumName(path: String, folderName: String, name: String) {
+        val clean = AlbumStack.cleanName(name).ifEmpty { return }
+        albumNames = if (clean == folderName) albumNames - path else albumNames + (path to clean)
+        preferences.edit().putString("albumNames", albumNames.entries.joinToString("\n") { "${it.key}\t${it.value}" }).apply()
     }
 
     fun updateAutoplayVideos(value: Boolean) {

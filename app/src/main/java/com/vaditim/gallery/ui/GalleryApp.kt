@@ -190,7 +190,12 @@ fun GalleryApp(viewModel: GalleryViewModel = viewModel()) {
 @Composable
 private fun Library(viewModel: GalleryViewModel) {
     val library by viewModel.library.collectAsStateWithLifecycle()
-    val albums by viewModel.albums.collectAsStateWithLifecycle()
+    val folderAlbums by viewModel.albums.collectAsStateWithLifecycle()
+    // Renamed albums show the name given to them; the folder underneath keeps its own.
+    val albums = remember(folderAlbums, Settings.albumNames) {
+        val names = Settings.albumNames
+        if (names.isEmpty()) folderAlbums else folderAlbums.map { album -> names[album.relativePath]?.let { album.copy(name = it) } ?: album }
+    }
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val privateContents by viewModel.privateContents.collectAsStateWithLifecycle()
     val isPrivateUnlocked by viewModel.isPrivateUnlocked.collectAsStateWithLifecycle()

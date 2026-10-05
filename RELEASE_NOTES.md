@@ -1,5 +1,3 @@
-# 0.85
+# 0.86
 
-- Setting a photo as a cover shows a short "Set as cover" message.
-- Top buttons pop in and out in place instead of sliding.
-- The number of photos in the current grid shows under the month pill.
+- Renaming an album now only changes its name in the app. The folder on your phone stays as it is, so the camera and other apps keep saving into it.
