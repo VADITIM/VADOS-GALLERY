@@ -122,12 +122,12 @@ class TimelineGrab {
 
     fun takes(root: Offset): Boolean {
         val timeline = timeline?.takeIf { isActive && it.isAttached } ?: return false
-        val local = timeline.rootToLocal(root)
+        val local = timeline.windowToLocal(root)
         val isOnStrip = local.x >= timeline.size.width - stripWidth && local.y >= trackTop && local.y <= trackTop + trackHeight
         return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
     }
 
-    fun trackY(root: Offset): Float = (timeline?.rootToLocal(root)?.y ?: 0f) - trackTop
+    fun trackY(root: Offset): Float = (timeline?.windowToLocal(root)?.y ?: 0f) - trackTop
 }
 
 fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
@@ -135,15 +135,15 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val coordinates = grab.holder ?: return@awaitEachGesture
-            if (!grab.takes(coordinates.localToRoot(down.position))) return@awaitEachGesture
+            if (!grab.takes(coordinates.localToWindow(down.position))) return@awaitEachGesture
             // Taken before the grid sees it, so the held finger neither scrolls the list, taps a tile nor starts a selection.
             down.consume()
             grab.begin()
-            grab.follow(grab.trackY(coordinates.localToRoot(down.position)))
+            grab.follow(grab.trackY(coordinates.localToWindow(down.position)))
             do {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                grab.follow(grab.trackY(coordinates.localToRoot(change.position)))
+                grab.follow(grab.trackY(coordinates.localToWindow(change.position)))
                 change.consume()
             } while (change.pressed)
             grab.release()
