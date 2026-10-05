@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.text.style.TextOverflow
 
 import com.vaditim.gallery.CrashLog
@@ -159,6 +161,13 @@ private enum class AppSheet {
     FAVORITE_STACK_MENU, FAVORITE_STACK_RENAME, FAVORITE_ALBUM_STACK, FAVORITE_ALBUM_NEW_STACK,
 }
 
+// Locations and the trash carry their own colour, in their views and on their buttons; every other place takes its section's.
+private fun placeAccentOf(place: AlbumsPlace): Color? = when (place) {
+    AlbumsPlace.Locations, is AlbumsPlace.Location -> Palette.locationBlue
+    AlbumsPlace.Trash -> Palette.trashGray
+    else -> null
+}
+
 // What Favorites shows: every favourite as one grid, the albums made inside it, or one of those albums.
 private sealed interface FavoritesView {
     data object All : FavoritesView
@@ -316,7 +325,7 @@ private fun Library(viewModel: GalleryViewModel) {
     }
 
     // Private has a colour of its own across every section.
-    val accent by animateColorAsState(if (isPrivateMode) Palette.privateRed else section.accent, tween(Motion.STATE_MS), label = "accent")
+    val accent by animateColorAsState(if (isPrivateMode) Palette.privateRed else (if (section == Section.ALBUMS) placeAccentOf(albumsPlace) else null) ?: section.accent, tween(Motion.STATE_MS), label = "accent")
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val insetPadding = PaddingValues(
         top = statusBarHeight + HEADER_ROOM,
@@ -611,7 +620,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                         },
                         label = "place",
-                    ) { shownPlace -> when (shownPlace) {
+                    ) { shownPlace -> CompositionLocalProvider(LocalAccent provides placeAccentOf(shownPlace) ?: LocalAccent.current) { when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
                             openStacks = openAlbumStacks,
                             onOpenStacksChange = { openAlbumStacks = it },
@@ -634,8 +643,10 @@ private fun Library(viewModel: GalleryViewModel) {
                             contentPadding = insetPadding,
                             footer = {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    FolderEntry("Locations", icon = { PinIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Locations })
-                                    FolderEntry("Trash", icon = { TrashIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Trash }, count = trash.size)
+                                    FolderEntry("Locations", Palette.locationBlue, icon = { PinIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Locations })
+                                    FolderDivider()
+                                    FolderEntry("Trash", Palette.trashGray, icon = { TrashIcon(it) }, onClick = { albumsPlace = AlbumsPlace.Trash }, count = trash.size)
+                                    FolderDivider()
                                     PrivateEntry(onClick = openPrivate)
                                 }
                             },
@@ -708,7 +719,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 selection = selection,
                             )
                         }
-                    } }
+                    } } }
                     Section.FAVORITES -> AnimatedContent(
                         targetState = favoritesView,
                         transitionSpec = {
@@ -987,7 +998,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         }
                         SectionBar(
                             active = section,
-                            accentOf = { if (isPrivateMode) Palette.privateRed else it.accent },
+                            accentOf = { if (isPrivateMode) Palette.privateRed else if (it == Section.ALBUMS) placeAccentOf(albumsPlace) ?: it.accent else it.accent },
                             onSelect = { selected ->
                                 if (selected == section) {
                                     when {

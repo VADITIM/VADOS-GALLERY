@@ -36,6 +36,8 @@ object Palette {
     val hotPink = Color(0xFFFF2E88)
     // Private's own accent, the same in every section while inside it.
     val privateRed = Color(0xFFFA3438)
+    val locationBlue = Color(0xFF148BC7)
+    val trashGray = Color(0xFF9A9A9A)
 
     // Photos are the only colour that matters in the viewer, so it stands on black rather than the ground: a grey frame around a picture shifts how its own blacks read.
     val viewerGround = Color(0xFF000000)

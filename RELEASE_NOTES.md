@@ -1,2 +1,2 @@
-- Coming back to Recent keeps it where you left it; tapping Recent again still scrolls to the newest.
-- Switching between Recent and Albums or Favorites no longer makes the albums jump around.
+- Locations are blue, Trash is grey and Private is red, in their own views and on their buttons in Albums.
+- A divider now separates the Locations, Trash and Private buttons.

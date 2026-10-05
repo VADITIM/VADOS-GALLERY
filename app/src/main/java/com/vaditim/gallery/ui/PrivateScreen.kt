@@ -63,7 +63,7 @@ fun PrivateEntry(onClick: () -> Unit) {
             .background(Palette.surface)
             .padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
-        BasicText("Private", style = Type.cardTitle)
+        BasicText("Private", style = Type.cardTitle.copy(color = Palette.privateRed))
     }
 }
 

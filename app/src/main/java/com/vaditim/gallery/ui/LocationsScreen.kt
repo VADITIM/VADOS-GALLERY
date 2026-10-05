@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -29,7 +31,7 @@ import com.vaditim.gallery.vas.pressable
 
 // A row at the foot of Albums (Locations, Trash), shaped like the Private row below them.
 @Composable
-fun FolderEntry(title: String, icon: @Composable (Color) -> Unit, onClick: () -> Unit, count: Int? = null) {
+fun FolderEntry(title: String, color: Color, icon: @Composable (Color) -> Unit, onClick: () -> Unit, count: Int? = null) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -40,10 +42,16 @@ fun FolderEntry(title: String, icon: @Composable (Color) -> Unit, onClick: () ->
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        icon(Palette.textMuted)
-        BasicText(title, style = Type.cardTitle, modifier = Modifier.weight(1f))
+        icon(color)
+        BasicText(title, style = Type.cardTitle.copy(color = color), modifier = Modifier.weight(1f))
         if (count != null && count > 0) BasicText(count.toString(), style = Type.value)
     }
+}
+
+// A hairline between the rows at the end of Albums, so each reads as its own place.
+@Composable
+fun FolderDivider() {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(1.dp).background(Palette.border))
 }
 
 // Trashed photos, kept by Android for 30 days. A tap opens one like anywhere else; a long press selects.
