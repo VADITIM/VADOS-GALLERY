@@ -45,9 +45,12 @@ private const val ALBUM_1 = "M18.1316 7.40799C17.2832 7.28732 16.1897 7.28734 14
 private const val ALBUM_2 = "M8.85886 2.00001H15.141C15.3502 1.99995 15.5106 1.99991 15.6508 2.01515C16.6479 2.12351 17.4639 2.78957 17.81 3.68676H6.18981C6.53588 2.78957 7.35195 2.12351 8.34899 2.01515C8.48922 1.99991 8.64963 1.99995 8.85886 2.00001Z"
 private const val ALBUM_3 = "M6.87943 4.5C5.62786 4.5 4.60163 5.33974 4.25915 6.45377C4.25201 6.477 4.24517 6.50034 4.23862 6.5238C4.59696 6.40323 4.96989 6.32446 5.34741 6.27068C6.31974 6.13218 7.54855 6.13225 8.97598 6.13234L9.08258 6.13234L15.1789 6.13234C16.6063 6.13225 17.8351 6.13218 18.8074 6.27068C19.185 6.32446 19.5579 6.40323 19.9162 6.5238C19.9097 6.50034 19.9028 6.477 19.8957 6.45377C19.5532 5.33974 18.527 4.5 17.2754 4.5H6.87943Z"
 
+// Parsed once for the whole app: a grid draws a heart per favourite and parsing each one would cost the scroll.
+private val parsedPaths = HashMap<String, Path>()
+
 @Composable
 private fun SvgGlyph(color: Color, size: Dp, viewBox: Float = 24f, vararg paths: String) {
-    val parsed = remember(paths.toList()) { paths.map { PathParser().parsePathString(it).toPath().apply { fillType = PathFillType.EvenOdd } } }
+    val parsed = paths.map { parsedPaths.getOrPut(it) { PathParser().parsePathString(it).toPath().apply { fillType = PathFillType.EvenOdd } } }
     Canvas(Modifier.size(size)) {
         val scale = this.size.minDimension / viewBox
         scale(scale, pivot = Offset.Zero) { parsed.forEach { drawPath(it, color) } }
