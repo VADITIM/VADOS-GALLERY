@@ -75,19 +75,17 @@ private const val TRACK_SHARE = 0.3f
 private val STRIP_WIDTH = 24.dp
 // Room around a label that still counts as taking hold of it.
 private val LABEL_GRAB_SLACK = 6.dp
-// Each label's full height on the strip, a year's being the larger; labels stand this far apart besides, at any size, so none ever touch.
+// Each label's full height on the strip, a year's being the larger.
 private val MONTH_HEIGHT = 18.dp
 private val YEAR_HEIGHT = 22.dp
-private val LABEL_SPACE = 4.dp
 private val THUMB_HEIGHT = 22.dp
-// A step of the strip at full size, which is how far the marker travels per label on a short strip.
-private val LABEL_STEP = 24.dp
-// Months are gone this far before the window's edge, which belongs to the years.
-private val MONTH_EDGE = 28.dp
-// Labels shrink, and draw closer together, by this rate for each step away from the marker and keep shrinking; the near ones read clearly and the far months fade to nothing.
+// Labels stand apart by this share of their own height besides, so the gaps shrink with them and never outgrow the labels.
+private const val LABEL_SPACE_SHARE = 0.25f
+// Labels shrink, and draw closer together, by this rate for each step away from the marker. It is the gentlest rate; a strip too long for the window falls off harder, just enough to fit, so any number of years and months fills it the same way.
 private const val FALLOFF = 0.22f
-// Years never shrink below this, so far from the marker the strip reads as the years alone.
-private const val YEAR_SMALLEST = 0.8f
+private const val FALLOFF_STEEPEST = 4f
+// Years shrink no further than this, so far from the marker the strip reads as the years alone; when even they overflow, the whole strip scales down.
+private const val YEAR_SMALLEST = 0.7f
 // A month this small is gone; it fades out over the share above it.
 private const val MONTH_GONE = 0.14f
 private const val MONTH_FADE = 0.2f
@@ -116,7 +114,7 @@ private fun marksOf(entries: List<GridEntry>): List<TimelineMark> {
 
 // One step of the strip: a year, or a month under the year before it.
 private data class TimelineLabel(val year: Int, val month: TimelineMark?) {
-    fun sizeAt(distance: Float): Float = exp(-FALLOFF * abs(distance)).let { if (month == null) maxOf(it, YEAR_SMALLEST) else it }
+    fun sizeAt(distance: Float, falloff: Float): Float = exp(-falloff * abs(distance)).let { if (month == null) maxOf(it, YEAR_SMALLEST) else it }
 }
 
 private fun labelsOf(marks: List<TimelineMark>): List<TimelineLabel> =
@@ -168,7 +166,7 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         }
     }
 
-// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a short window, drawn along the grid's right edge, and taken hold of from either edge. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, months shrink away from it and years hold the window's ends. Held at either edge, the marker is the finger and the label under it is where the grid goes.
+// Every year with all its months, oldest at the top like the grid, fitted whole into a short window along the grid's right edge and taken hold of from either edge. Labels swell around the marker and shrink away from it, so the marker runs down the window as the grid scrolls. Held at either edge, the marker is the finger and the label under it is where the grid goes.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
@@ -248,66 +246,47 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val labelHalf = with(density) { MONTH_HEIGHT.toPx() } / 2f
         val monthHeight = with(density) { MONTH_HEIGHT.toPx() }
         val yearHeight = with(density) { YEAR_HEIGHT.toPx() }
-        val space = with(density) { LABEL_SPACE.toPx() }
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
-        val step = with(density) { LABEL_STEP.toPx() }
-        val monthEdge = with(density) { MONTH_EDGE.toPx() }
-        val yearGap = yearHeight * YEAR_SMALLEST + space
-        val last = (labels.size - 1).coerceAtLeast(1)
-        // A short strip sits in the middle of the window and mostly the marker moves; a long one runs the marker down the window as the strip slides.
-        // The marker keeps clear of the window's ends, so the first and last months are never in the stretch where months fade.
-        val span = minOf(step * (labels.size - 1), (track - 2f * (monthEdge + yearGap)).coerceAtLeast(0f))
-        val spanTop = top + (track - span) / 2f
-        fun markerY(at: Float): Float = spanTop + span * (at / last)
-        // Each label's height on screen: neighbours stand apart by the mean of their sizes, laid outward from the marker, which sits between the two labels it falls between.
-        fun placesAt(at: Float): FloatArray {
-            val places = FloatArray(labels.size)
-            val anchor = floor(at).toInt().coerceIn(0, labels.lastIndex)
-            fun heightOf(slot: Int): Float = (if (labels[slot].month == null) yearHeight else monthHeight) * labels[slot].sizeAt(slot - at)
-            fun gap(slot: Int): Float = (heightOf(slot) + heightOf(slot + 1)) / 2f + space
-            places[anchor] = markerY(at) - if (anchor < labels.lastIndex) (at - anchor) * gap(anchor) else 0f
-            for (slot in anchor + 1..labels.lastIndex) places[slot] = places[slot - 1] + gap(slot - 1)
-            for (slot in anchor - 1 downTo 0) places[slot] = places[slot + 1] - gap(slot)
-            return places
+        fun fullHeightOf(slot: Int): Float = if (labels[slot].month == null) yearHeight else monthHeight
+        // The strip's length end to end with every label at its size; neighbours stand apart by the mean of their heights and a share of it.
+        fun lengthOf(sizes: FloatArray): Float {
+            var length = (fullHeightOf(0) * sizes[0] + fullHeightOf(labels.lastIndex) * sizes[labels.lastIndex]) / 2f
+            for (slot in 0 until labels.lastIndex) length += (fullHeightOf(slot) * sizes[slot] + fullHeightOf(slot + 1) * sizes[slot + 1]) / 2f * (1f + LABEL_SPACE_SHARE)
+            return length
         }
-        val yearSlots = remember(labels) { labels.indices.filter { labels[it].month == null } }
-        // Where each label is drawn and how present it is. Months shrink away and are gone before the window's edges; the years inside show whole, and the nearest year past either edge stays held on that edge, pushed off it by the next year coming in.
-        class Placement(val places: FloatArray, val presence: FloatArray)
+        fun sizesAt(at: Float, falloff: Float): FloatArray = FloatArray(labels.size) { labels[it].sizeAt(it - at, falloff) }
+        // Where each label is drawn, its size and whether it shows, and where the marker stands among them.
+        class Placement(val places: FloatArray, val sizes: FloatArray, val presence: FloatArray, val marker: Float)
+        // The whole strip always fits the window: the falloff steepens until it does, and only if the years alone overflow does everything scale down. A strip that fits as it is sits in the middle, its gaps never stretched.
         fun placementAt(at: Float): Placement {
-            val places = placesAt(at)
-            val presence = FloatArray(labels.size)
-            val bottom = top + track
-            labels.forEachIndexed { slot, label ->
-                if (label.month == null) return@forEachIndexed
-                val shrink = ((label.sizeAt(slot - at) - MONTH_GONE) / MONTH_FADE).coerceIn(0f, 1f)
-                val edge = (minOf(places[slot] - top, bottom - places[slot]) / monthEdge).coerceIn(0f, 1f)
-                presence[slot] = shrink * edge
-            }
-            // The month the marker is on always shows, whatever its size or place.
-            labels.getOrNull(at.roundToInt())?.takeIf { it.month != null }?.let { presence[at.roundToInt()] = 1f }
-            var above = -1
-            var below = -1
-            for (slot in yearSlots) {
-                val y = places[slot]
-                when {
-                    y < top -> above = slot
-                    y > bottom -> if (below < 0) below = slot
-                    else -> presence[slot] = 1f
+            var falloff = FALLOFF
+            var natural = sizesAt(at, falloff)
+            if (lengthOf(natural) > track) {
+                var gentle = FALLOFF
+                var steep = FALLOFF_STEEPEST
+                repeat(14) {
+                    val middle = (gentle + steep) / 2f
+                    if (lengthOf(sizesAt(at, middle)) > track) gentle = middle else steep = middle
                 }
+                falloff = steep
+                natural = sizesAt(at, falloff)
             }
-            if (above >= 0) {
-                val next = yearSlots.firstOrNull { places[it] >= top }?.let { places[it] } ?: Float.MAX_VALUE
-                places[above] = minOf(top, next - yearGap)
-                presence[above] = (1f - (top - places[above]) / yearGap).coerceIn(0f, 1f)
-            }
-            if (below >= 0) {
-                val previous = yearSlots.lastOrNull { places[it] <= bottom }?.let { places[it] } ?: -Float.MAX_VALUE
-                places[below] = maxOf(bottom, previous + yearGap)
-                presence[below] = (1f - (places[below] - bottom) / yearGap).coerceIn(0f, 1f)
-            }
-            return Placement(places, presence)
+            val length = lengthOf(natural)
+            val fit = if (length > track) track / length else 1f
+            val sizes = FloatArray(labels.size) { natural[it] * fit }
+            val places = FloatArray(labels.size)
+            places[0] = top + (track - length * fit) / 2f + fullHeightOf(0) * sizes[0] / 2f
+            for (slot in 1..labels.lastIndex) places[slot] = places[slot - 1] + (fullHeightOf(slot - 1) * sizes[slot - 1] + fullHeightOf(slot) * sizes[slot]) / 2f * (1f + LABEL_SPACE_SHARE)
+            val presence = FloatArray(labels.size) { slot -> if (labels[slot].month == null) 1f else ((natural[slot] - MONTH_GONE) / MONTH_FADE).coerceIn(0f, 1f) }
+            // The month the marker is on always shows, whatever its size.
+            val nearest = at.roundToInt().coerceIn(0, labels.lastIndex)
+            if (labels[nearest].month != null) presence[nearest] = 1f
+            val anchor = floor(at).toInt().coerceIn(0, labels.lastIndex)
+            val marker = if (anchor < labels.lastIndex) places[anchor] + (at - anchor) * (places[anchor + 1] - places[anchor]) else places[anchor]
+            return Placement(places, sizes, presence, marker)
         }
         val placement by remember(labels, top, track) { derivedStateOf { placementAt(position()) } }
+        fun markerY(at: Float): Float = placementAt(at).marker
 
         // Only the labels that show are composed; the set changes a label at a time, never per frame.
         val shownSlots by remember(labels, top, track) { derivedStateOf { labels.indices.filter { placement.presence[it] > 0f } } }
@@ -341,7 +320,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                                 alpha = placement.presence.getOrElse(slot) { 0f }
                                 // Shrinks toward the edge of the screen, so every label keeps its right side on the line.
                                 transformOrigin = TransformOrigin(1f, 0.5f)
-                                scaleX = label.sizeAt(slot - position())
+                                scaleX = placement.sizes.getOrElse(slot) { 0f }
                                 scaleY = scaleX
                             }
                             .clip(Shapes.capsule)
@@ -355,7 +334,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             Box(
                 Modifier
                     .align(side)
-                    .offset { IntOffset(0, (markerY(position()) - thumbHalf).roundToInt()) }
+                    .offset { IntOffset(0, (placement.marker - thumbHalf).roundToInt()) }
                     .padding(end = 6.dp)
                     .size(width = 4.dp, height = THUMB_HEIGHT)
                     .clip(Shapes.capsule)
@@ -370,7 +349,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, (markerY(position()) - labelHalf * 1.6f).roundToInt()) }
+                    .offset { IntOffset(0, (placement.marker - labelHalf * 1.6f).roundToInt()) }
                     .padding(end = 76.dp)
                     .graphicsLayer { alpha = reveal }
                     .glass(Shapes.capsule)
@@ -392,7 +371,14 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         grab.trackTop = top
         grab.trackHeight = track
         grab.follow = follow@{ y ->
-            val at = if (span <= 0f) 0f else ((top + y - spanTop) / span * last).coerceIn(0f, labels.lastIndex.toFloat())
+            // The step whose marker lands under the finger, laid out as it would be there, so the label under the finger is the one held.
+            var low = 0f
+            var high = labels.lastIndex.toFloat()
+            repeat(18) {
+                val middle = (low + high) / 2f
+                if (markerY(middle) < top + y) low = middle else high = middle
+            }
+            val at = (low + high) / 2f
             if (heldMark == null) handOver(position(), at)
             heldPosition = at
             val label = labels[at.roundToInt().coerceIn(0, labels.lastIndex)]

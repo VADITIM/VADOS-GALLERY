@@ -1,6 +1,5 @@
-# 0.78
+# 0.79
 
-- The timeline is back on the right; both edges still grab it.
-- Timeline labels are less squeezed and spaced by their real size, so they no longer overlap. The first and last months no longer fade out.
-- Month and week headers are back on the left, in the section colour and slightly larger. Day stamps are back at the top left.
-- Album names in Favorites are in the Favorites colour.
+- The timeline always fits its window: the whole strip is shown, and its curve tightens only as much as the number of years and months needs.
+- Gaps scale with the labels, so they shrink with them and never stay large.
+- No extra gap before the outermost years.
