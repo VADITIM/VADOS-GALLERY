@@ -1,7 +1,9 @@
 package com.vaditim.gallery.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.math.abs
+import com.vaditim.gallery.vas.LabelReveal
+import androidx.compose.foundation.layout.Arrangement
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -163,14 +165,16 @@ fun AlbumsScreen(
 
 // Extra room above and below a group, so groups read as separate rows.
 private val GROUP_GAP = 8.dp
-// How far an opened group has to be swiped left for letting go to close it.
-private val SWIPE_CLOSE = 72.dp
+// How much of the row's width a swipe left takes to pull an opened group all the way shut, and how far through it letting go closes it.
+private const val PULL_REACH = 0.8f
+private const val PULL_CLOSE = 0.3f
 // Opened, a group lays its albums out this many to a row, whatever the album columns are.
 private const val GROUP_COLUMNS = 3
 // How much of the opening the albums' departures are spread over; each album then takes the rest to arrive.
 private const val STAGGER_SPAN = 0.35f
 private val GROUP_LABEL_GAP = 18.dp
 private val GROUP_ROW_GAP = 20.dp
+private val GROUP_HEADING_GAP = 14.dp
 
 // The albums before a group stretch to the end of their row, so the group starts a row of its own.
 private fun spansOf(entries: List<AlbumEntry>, columns: Int): List<Int> {
@@ -228,7 +232,14 @@ private fun GroupRow(
     val count = albums.size
     // Time through opening or closing, 0 to 1, run evenly; each card turns it into its own eased, staggered progress.
     val time = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
-    LaunchedEffect(isOpen) { time.animateTo(if (isOpen) 1f else 0f, tween(Motion.STACK_MS, easing = LinearEasing)) }
+    // A swipe left pulls the opened group shut by the finger: it drives the same time, on the closing curve, so letting go carries on from where the cards are.
+    var isPulled by remember(stack.name) { mutableStateOf(false) }
+    LaunchedEffect(isOpen) {
+        if (!isOpen) isPulled = false
+        val target = if (isOpen) 1f else 0f
+        // Started part way, by a pull, it takes only the share of the time that is left.
+        time.animateTo(target, tween((Motion.STACK_MS * abs(target - time.value)).roundToInt(), easing = LinearEasing))
+    }
     val isShut = !isOpen && time.value == 0f
     val isArranging = isRearranging && isOpen
     val geometry = remember { GroupGeometry() }
@@ -241,7 +252,7 @@ private fun GroupRow(
     fun progressOf(index: Int): Float {
         val start = index.toFloat() / count * STAGGER_SPAN
         val local = ((time.value - start) / (1f - STAGGER_SPAN)).coerceIn(0f, 1f)
-        return if (isOpen) Motion.backOut.transform(local) else Motion.powerThreeInOut.transform(local)
+        return if (isOpen && !isPulled) Motion.backOut.transform(local) else Motion.powerThreeInOut.transform(local)
     }
 
     val openGroup = { if (isPicking) onToggle(albums) else onOpenChange(true) }
@@ -251,33 +262,49 @@ private fun GroupRow(
 
     val context = LocalContext.current
     val currentOnOpenChange by rememberUpdatedState(onOpenChange)
-    val slide = remember(stack.name) { Animatable(0f) }
     val scope = rememberCoroutineScope()
     Layout(
         modifier = modifier
             .jiggle(stack.key, isMovable, pivot = LIST_COVER / 2)
-            // The opened group follows a swipe to the left; let go far enough and it lays itself back down, otherwise it slides home.
-            .graphicsLayer { translationX = slide.value }
+            // Each card follows the swipe back toward the stack, the last ones pulled hardest, so they land under one another; let go far enough and the group lays itself down, otherwise the cards go back.
             .then(
                 if (!isOpen || isRearranging) Modifier else Modifier.pointerInput(stack.name) {
-                    val home = { scope.launch { slide.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) }; Unit }
+                    var pulled = 0f
+                    val home = {
+                        scope.launch {
+                            time.animateTo(1f, tween((Motion.STATE_MS * (1f - time.value)).roundToInt(), easing = Motion.powerTwoOut))
+                            isPulled = false
+                        }
+                        Unit
+                    }
                     detectHorizontalDragGestures(
+                        onDragStart = {
+                            pulled = 0f
+                            isPulled = true
+                        },
                         onDragEnd = {
-                            if (slide.value < -SWIPE_CLOSE.toPx()) {
+                            if (1f - time.value > PULL_CLOSE) {
                                 Haptics.tick(context)
                                 currentOnOpenChange(false)
+                            } else {
+                                home()
                             }
-                            home()
                         },
                         onDragCancel = { home() },
                     ) { change, amount ->
                         change.consume()
-                        scope.launch { slide.snapTo((slide.value + amount).coerceAtMost(0f)) }
+                        pulled = (pulled + amount).coerceAtMost(0f)
+                        val reach = size.width * PULL_REACH
+                        scope.launch { time.snapTo((1f + pulled / reach).coerceIn(0f, 1f)) }
                     }
                 },
             ),
         content = {
-            Column(Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = { if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress() })) {
+            // The name and count take the whole rest of the row, so a tap anywhere beside the stack opens it; opened, the area is gone from under the cards.
+            Column(
+                if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = { if (isPicking) onToggle(albums) else if (!isRearranging) onStackLongPress() }),
+                verticalArrangement = Arrangement.Center,
+            ) {
                 BasicText(stack.name, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicText(albums.sumOf { it.items.size }.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
             }
@@ -342,7 +369,8 @@ private fun GroupRow(
                     )
                 }
             }
-            CollapseCard(stack.name, onClick = { onOpenChange(false) }, isList = false)
+            CollapseCard(onClick = { onOpenChange(false) }, isList = false)
+            LabelReveal(stack.name, isShown = isOpen, style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current), presence = { time.value })
         },
     ) { measurables, constraints ->
         val width = constraints.maxWidth
@@ -350,8 +378,9 @@ private fun GroupRow(
         val cell = (width - gap * (GROUP_COLUMNS - 1)) / GROUP_COLUMNS
         val small = LIST_COVER.roundToPx()
         val labelStart = small + GROUP_LABEL_GAP.roundToPx() + stackShift(GROUP_COLUMNS).roundToPx()
-        val header = measurables.first().measure(Constraints(maxWidth = (width - labelStart).coerceAtLeast(0)))
-        val cards = measurables.drop(1).map { it.measure(Constraints.fixedWidth(cell)) }
+        val header = measurables.first().measure(Constraints.fixed((width - labelStart).coerceAtLeast(0), small))
+        val heading = measurables.last().measure(Constraints(maxWidth = width))
+        val cards = measurables.subList(1, measurables.size - 1).map { it.measure(Constraints.fixedWidth(cell)) }
         val rowHeight = cards.maxOf { it.height }
         val rowGap = GROUP_ROW_GAP.roundToPx()
         geometry.cell = cell.toFloat()
@@ -359,17 +388,20 @@ private fun GroupRow(
         geometry.rowHeight = rowHeight.toFloat()
         geometry.rowGap = rowGap.toFloat()
         val rows = (cards.size + GROUP_COLUMNS - 1) / GROUP_COLUMNS
-        val openHeight = rows * rowHeight + (rows - 1) * rowGap
+        // Opened, the group's name stands over its cards as a heading.
+        val headingSpace = heading.height + GROUP_HEADING_GAP.roundToPx()
+        val openHeight = headingSpace + rows * rowHeight + (rows - 1) * rowGap
         val openness = Motion.powerThreeInOut.transform(time.value)
         val height = (small + (openHeight - small) * openness).roundToInt()
         layout(width, height) {
-            header.placeWithLayer(labelStart, (small - header.height) / 2) { alpha = (1f - openness * 2f).coerceIn(0f, 1f) }
+            header.placeWithLayer(labelStart, 0) { alpha = (1f - openness * 2f).coerceIn(0f, 1f) }
+            heading.place(0, 0)
             cards.forEachIndexed { index, card ->
                 val isCloser = index == count
                 val p = progressOf(index)
                 val depth = min(index, STACK_DEPTH)
                 val isHeld = !isCloser && albums[index].id == heldId
-                val open = when {
+                val open = Offset(0f, headingSpace.toFloat()) + when {
                     isCloser -> geometry.slot(count)
                     isHeld -> geometry.slot(index) + heldOffset
                     else -> geometry.slot(slotStates[index].value)

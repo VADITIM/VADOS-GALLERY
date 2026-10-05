@@ -143,27 +143,14 @@ private const val STACK_SHRINK = 0.05f
 private const val STACK_DARKEN = 0.2f
 private const val STACK_VISIBLE_LAYERS = 4
 
-// The card at the end of an opened stack that lays it back down.
+// The card at the end of an opened stack that lays it back down: the glyph alone, since the group's name is its heading.
 @Composable
-fun CollapseCard(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, isList: Boolean = Settings.albumColumns == 1) {
+fun CollapseCard(onClick: () -> Unit, modifier: Modifier = Modifier, isList: Boolean = Settings.albumColumns == 1) {
     val glyph = @Composable { BasicText("‹", style = Type.title.copy(color = LocalAccent.current)) }
     if (isList) {
-        Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) { glyph() }
-            BasicText(label, style = Type.cardTitle.copy(fontSize = 20.sp, color = Palette.textMuted), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 18.dp))
-        }
+        Box(modifier.size(LIST_COVER).pressable(onClick = onClick, pressedScale = 0.9f), contentAlignment = Alignment.Center) { glyph() }
     } else {
-        Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
-            Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) { glyph() }
-            BasicText(
-                label,
-                style = Type.cardTitle.copy(color = Palette.textMuted),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.padding(start = 4.dp, top = 10.dp),
-            )
-        }
+        Box(modifier.fillMaxWidth().aspectRatio(1f).pressable(onClick = onClick, pressedScale = 0.9f), contentAlignment = Alignment.Center) { glyph() }
     }
 }
 

@@ -50,6 +50,11 @@ object Motion {
     // The grid timeline: months fading in beside the years when a finger takes hold of it, and the jump to where it points.
     const val TIMELINE_REVEAL_MS = 180
 
+    // The bar-sweep reveal on a title: the bar grows, then retracts slower because that half is the one read; leaving is a quicker cut.
+    const val SWEEP_GROW_MS = 420
+    const val SWEEP_RETRACT_MS = 500
+    const val SWEEP_LEAVE_MS = 300
+
     // How long a delete or a move can still be taken back from the pill above the bar.
     const val UNDO_MS = 4500
 }
