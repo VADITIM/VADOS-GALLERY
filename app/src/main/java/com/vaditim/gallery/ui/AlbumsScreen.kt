@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -96,7 +97,8 @@ fun AlbumsScreen(
     onToggle: (List<Album>) -> Unit = {},
     openStacks: Set<String> = emptySet(),
     onOpenStacksChange: (Set<String>) -> Unit = {},
-) {
+    isAccented: Boolean = false,
+) = CompositionLocalProvider(LocalAccentedCoverNames provides isAccented) {
     val isPicking = selectedPaths.isNotEmpty()
     val entries = remember(albums, stacks) { entriesOf(albums, stacks) }
     // Several groups can be open at once; opening one leaves the others as they are. The set lives above this screen so it survives opening an album and coming back.

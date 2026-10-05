@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -275,17 +274,13 @@ suspend fun GridMemory.revealItem(items: List<MediaItem>, mediaId: Long) {
 // In the week layout months stand further apart, so the weeks inside one read as belonging together.
 @Composable
 private fun MonthHeader(label: String, isRoomy: Boolean) {
-    // Dates sit at the right end, across the grid from the timeline on the left.
-    Box(Modifier.fillMaxWidth().padding(end = 4.dp, top = if (isRoomy) 34.dp else 18.dp, bottom = 8.dp), contentAlignment = Alignment.CenterEnd) {
-        BasicText(label, style = Type.cardTitle)
-    }
+    // Dates sit at the left, across the grid from the timeline, in the section colour so they read as the grid's markers.
+    BasicText(label, style = Type.cardTitle.copy(fontSize = 16.sp, color = LocalAccent.current), modifier = Modifier.padding(start = 4.dp, top = if (isRoomy) 34.dp else 18.dp, bottom = 8.dp))
 }
 
 @Composable
 private fun WeekHeader(label: String) {
-    Box(Modifier.fillMaxWidth().padding(end = 4.dp, top = 8.dp, bottom = 4.dp), contentAlignment = Alignment.CenterEnd) {
-        BasicText(label, style = Type.microLabel, maxLines = 1)
-    }
+    BasicText(label, style = Type.microLabel.copy(fontSize = 11.sp, color = LocalAccent.current), maxLines = 1, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 4.dp))
 }
 
 // Two fingers change the column count and nothing else; one finger is left alone so the grid still scrolls. Watching on the initial pass lets the pinch claim its events before the list can start scrolling.
@@ -475,7 +470,7 @@ private fun Tile(
     ) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         if (sharpRequest != null) AsyncImage(model = sharpRequest, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        // Top right, away from the timeline: the day this photo opens, on a backdrop so it reads over any picture.
+        // Top left, away from the timeline: the day this photo opens, on a backdrop so it reads over any picture.
         if (stampDay != null) {
             BasicText(
                 if (isStampShort) shortDayStamp(stampDay) else dayStamp(stampDay),
@@ -483,7 +478,7 @@ private fun Tile(
                 maxLines = 1,
                 softWrap = false,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .padding(4.dp)
                     .clip(Shapes.capsule)
                     .background(Palette.panel)
@@ -531,10 +526,10 @@ private fun Tile(
                 }
             }
         }
-        // Top left: a folded stack's count, or an opened stack's place in it, which folds it back when tapped.
+        // Top right: a folded stack's count, or an opened stack's place in it, which folds it back when tapped.
         if (stackSize > 0) {
             Row(
-                Modifier.align(Alignment.TopStart).padding(5.dp).clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 5.dp, vertical = 2.dp),
+                Modifier.align(Alignment.TopEnd).padding(5.dp).clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 5.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -546,7 +541,7 @@ private fun Tile(
                 stackPlace,
                 style = Type.value.copy(color = LocalAccent.current),
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.TopEnd)
                     .pressable(onClick = onCloseStack)
                     .padding(5.dp)
                     .clip(Shapes.capsule)

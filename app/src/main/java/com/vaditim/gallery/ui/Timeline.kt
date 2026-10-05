@@ -40,6 +40,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -69,19 +70,22 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 // The window the timeline shows through is this share of the grid's height, centred on it.
-private const val TRACK_SHARE = 0.26f
+private const val TRACK_SHARE = 0.3f
 // The strip a finger takes hold of along each edge, besides the labels themselves; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
 // Room around a label that still counts as taking hold of it.
 private val LABEL_GRAB_SLACK = 6.dp
-private val LABEL_HEIGHT = 18.dp
+// Each label's full height on the strip, a year's being the larger; labels stand this far apart besides, at any size, so none ever touch.
+private val MONTH_HEIGHT = 18.dp
+private val YEAR_HEIGHT = 22.dp
+private val LABEL_SPACE = 4.dp
 private val THUMB_HEIGHT = 22.dp
-// The room a full-size label takes on the strip; smaller labels take a share of it, so the strip draws together away from the marker.
-private val LABEL_STEP = 22.dp
+// A step of the strip at full size, which is how far the marker travels per label on a short strip.
+private val LABEL_STEP = 24.dp
 // Months are gone this far before the window's edge, which belongs to the years.
 private val MONTH_EDGE = 28.dp
 // Labels shrink, and draw closer together, by this rate for each step away from the marker and keep shrinking; the near ones read clearly and the far months fade to nothing.
-private const val FALLOFF = 0.34f
+private const val FALLOFF = 0.22f
 // Years never shrink below this, so far from the marker the strip reads as the years alone.
 private const val YEAR_SMALLEST = 0.8f
 // A month this small is gone; it fades out over the share above it.
@@ -138,7 +142,7 @@ class TimelineGrab {
         // Only the window's stretch of each edge takes a finger.
         if (local.y < trackTop - labelSlack || local.y > trackTop + trackHeight + labelSlack) return false
         val isOnStrip = local.x >= timeline.size.width - stripWidth || local.x <= stripWidth
-        // The timeline is drawn on the left, but either edge takes hold of it, so it reaches under either thumb.
+        // The timeline is drawn on the right, but either edge takes hold of it, so it reaches under either thumb.
         return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
     }
 
@@ -164,7 +168,7 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
         }
     }
 
-// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a short window, drawn along the grid's left edge, and taken hold of from either edge. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, months shrink away from it and years hold the window's ends. Held at either edge, the marker is the finger and the label under it is where the grid goes.
+// Every year with all its months, oldest at the top like the grid, laid on one strip seen through a short window, drawn along the grid's right edge, and taken hold of from either edge. The marker runs down the window as the grid scrolls, the strip slides the other way so the month shown sits on it, months shrink away from it and years hold the window's ends. Held at either edge, the marker is the finger and the label under it is where the grid goes.
 @Composable
 fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding: PaddingValues, grab: TimelineGrab, modifier: Modifier = Modifier) {
     val marks = remember(entries) { marksOf(entries) }
@@ -241,21 +245,26 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val track = height * TRACK_SHARE
         val top = (height - track) / 2f
         val density = LocalDensity.current
-        val labelHalf = with(density) { LABEL_HEIGHT.toPx() } / 2f
+        val labelHalf = with(density) { MONTH_HEIGHT.toPx() } / 2f
+        val monthHeight = with(density) { MONTH_HEIGHT.toPx() }
+        val yearHeight = with(density) { YEAR_HEIGHT.toPx() }
+        val space = with(density) { LABEL_SPACE.toPx() }
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
         val step = with(density) { LABEL_STEP.toPx() }
         val monthEdge = with(density) { MONTH_EDGE.toPx() }
-        val yearGap = step * YEAR_SMALLEST
+        val yearGap = yearHeight * YEAR_SMALLEST + space
         val last = (labels.size - 1).coerceAtLeast(1)
         // A short strip sits in the middle of the window and mostly the marker moves; a long one runs the marker down the window as the strip slides.
-        val span = minOf(step * (labels.size - 1), track)
+        // The marker keeps clear of the window's ends, so the first and last months are never in the stretch where months fade.
+        val span = minOf(step * (labels.size - 1), (track - 2f * (monthEdge + yearGap)).coerceAtLeast(0f))
         val spanTop = top + (track - span) / 2f
         fun markerY(at: Float): Float = spanTop + span * (at / last)
         // Each label's height on screen: neighbours stand apart by the mean of their sizes, laid outward from the marker, which sits between the two labels it falls between.
         fun placesAt(at: Float): FloatArray {
             val places = FloatArray(labels.size)
             val anchor = floor(at).toInt().coerceIn(0, labels.lastIndex)
-            fun gap(slot: Int): Float = step * (labels[slot].sizeAt(slot - at) + labels[slot + 1].sizeAt(slot + 1 - at)) / 2f
+            fun heightOf(slot: Int): Float = (if (labels[slot].month == null) yearHeight else monthHeight) * labels[slot].sizeAt(slot - at)
+            fun gap(slot: Int): Float = (heightOf(slot) + heightOf(slot + 1)) / 2f + space
             places[anchor] = markerY(at) - if (anchor < labels.lastIndex) (at - anchor) * gap(anchor) else 0f
             for (slot in anchor + 1..labels.lastIndex) places[slot] = places[slot - 1] + gap(slot - 1)
             for (slot in anchor - 1 downTo 0) places[slot] = places[slot + 1] - gap(slot)
@@ -274,6 +283,8 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                 val edge = (minOf(places[slot] - top, bottom - places[slot]) / monthEdge).coerceIn(0f, 1f)
                 presence[slot] = shrink * edge
             }
+            // The month the marker is on always shows, whatever its size or place.
+            labels.getOrNull(at.roundToInt())?.takeIf { it.month != null }?.let { presence[at.roundToInt()] = 1f }
             var above = -1
             var below = -1
             for (slot in yearSlots) {
@@ -301,7 +312,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         // Only the labels that show are composed; the set changes a label at a time, never per frame.
         val shownSlots by remember(labels, top, track) { derivedStateOf { labels.indices.filter { placement.presence[it] > 0f } } }
         run {
-            val side = Alignment.TopStart
+            val side = Alignment.TopEnd
             shownSlots.forEach { slot ->
                 val label = labels[slot]
                 val grabKey = label
@@ -318,14 +329,18 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                         maxLines = 1,
                         modifier = Modifier
                             .align(side)
-                            .offset { IntOffset(0, (placement.places[slot] - labelHalf).roundToInt()) }
-                            .padding(start = STRIP_WIDTH - 4.dp)
+                            // Centred on its place whatever its height, so a year and a month never sit off their marks.
+                            .layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints)
+                                layout(placeable.width, placeable.height) { placeable.place(0, (placement.places[slot] - placeable.height / 2f).roundToInt()) }
+                            }
+                            .padding(end = STRIP_WIDTH - 4.dp)
                             // The label itself can be taken hold of, not only the strip beside it.
                             .onGloballyPositioned { grab.labels[grabKey] = it }
                             .graphicsLayer {
                                 alpha = placement.presence.getOrElse(slot) { 0f }
-                                // Shrinks toward the edge of the screen, so every label keeps its left side on the line.
-                                transformOrigin = TransformOrigin(0f, 0.5f)
+                                // Shrinks toward the edge of the screen, so every label keeps its right side on the line.
+                                transformOrigin = TransformOrigin(1f, 0.5f)
                                 scaleX = label.sizeAt(slot - position())
                                 scaleY = scaleX
                             }
@@ -341,7 +356,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                 Modifier
                     .align(side)
                     .offset { IntOffset(0, (markerY(position()) - thumbHalf).roundToInt()) }
-                    .padding(start = 6.dp)
+                    .padding(end = 6.dp)
                     .size(width = 4.dp, height = THUMB_HEIGHT)
                     .clip(Shapes.capsule)
                     .background(if (isHeld) accent else Palette.textMuted),
@@ -354,9 +369,9 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                 style = Type.microLabel.copy(color = Palette.textBright),
                 maxLines = 1,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.TopEnd)
                     .offset { IntOffset(0, (markerY(position()) - labelHalf * 1.6f).roundToInt()) }
-                    .padding(start = 76.dp)
+                    .padding(end = 76.dp)
                     .graphicsLayer { alpha = reveal }
                     .glass(Shapes.capsule)
                     .padding(horizontal = 14.dp, vertical = 8.dp),

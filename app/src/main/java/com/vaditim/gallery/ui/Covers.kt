@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,15 +85,19 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
     }
 }
 
+// Whether cover names take the section colour, as the albums made inside Favorites do; real folders keep plain names.
+val LocalAccentedCoverNames = staticCompositionLocalOf { false }
+
 // A cover with its name and count: a card in a grid, a row when there is one column.
 @Composable
 fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = Settings.coverColumns == 1) {
     val request = rememberCoverRequest(cover)
+    val nameColor = if (LocalAccentedCoverNames.current) LocalAccent.current else Palette.textBright
     if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
             CoverImage(request, name, Modifier.size(LIST_COVER), isSelected)
             Column(Modifier.padding(start = 18.dp).weight(1f).graphicsLayer { alpha = labelAlpha() }) {
-                BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = nameColor), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
             }
         }
@@ -102,7 +107,7 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
             // Narrow cards shrink the name until it fits, down to a size that still reads; only past that is it cut.
             BasicText(
                 name,
-                style = Type.cardTitle,
+                style = Type.cardTitle.copy(color = nameColor),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),

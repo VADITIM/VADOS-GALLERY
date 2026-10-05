@@ -1,4 +1,6 @@
-# 0.77
+# 0.78
 
-- Month and week headers and the day stamps now sit on the right, opposite the timeline.
-- The similar-shots count moved to the top left of its tile to make room.
+- The timeline is back on the right; both edges still grab it.
+- Timeline labels are less squeezed and spaced by their real size, so they no longer overlap. The first and last months no longer fade out.
+- Month and week headers are back on the left, in the section colour and slightly larger. Day stamps are back at the top left.
+- Album names in Favorites are in the Favorites colour.

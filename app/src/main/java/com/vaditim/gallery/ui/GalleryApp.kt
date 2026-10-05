@@ -604,6 +604,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         FavoritesView.Albums -> AlbumsScreen(
                             albums = favoriteAlbumViews,
                             title = "Favorites",
+                            isAccented = true,
                             stacks = Settings.favoriteStacks,
                             openStacks = openFavoriteStacks,
                             onOpenStacksChange = { openFavoriteStacks = it },
