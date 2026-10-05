@@ -1,3 +1,1 @@
-- "Set as cover" in a photo's More menu inside albums, private groups and Favorites albums.
-- Selected photos can be favourited (or unfavourited) from the bar.
-- The photo count moved under the back button, on the same glass as the top buttons, as "this month / total".
+- Fixed the app crashing on launch since 0.91.

@@ -1665,10 +1665,11 @@ private fun TopRow(month: VisibleMonth, photoCount: Int, selectedCount: Int, onB
 private fun BelowStart(below: @Composable () -> Unit, content: @Composable () -> Unit) {
     Layout(contents = listOf(content, below)) { (contentMeasurables, belowMeasurables), constraints ->
         val main = contentMeasurables.first().measure(constraints)
-        val hanging = belowMeasurables.first().measure(Constraints())
+        // `below` can be empty while it is hidden, and then there is nothing to hang.
+        val hanging = belowMeasurables.firstOrNull()?.measure(Constraints())
         layout(main.width, main.height) {
             main.place(0, 0)
-            hanging.place(0, main.height + BELOW_GAP.roundToPx())
+            hanging?.place(0, main.height + BELOW_GAP.roundToPx())
         }
     }
 }
