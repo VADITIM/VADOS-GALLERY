@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -51,6 +52,8 @@ fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDism
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val confirm = { if (name.isNotBlank()) onConfirm(name.trim()) }
+    // The back gesture closes the sheet, not what lies behind it.
+    BackHandler(onBack = onDismiss)
 
     Box(
         Modifier

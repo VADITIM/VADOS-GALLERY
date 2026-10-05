@@ -1,5 +1,6 @@
 package com.vaditim.gallery.ui
 
+import androidx.activity.compose.BackHandler
 import com.vaditim.gallery.AlbumStack
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.graphics.graphicsLayer
@@ -64,6 +65,8 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
         enter = if (isRevealing && !visible) EnterTransition.None else fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)),
         exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)),
     ) {
+        // Registered as the sheet appears, so it is the newest back handler and the back gesture closes the sheet before anything behind it.
+        BackHandler(enabled = visible, onBack = onDismiss)
         Box(
             Modifier
                 .fillMaxSize()

@@ -1441,7 +1441,11 @@ private fun Library(viewModel: GalleryViewModel) {
 
             picker?.let { target ->
                 val alreadyThere = when (target) {
-                    is PickerTarget.IntoAlbum -> albums.firstOrNull { it.relativePath == target.relativePath }?.items?.map { it.id }?.toSet().orEmpty()
+                    // Photos already in this album, or in any album sorted into a group, are not offered again.
+                    is PickerTarget.IntoAlbum -> {
+                        val groupedPaths = if (Settings.groupedAlbumsIn(SettingsView.ALBUMS)) Settings.albumStacks.flatMap { it.paths }.toSet() else emptySet()
+                        albums.filter { it.relativePath == target.relativePath || it.relativePath in groupedPaths }.flatMap { album -> album.items.map { it.id } }.toSet()
+                    }
                     // A favourite already in any Favorites album is not offered again.
                     is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.flatMap { it.ids }.toSet()
                     is PickerTarget.IntoGroup -> emptySet()
