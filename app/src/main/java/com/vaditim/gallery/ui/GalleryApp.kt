@@ -111,9 +111,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 
 private val BAR_ROOM = 84.dp
-// What the top row leaves above itself for the count hanging over the month pill; declared first so the header room can count it.
-private val COUNT_ROOM = 22.dp
-private val HEADER_ROOM = 56.dp + COUNT_ROOM
+private val HEADER_ROOM = 56.dp
 private val MONTH_CHIP_WIDTH = 148.dp
 // How far the viewer has grown into place before its buttons start arriving.
 private const val VIEWER_CHROME_AT = 0.85f
@@ -789,7 +787,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 (section == Section.ALBUMS && place != AlbumsPlace.Folders) || (section == Section.FAVORITES && openFavoriteAlbum != null)
             }
             TopRow(
-                month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: "",
+                month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: VisibleMonth("", 0),
                 photoCount = if (folderMemory != null) gridItems.size else 0,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
@@ -893,6 +891,12 @@ private fun Library(viewModel: GalleryViewModel) {
                         ) { TrashIcon(Palette.danger) }
                       } else {
                         IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+                        // Favourites every selected photo, or takes them all out once all of them are favourites.
+                        val isAllFavorite = selectedItems.all { it.isFavorite }
+                        IconButton(onClick = {
+                            actions.setFavorite(selectedItems, !isAllFavorite)
+                            clearSelection()
+                        }) { HeartIcon(isFilled = isAllFavorite, color = if (isAllFavorite) Palette.favorite else Palette.textBody, size = 22.dp) }
                         val isInFavoriteAlbum = section == Section.FAVORITES && openFavorite != null
                         if (selectedItems.size == 1 && (openAlbum != null || openPrivateGroup != null || isInFavoriteAlbum)) {
                             IconButton(onClick = {
@@ -1553,6 +1557,16 @@ private fun Library(viewModel: GalleryViewModel) {
                         }
                     },
                     places = places,
+                    // Where the photos come from a folder with a cover, any of them can be made its cover from the viewer.
+                    onSetCover = run {
+                        val setCover: ((MediaItem) -> Unit)? = when (val source = request.source) {
+                            is ViewerSource.InAlbum -> { item -> viewModel.setAlbumCover(source.albumId, item) }
+                            is ViewerSource.InPrivateGroup -> { item -> viewModel.setGroupCover(source.name, item) }
+                            is ViewerSource.InFavoriteAlbum -> favoriteAlbumViews.firstOrNull { it.name == source.name }?.let { album -> { item: MediaItem -> viewModel.setAlbumCover(album.id, item) } }
+                            else -> null
+                        }
+                        setCover?.let { set -> { item: MediaItem -> set(item); actions.announce("Set as cover") } }
+                    },
                 )
             }
 
@@ -1593,38 +1607,42 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: VisibleMonth, photoCount: Int, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
-        // Unclipped, so the count hanging over the month pill shows past the row.
+        // Unclipped, so the count hanging under the back button shows past the row.
         transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
-        // Room above for the count that hangs over the month pill.
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 8.dp + COUNT_ROOM, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (isSelecting) {
                 TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
                 Box(Modifier.weight(1f))
                 Chip("$selectedCount selected")
             } else {
                 // Back sits at the far left, then the month, which types itself over as it changes; the buttons gather at the right.
-                ShownTopButton(onBack, isGapAfter = true) { BackIcon(LocalAccent.current) }
-                AnimatedVisibility(month.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
-                    var lastMonth by remember { mutableStateOf(month) }
-                    var lastCount by remember { mutableStateOf(photoCount) }
-                    if (month.isNotEmpty()) {
-                        lastMonth = month
-                        lastCount = photoCount
-                    }
-                    AboveCentred(above = {
-                        // On black, so the count reads over any photo scrolling under it.
-                        Box(Modifier.background(Palette.viewerGround, Shapes.capsule).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                            TypewriterText(lastCount.toString(), style = Type.microLabel.copy(color = Palette.textMuted))
+                val isMonthShown = month.label.isNotEmpty()
+                var lastMonth by remember { mutableStateOf(month) }
+                var lastTotal by remember { mutableStateOf(photoCount) }
+                if (isMonthShown) {
+                    lastMonth = month
+                    lastTotal = photoCount
+                }
+                // Under the back button (or the month, where there is no way back): the month's photos out of the whole view's.
+                BelowStart(below = {
+                    AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
+                        Box(Modifier.glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                            TypewriterText("${lastMonth.count}/$lastTotal", style = Type.microLabel)
                         }
-                    }) {
-                        Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                            TypewriterText(lastMonth.uppercase(), style = Type.microLabel)
+                    }
+                }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ShownTopButton(onBack, isGapAfter = true) { BackIcon(LocalAccent.current) }
+                        AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
+                            Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
+                                TypewriterText(lastMonth.label.uppercase(), style = Type.microLabel)
+                            }
                         }
                     }
                 }
@@ -1642,20 +1660,20 @@ private fun TopRow(month: String, photoCount: Int, selectedCount: Int, onBack: (
     }
 }
 
-// `content` with `above` centred over it, hanging outside its bounds, so the row around it keeps the height of the content alone.
+// `content` with `below` under its left edge, hanging outside its bounds, so the row around it keeps the height of the content alone.
 @Composable
-private fun AboveCentred(above: @Composable () -> Unit, content: @Composable () -> Unit) {
-    Layout(contents = listOf(content, above)) { (contentMeasurables, aboveMeasurables), constraints ->
+private fun BelowStart(below: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Layout(contents = listOf(content, below)) { (contentMeasurables, belowMeasurables), constraints ->
         val main = contentMeasurables.first().measure(constraints)
-        val hanging = aboveMeasurables.first().measure(Constraints())
+        val hanging = belowMeasurables.first().measure(Constraints())
         layout(main.width, main.height) {
             main.place(0, 0)
-            hanging.place((main.width - hanging.width) / 2, -hanging.height - ABOVE_GAP.roundToPx())
+            hanging.place(0, main.height + BELOW_GAP.roundToPx())
         }
     }
 }
 
-private val ABOVE_GAP = 4.dp
+private val BELOW_GAP = 8.dp
 
 // What the bottom bar is showing: the sections, a selection's actions, or the end of rearranging.
 private enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }

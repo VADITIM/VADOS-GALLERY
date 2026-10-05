@@ -121,6 +121,7 @@ fun ViewerScreen(
     places: Map<Long, Place> = emptyMap(),
     isChromeAllowed: Boolean = true,
     photoModifier: Modifier = Modifier,
+    onSetCover: ((MediaItem) -> Unit)? = null,
 ) {
     if (items.isEmpty()) {
         LaunchedEffect(Unit) { onClose() }
@@ -245,6 +246,12 @@ fun ViewerScreen(
                         overlay = Overlay.NONE
                         video.player.pause()
                         actions.saveFrame(current, video.player.currentPosition)
+                    }
+                }
+                if (onSetCover != null) {
+                    SheetRow("Set as cover", icon = { ImageIcon(it) }) {
+                        overlay = Overlay.NONE
+                        onSetCover(current)
                     }
                 }
                 SheetRow("Crop", icon = { CropIcon(it) }) {

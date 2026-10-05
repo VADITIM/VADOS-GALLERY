@@ -1,2 +1,3 @@
-- The back gesture now closes an open settings sheet or menu instead of the screen behind it.
-- Adding photos to an album no longer offers photos from albums that are in a group.
+- "Set as cover" in a photo's More menu inside albums, private groups and Favorites albums.
+- Selected photos can be favourited (or unfavourited) from the bar.
+- The photo count moved under the back button, on the same glass as the top buttons, as "this month / total".

@@ -130,6 +130,15 @@ class MediaActions(
         }
     }
 
+    // A selection is favourited or unfavourited as one; private photos change in the vault, the rest in one MediaStore request.
+    fun setFavorite(items: List<MediaItem>, isFavorite: Boolean) {
+        val (privateItems, libraryItems) = items.filter { it.isFavorite != isFavorite }.partition { isPrivate(it) }
+        runVaultBatch(privateItems, if (isFavorite) "Added to private favorites" else "Removed from private favorites") { vault.setFavorite(it, isFavorite); true }
+        if (libraryItems.isNotEmpty()) {
+            startRequest(MediaStore.createFavoriteRequest(context.contentResolver, libraryItems.map { it.uri }, isFavorite)) { isDone -> if (isDone) Haptics.confirm(context) }
+        }
+    }
+
     fun trash(items: List<MediaItem>) {
         if (items.isEmpty()) return
         val uris = items.map { it.uri }

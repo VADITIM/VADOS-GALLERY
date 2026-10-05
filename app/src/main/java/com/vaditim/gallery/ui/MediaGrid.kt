@@ -389,16 +389,23 @@ private fun Modifier.dragSelect(
 
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
-fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<String> {
+fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<VisibleMonth> {
     val entries = remember(items, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
-    return remember(entries, memory) {
+    val countByMonth = remember(items) { items.groupingBy { YearMonth.from(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault())) }.eachCount() }
+    return remember(entries, memory, countByMonth) {
         derivedStateOf {
             // A header at the top belongs to the photos under it.
             val photo = (memory.state.firstVisibleItemIndex until entries.size).firstNotNullOfOrNull { entries[it] as? GridEntry.Photo }
-            photo?.let { MONTH_FORMAT.format(Instant.ofEpochMilli(it.item.timestampMillis).atZone(ZoneId.systemDefault())) } ?: ""
+            photo?.let {
+                val date = Instant.ofEpochMilli(it.item.timestampMillis).atZone(ZoneId.systemDefault())
+                VisibleMonth(MONTH_FORMAT.format(date), countByMonth[YearMonth.from(date)] ?: 0)
+            } ?: VisibleMonth("", 0)
         }
     }
 }
+
+// The month at the top of a grid and how many of the grid's photos were taken in it.
+data class VisibleMonth(val label: String, val count: Int)
 
 // What a grid needs to know about multi-select: which tiles are in it, and how to toggle one. A long press (see `dragSelect`) starts a selection; once one is active, a tap toggles too.
 class Selection(
