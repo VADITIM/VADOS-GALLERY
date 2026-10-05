@@ -1,6 +1,10 @@
 package com.vaditim.gallery.ui
 
 import androidx.compose.ui.graphics.Color
+import kotlin.math.roundToInt
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.coroutines.delay
 
 import androidx.compose.ui.text.style.TextOverflow
 
@@ -250,6 +254,8 @@ private fun Library(viewModel: GalleryViewModel) {
     // Albums (by folder path) or private groups (by name) picked in a cover grid; only one of the two grids is ever on screen.
     var selectedCovers by remember { mutableStateOf(emptySet<String>()) }
     // A delete that waits for the Confirm above the bar; anything else the user does lets it go.
+    // The nav bar's own height, so what sits above it (the count in the corner) clears it.
+    var navigationHeight by remember { mutableIntStateOf(0) }
     var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
@@ -325,7 +331,13 @@ private fun Library(viewModel: GalleryViewModel) {
     }
 
     // Private has a colour of its own across every section.
-    val accent by animateColorAsState(if (isPrivateMode) Palette.privateRed else (if (section == Section.ALBUMS) placeAccentOf(albumsPlace) else null) ?: section.accent, tween(Motion.STATE_MS), label = "accent")
+    val accentTarget = if (isPrivateMode) Palette.privateRed else (if (section == Section.ALBUMS) placeAccentOf(albumsPlace) else null) ?: section.accent
+    // The buttons change colour on the cut, once the outgoing view has left, never while it is still on screen.
+    var accent by remember { mutableStateOf(accentTarget) }
+    LaunchedEffect(accentTarget) {
+        delay(Motion.SECTION_LEAVE_MS.toLong())
+        accent = accentTarget
+    }
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val insetPadding = PaddingValues(
         top = statusBarHeight + HEADER_ROOM,
@@ -620,7 +632,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                         },
                         label = "place",
-                    ) { shownPlace -> CompositionLocalProvider(LocalAccent provides placeAccentOf(shownPlace) ?: LocalAccent.current) { when (shownPlace) {
+                    ) { shownPlace -> CompositionLocalProvider(LocalAccent provides (placeAccentOf(shownPlace) ?: LocalAccent.current)) { when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
                             openStacks = openAlbumStacks,
                             onOpenStacksChange = { openAlbumStacks = it },
@@ -797,6 +809,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 section == Section.FAVORITES && openFavorite != null -> { { review = ViewerSource.InFavoriteAlbum(openFavorite.name) } }
                 else -> null
             }
+            val visibleMonth = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: VisibleMonth("", 0)
             // Out of a folder, the same as the system back; Private's own groups leave by the Private pill instead.
             val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
             val canGoBack = if (isPrivateMode) {
@@ -805,8 +818,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 (section == Section.ALBUMS && place != AlbumsPlace.Folders) || (section == Section.FAVORITES && openFavoriteAlbum != null)
             }
             TopRow(
-                month = folderMemory?.let { rememberVisibleMonth(gridItems, it).value } ?: VisibleMonth("", 0),
-                photoCount = if (folderMemory != null) gridItems.size else 0,
+                month = visibleMonth,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
                 // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
@@ -834,6 +846,20 @@ private fun Library(viewModel: GalleryViewModel) {
                 isSelectingCovers -> BottomBar.COVERS
                 isSelecting -> BottomBar.PHOTOS
                 else -> BottomBar.NAVIGATION
+            }
+            // The month's photos out of the whole view's, in the corner just above the nav.
+            var lastCount by remember { mutableStateOf("") }
+            if (visibleMonth.label.isNotEmpty()) lastCount = "${visibleMonth.count}/${gridItems.size}"
+            AnimatedVisibility(
+                visibleMonth.label.isNotEmpty(),
+                enter = TOP_ENTER,
+                exit = TOP_EXIT,
+                modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
+                    .padding(end = 16.dp, bottom = 14.dp + with(LocalDensity.current) { navigationHeight.toDp() } + 8.dp),
+            ) {
+                Box(Modifier.glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    TypewriterText(lastCount, style = Type.microLabel.copy(fontSize = 9.sp))
+                }
             }
             Column(
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
@@ -997,6 +1023,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             }
                         }
                         SectionBar(
+                            modifier = Modifier.onSizeChanged { navigationHeight = it.height },
                             active = section,
                             accentOf = { if (isPrivateMode) Palette.privateRed else if (it == Section.ALBUMS) placeAccentOf(albumsPlace) ?: it.accent else it.accent },
                             onSelect = { selected ->
@@ -1682,11 +1709,10 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: VisibleMonth, photoCount: Int, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
-        // Unclipped, so the count hanging under the back button shows past the row.
         transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
@@ -1699,26 +1725,11 @@ private fun TopRow(month: VisibleMonth, photoCount: Int, selectedCount: Int, onB
                 // Back sits at the far left, then the month, which types itself over as it changes; the buttons gather at the right.
                 val isMonthShown = month.label.isNotEmpty()
                 var lastMonth by remember { mutableStateOf(month) }
-                var lastTotal by remember { mutableStateOf(photoCount) }
-                if (isMonthShown) {
-                    lastMonth = month
-                    lastTotal = photoCount
-                }
-                // Under the back button (or the month, where there is no way back): the month's photos out of the whole view's.
-                BelowStart(below = {
-                    AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                        Box(Modifier.glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                            TypewriterText("${lastMonth.count}/$lastTotal", style = Type.microLabel)
-                        }
-                    }
-                }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ShownTopButton(onBack, isGapAfter = true) { BackIcon(LocalAccent.current) }
-                        AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                                TypewriterText(lastMonth.label.uppercase(), style = Type.microLabel)
-                            }
-                        }
+                if (isMonthShown) lastMonth = month
+                MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
+                AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
+                    Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
+                        TypewriterText(lastMonth.label.uppercase(), style = Type.microLabel)
                     }
                 }
                 Box(Modifier.weight(1f))
@@ -1735,21 +1746,38 @@ private fun TopRow(month: VisibleMonth, photoCount: Int, selectedCount: Int, onB
     }
 }
 
-// `content` with `below` under its left edge, hanging outside its bounds, so the row around it keeps the height of the content alone.
+// The back button takes its room and gives it back in two steps: leaving, it pops away first and then the month slides into its place; arriving, the month slides over first and then it pops in.
 @Composable
-private fun BelowStart(below: @Composable () -> Unit, content: @Composable () -> Unit) {
-    Layout(contents = listOf(content, below)) { (contentMeasurables, belowMeasurables), constraints ->
-        val main = contentMeasurables.first().measure(constraints)
-        // `below` can be empty while it is hidden, and then there is nothing to hang.
-        val hanging = belowMeasurables.firstOrNull()?.measure(Constraints())
-        layout(main.width, main.height) {
-            main.place(0, 0)
-            hanging?.place(0, main.height + BELOW_GAP.roundToPx())
+private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit) {
+    var lastClick by remember { mutableStateOf(onClick) }
+    if (onClick != null) lastClick = onClick
+    val isShown = onClick != null
+    val room = remember { Animatable(if (isShown) 1f else 0f) }
+    val pop = remember { Animatable(if (isShown) 1f else 0f) }
+    LaunchedEffect(isShown) {
+        if (isShown) {
+            room.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut))
+            pop.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.backOut))
+        } else {
+            pop.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backIn))
+            room.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut))
         }
     }
+    if (room.value == 0f && pop.value == 0f && !isShown) return
+    Layout(
+        content = {
+            Box(Modifier.padding(end = 8.dp).graphicsLayer {
+                scaleX = pop.value
+                scaleY = pop.value
+                alpha = pop.value.coerceIn(0f, 1f)
+            }) { TopButton({ lastClick?.invoke() }, icon) }
+        },
+    ) { measurables, constraints ->
+        val button = measurables.first().measure(constraints.copy(minWidth = 0))
+        val width = (button.width * room.value).roundToInt()
+        layout(width, button.height) { button.place(0, 0) }
+    }
 }
-
-private val BELOW_GAP = 8.dp
 
 // What the bottom bar is showing: the sections, a selection's actions, or the end of rearranging.
 private enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }

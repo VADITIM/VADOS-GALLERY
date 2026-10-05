@@ -1,2 +1,4 @@
-- Locations are blue, Trash is grey and Private is red, in their own views and on their buttons in Albums.
-- A divider now separates the Locations, Trash and Private buttons.
+- Locations are blue, Trash is grey and Private is red, in their own views and on their buttons in Albums, with dividers between those buttons.
+- The photo count is smaller and sits in the bottom right corner, above the nav.
+- The back button pops away before the date slides over, and the date makes room before it pops back in.
+- Button colours change only after the old section has gone, not during the switch.
