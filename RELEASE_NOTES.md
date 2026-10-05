@@ -1,6 +1,4 @@
-# v0.107
+# v0.108
 
-- Selecting a photo works again on a grid that is only drifting: only a real scroll stops it.
-- Settings hangs from a fixed spot near the top, centred; its height only ever grows downward.
-- Opening a group: the arrow pops in after the name has swept in. Closing: the arrow pops away first, then the closed name sweeps in.
-- A tap on a group's heading line closes it; a swipe right on a closed group opens it with the finger.
+- Opening a group: the arrow comes out of the end of the name near the end of its sweep and slides left into place before the name.
+- Closing a group: the arrow slides back over the name and cuts it away where it passes, following the finger when pulled shut.

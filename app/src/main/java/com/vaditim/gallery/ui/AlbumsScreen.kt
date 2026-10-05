@@ -5,6 +5,8 @@ import kotlin.math.abs
 import com.vaditim.gallery.vas.LabelReveal
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.layout.Arrangement
 import kotlinx.coroutines.launch
@@ -186,6 +188,9 @@ private val GROUP_GAP = 8.dp
 private const val PULL_REACH = 0.8f
 private const val PULL_CLOSE = 0.3f
 private const val PUSH_OPEN = 0.3f
+// How far through the heading's sweep the arrow comes out of the name, and how quickly over its way it reaches full size.
+private const val ARROW_AFTER_SWEEP = 0.8f
+private const val ARROW_POP = 4f
 // Opened, a group lays its albums out this many to a row, whatever the album columns are.
 private const val GROUP_COLUMNS = 3
 // How much of the opening the albums' departures are spread over; each album then takes the rest to arrive.
@@ -213,6 +218,7 @@ private class GroupGeometry {
     var rowHeight = 1f
     var rowGap = 0f
     var headingHeight = 0f
+    var arrowWidth = 0f
 
     fun slot(index: Int): Offset = Offset((index % GROUP_COLUMNS) * (cell + gap), (index / GROUP_COLUMNS) * (rowHeight + rowGap))
 
@@ -254,26 +260,21 @@ private fun GroupRow(
     val time = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     // A swipe left pulls the opened group shut by the finger: it drives the same time, on the closing curve, so letting go carries on from where the cards are.
     var isPulled by remember(stack.name) { mutableStateOf(false) }
-    // The arrow at the end of the heading, and whether the heading stands. Opening, the heading sweeps in and the arrow pops in once it is done; closing, the arrow pops away first and the closed name then sweeps in.
+    // Where the arrow is, 0 at the end of the heading's name to 1 in its place before it. Opening, it pops out of the name late in the sweep and slides left; closing, it slides back over the name and cuts it where it passes, then the closed name sweeps in.
     val arrow = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     var isHeadingShown by remember(stack.name) { mutableStateOf(isOpen) }
-    // Pulled shut by the finger, the heading and arrow went with it, so they follow the cards instead of taking turns.
-    var isPullClosed by remember(stack.name) { mutableStateOf(false) }
     // Before the effect below, which clears isPulled, so it can still tell a pull from a tap.
     LaunchedEffect(isOpen) {
         if (isOpen) {
-            isPullClosed = false
             isHeadingShown = true
             if (arrow.value < 1f) {
-                delay((Motion.SWEEP_GROW_MS + Motion.SWEEP_RETRACT_MS).toLong())
-                arrow.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.backOut))
+                arrow.snapTo(0f)
+                delay(((Motion.SWEEP_GROW_MS + Motion.SWEEP_RETRACT_MS) * ARROW_AFTER_SWEEP).roundToInt().toLong())
+                arrow.animateTo(1f, tween(Motion.STACK_MS, easing = Motion.backOut))
             }
-        } else if (isPulled) {
-            isPullClosed = true
-            isHeadingShown = false
-            arrow.animateTo(0f, tween((Motion.STATE_MS * arrow.value).roundToInt(), easing = Motion.powerTwoOut))
         } else {
-            arrow.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backIn))
+            // From wherever the finger left it, so a pull carries straight on.
+            arrow.animateTo(0f, tween((Motion.STACK_MS * arrow.value).roundToInt(), easing = if (isPulled) Motion.powerTwoOut else Motion.powerThreeInOut))
             isHeadingShown = false
         }
     }
@@ -468,8 +469,19 @@ private fun GroupRow(
                     )
                 }
             }
-            LabelReveal(stack.name, isShown = isHeadingShown, style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current), presence = { if (isPulled || isPullClosed) time.value else 1f }, isRevealedAtStart = true)
-            // Folding the group back sits at the right end of its heading; shut, it is not there at all, so it never takes a tap meant for opening the group.
+            LabelReveal(
+                stack.name,
+                isShown = isHeadingShown,
+                style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current),
+                isRevealedAtStart = true,
+                // Going back, the arrow slices the name where its middle passes; coming out it only rides over it.
+                modifier = Modifier.drawWithContent {
+                    val isCutting = !isOpen || isPulled
+                    val cut = (1f - arrow.value) * (geometry.arrowWidth + size.width) - geometry.arrowWidth / 2f
+                    if (!isCutting || cut <= 0f) drawContent() else clipRect(left = cut) { this@drawWithContent.drawContent() }
+                },
+            )
+            // Folding the group back sits before its heading; shut, it is not there at all, so it never takes a tap meant for opening the group.
             Box { if (!isShut) CollapseButton(onClick = { onOpenChange(false) }) }
         },
     ) { measurables, constraints ->
@@ -492,6 +504,7 @@ private fun GroupRow(
         // Opened, the group's name stands over its cards as a heading.
         val headingHeight = maxOf(heading.height, back.height)
         geometry.headingHeight = headingHeight.toFloat()
+        geometry.arrowWidth = back.width.toFloat()
         val headingSpace = headingHeight + GROUP_HEADING_GAP.roundToPx()
         val openHeight = headingSpace + rows * rowHeight + (rows - 1).coerceAtLeast(0) * rowGap
         val openness = Motion.powerThreeInOut.transform(time.value)
@@ -516,11 +529,14 @@ private fun GroupRow(
         val height = maxOf(small + (openHeight - small) * openness, reach).roundToInt()
         layout(width, height) {
             header.place(labelStart, 0)
-            heading.place(0, (headingHeight - heading.height) / 2)
-            back.placeWithLayer(width - back.width, (headingHeight - back.height) / 2) {
-                alpha = arrow.value.coerceIn(0f, 1f)
-                scaleX = arrow.value.coerceAtLeast(0f)
-                scaleY = arrow.value.coerceAtLeast(0f)
+            heading.place(back.width, (headingHeight - heading.height) / 2)
+            back.placeWithLayer(0, (headingHeight - back.height) / 2) {
+                // It travels from just past the end of the name to its own place, popping up to full size over the first part of the way.
+                translationX = (1f - arrow.value) * (back.width + heading.width)
+                val pop = (arrow.value * ARROW_POP).coerceIn(0f, 1f)
+                alpha = pop
+                scaleX = pop
+                scaleY = pop
             }
             cards.forEachIndexed { index, card ->
                 val (x, y, scale, p, depth, isHeld) = placements[index]
