@@ -1,3 +1,3 @@
-# v0.100
+# v0.101
 
-- Private, Locations and Trash at the end of Albums are now three album-sized tiles in one row, each with its icon larger in the middle.
+- The blur along the top edge of the screen is half as tall.

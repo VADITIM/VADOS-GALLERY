@@ -220,7 +220,7 @@ review, which is not a goal.
 - **One cover grid.** Albums, private groups and locations share `CoverGrid`/`CoverCard`: the same columns (pinch or Settings), list layout at one column, shrinking names. Albums and private groups can be rearranged (long-press → Rearrange), by dragging a card onto another.
 - **Trash photos open** in the viewer on a tap (long press selects); the viewer there offers share, restore and delete forever (second tap).
 
-- The blur along the top edge fades evenly: strongest at the screen edge, easing out steadily the further down it goes.
+- The blur along the top edge fades evenly: strongest at the screen edge, easing out steadily the further down it goes, over a short band (half its first height).
 - Grouped albums (a setting): albums can be put into groups, as many as wanted. A group lies in the albums grid as a stack of its covers, each card leaning a little. Tapping it lays its albums out in the grid from its place onwards, wrapping by the album columns, under the group's name as a heading, with a back arrow at the right end of that heading that stacks them back. An album's menu adds it to a group, moves it to another, or takes it out; a group's menu renames it, rearranges, or ungroups it. Turning the setting off shows every album on its own again and keeps the groups for later.
 - Renaming an album keeps its place in the arranged order and in its group.
 - Crop (viewer → More): photos are cropped, videos cropped and trimmed. Free or a fixed ratio (Original, 1:1, 4:5, 4:3, 16:9, 9:16). The result is saved as a copy beside the original with the original's date and location; the original is never changed. Available in Private as well.

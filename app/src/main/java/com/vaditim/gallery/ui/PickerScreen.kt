@@ -62,7 +62,7 @@ fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: 
                 selection = selection,
                 modifier = Modifier.hazeSource(hazeState),
             )
-            Box(Modifier.fillMaxWidth().height(statusBarHeight + 88.dp).fadingGlass())
+            Box(Modifier.fillMaxWidth().height((statusBarHeight + 88.dp) * 0.5f).fadingGlass())
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

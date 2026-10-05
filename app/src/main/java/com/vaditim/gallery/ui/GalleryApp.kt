@@ -793,7 +793,7 @@ private fun Library(viewModel: GalleryViewModel) {
             }
 
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
-            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.8f).fadingGlass())
+            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.4f).fadingGlass())
 
             // Sorting through the photos on screen, from the settings sheet; a place of covers has none to go through.
             val reviewAction: (() -> Unit)? = when {
