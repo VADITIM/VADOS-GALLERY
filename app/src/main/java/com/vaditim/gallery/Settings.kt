@@ -215,7 +215,9 @@ data class FavoriteAlbum(val name: String, val ids: List<Long>)
 // Photos join a Favorites album, or one made for them; an album renamed onto another's name joins it.
 fun List<FavoriteAlbum>.withPhotos(albumName: String, ids: List<Long>): List<FavoriteAlbum> {
     val name = AlbumStack.cleanName(albumName).ifEmpty { return this }
-    return if (any { it.name == name }) map { if (it.name == name) it.copy(ids = (it.ids + ids).distinct()) else it } else this + FavoriteAlbum(name, ids.distinct())
+    // A photo lives in one Favorites album at a time, so adding it elsewhere moves it.
+    val others = map { if (it.name == name) it else it.copy(ids = it.ids - ids.toSet()) }
+    return if (any { it.name == name }) others.map { if (it.name == name) it.copy(ids = (it.ids + ids).distinct()) else it } else others + FavoriteAlbum(name, ids.distinct())
 }
 
 fun List<FavoriteAlbum>.renamedAlbum(old: String, new: String): List<FavoriteAlbum> {

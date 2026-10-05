@@ -29,7 +29,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.vas.LocalAccent
@@ -43,7 +45,9 @@ import com.vaditim.gallery.vas.pressable
 // One text field on a pane of glass, sitting on the keyboard. Used to name a new private group.
 @Composable
 fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, ground: Color = Palette.ground, initialName: String = "") {
-    var name by remember { mutableStateOf(initialName) }
+    // A name being changed arrives selected whole, so typing replaces it at once.
+    var field by remember { mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length))) }
+    val name = field.text
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val confirm = { if (name.isNotBlank()) onConfirm(name.trim()) }
@@ -68,8 +72,8 @@ fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDism
         ) {
             MicroLabel(label)
             BasicTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = field,
+                onValueChange = { field = it },
                 singleLine = true,
                 textStyle = Type.title,
                 cursorBrush = SolidColor(LocalAccent.current),

@@ -651,6 +651,13 @@ private fun Library(viewModel: GalleryViewModel) {
                     section == Section.FAVORITES && openFavorite != null -> { { review = ViewerSource.InFavoriteAlbum(openFavorite.name) } }
                     else -> null
                 },
+                // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
+                onAdd = when {
+                    openAlbum != null -> { { picker = PickerTarget.IntoAlbum(openAlbum.relativePath, openAlbum.name) } }
+                    openPrivateGroup != null -> { { picker = PickerTarget.IntoGroup(openPrivateGroup.name) } }
+                    section == Section.FAVORITES && openFavorite != null -> { { picker = PickerTarget.IntoFavoriteAlbum(openFavorite.name) } }
+                    else -> null
+                },
                 // Favorites switches between every favourite in one grid and the albums made inside it.
                 onToggleView = if (section == Section.FAVORITES && openFavorite == null) { { Settings.updateFavoritesAsAlbums(!Settings.favoritesAsAlbums) } } else null,
                 isAlbumsView = Settings.favoritesAsAlbums,
@@ -1218,7 +1225,8 @@ private fun Library(viewModel: GalleryViewModel) {
             picker?.let { target ->
                 val alreadyThere = when (target) {
                     is PickerTarget.IntoAlbum -> albums.firstOrNull { it.relativePath == target.relativePath }?.items?.map { it.id }?.toSet().orEmpty()
-                    is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.firstOrNull { it.name == target.name }?.ids?.toSet().orEmpty()
+                    // A favourite already in any Favorites album is not offered again.
+                    is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.flatMap { it.ids }.toSet()
                     is PickerTarget.IntoGroup -> emptySet()
                 }
                 PickerScreen(
@@ -1357,7 +1365,7 @@ private fun ViewerSource?.isPrivateSource(): Boolean = this is ViewerSource.InPr
 // The top layer: the month you are looking at, or — while selecting — the count and the way out of the selection. Leaving a folder is the system back gesture.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     Row(
         Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1368,9 +1376,11 @@ private fun TopRow(month: String, selectedCount: Int, onReview: (() -> Unit)?, o
             Box(Modifier.weight(1f))
             Chip("$selectedCount selected")
         } else {
-            Box(Modifier.weight(1f))
+            // The month sits at the left end; the buttons gather at the right.
             if (month.isNotEmpty()) Chip(month, Modifier.width(MONTH_CHIP_WIDTH))
+            Box(Modifier.weight(1f))
             if (onReview != null) TopButton(onReview) { ReviewIcon(LocalAccent.current) }
+            if (onAdd != null) TopButton(onAdd) { PlusIcon(LocalAccent.current) }
             // The icon shows where a tap goes: the grid of every favourite, or the albums.
             if (onToggleView != null) TopButton(onToggleView) { if (isAlbumsView) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current) }
             TopButton(onSettings) { SettingsIcon(Palette.textBright) }
