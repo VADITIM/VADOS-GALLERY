@@ -886,12 +886,13 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                ) {
-                    SheetRow("Ungroup", trailing = stackPaths.size.toString(), icon = { CloseIcon(it) }) {
-                        Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != sheetStack })
-                        sheet = AppSheet.NONE
-                    }
-                }
+                    general = {
+                        SheetRow("Ungroup", trailing = stackPaths.size.toString(), icon = { CloseIcon(it) }) {
+                            Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != sheetStack })
+                            sheet = AppSheet.NONE
+                        }
+                    },
+                )
             }
             StackPickerSheet(
                 visible = sheet == AppSheet.ALBUM_STACK,
@@ -975,12 +976,13 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                ) {
-                    SheetRow("Ungroup", trailing = stackNames.size.toString(), icon = { CloseIcon(it) }) {
-                        Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != sheetStack })
-                        sheet = AppSheet.NONE
-                    }
-                }
+                    general = {
+                        SheetRow("Ungroup", trailing = stackNames.size.toString(), icon = { CloseIcon(it) }) {
+                            Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != sheetStack })
+                            sheet = AppSheet.NONE
+                        }
+                    },
+                )
             }
             StackPickerSheet(
                 visible = sheet == AppSheet.FAVORITE_ALBUM_STACK,
@@ -1014,25 +1016,28 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                ) {
-                    SheetRow("Add photos", icon = { PlusIcon(it) }) {
-                        sheetGroup?.let { picker = PickerTarget.IntoGroup(it.name) }
-                        sheet = AppSheet.NONE
-                    }
-                    SheetRow("Move group out to album", trailing = sheetGroup?.items?.size?.toString(), icon = { MoveIcon(it) }) { sheet = AppSheet.GROUP_MOVE_OUT }
-                    SheetRow(
-                        if (isMenuDeleteArmed) "Tap again: delete ${sheetGroup?.items?.size ?: 0} photos forever" else "Delete group",
-                        color = Palette.danger,
-                        icon = { TrashIcon(it) },
-                    ) {
-                        if (isMenuDeleteArmed) {
-                            sheetGroup?.let { actions.deleteGroup(it) }
-                            sheet = AppSheet.NONE
-                        } else {
-                            isMenuDeleteArmed = true
+                    general = {
+                        SheetRow(
+                            if (isMenuDeleteArmed) "Tap again: delete ${sheetGroup?.items?.size ?: 0} photos forever" else "Delete group",
+                            color = Palette.danger,
+                            icon = { TrashIcon(it) },
+                        ) {
+                            if (isMenuDeleteArmed) {
+                                sheetGroup?.let { actions.deleteGroup(it) }
+                                sheet = AppSheet.NONE
+                            } else {
+                                isMenuDeleteArmed = true
+                            }
                         }
-                    }
-                }
+                    },
+                    edit = {
+                        SheetRow("Move group out to album", trailing = sheetGroup?.items?.size?.toString(), icon = { MoveIcon(it) }) { sheet = AppSheet.GROUP_MOVE_OUT }
+                        SheetRow("Add photos", icon = { PlusIcon(it) }) {
+                            sheetGroup?.let { picker = PickerTarget.IntoGroup(it.name) }
+                            sheet = AppSheet.NONE
+                        }
+                    },
+                )
             }
             AlbumPickerSheet(
                 visible = sheet == AppSheet.GROUP_MOVE_OUT,

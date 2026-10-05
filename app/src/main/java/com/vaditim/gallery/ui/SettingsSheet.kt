@@ -15,7 +15,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -131,9 +130,7 @@ private fun SettingsTabs(active: SettingsTab, onSelect: (SettingsTab) -> Unit) {
 }
 
 @Composable
-private fun SettingsHeader(text: String) {
-    MicroLabel(text, Modifier.padding(start = 20.dp, top = 18.dp, bottom = 2.dp))
-}
+private fun SettingsHeader(text: String) = SheetHeader(text)
 
 @Composable
 private fun SettingsSlider(label: String, fraction: Float, value: String, onChange: (Float) -> Unit) {

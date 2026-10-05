@@ -105,6 +105,12 @@ fun Modifier.rowDivider(): Modifier = drawBehind {
     drawLine(Palette.border, Offset(inset, size.height - 0.5f), Offset(size.width - inset, size.height - 0.5f), strokeWidth = 1.dp.toPx())
 }
 
+// A small label over a run of rows, as Settings and the long-press menus divide theirs.
+@Composable
+fun SheetHeader(text: String) {
+    MicroLabel(text, Modifier.padding(start = 20.dp, top = 18.dp, bottom = 2.dp))
+}
+
 @Composable
 fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.textBright, icon: (@Composable (Color) -> Unit)? = null, onClick: () -> Unit) {
     Row(
