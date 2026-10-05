@@ -175,13 +175,13 @@ fun AlbumsScreen(
                 }
             }
         }
-        item(key = "new-album", contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum) } }
+        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum) } }
         item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { footer() } }
     }
 }
 
 // Extra room above and below a group, so groups read as separate rows.
-private val GROUP_GAP = 8.dp
+private val GROUP_GAP = 20.dp
 // How much of the row's width a swipe left takes to pull an opened group all the way shut, and how far through it letting go closes it.
 private const val PULL_REACH = 0.8f
 private const val PULL_CLOSE = 0.3f

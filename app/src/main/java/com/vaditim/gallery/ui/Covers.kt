@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -201,19 +202,12 @@ fun SpanCell(span: Int, modifier: Modifier = Modifier, content: @Composable () -
 // The "make a new one" card at the end of a grid of covers: albums and private groups both end with one.
 @Composable
 fun AddCard(label: String, onClick: () -> Unit) {
-    if (coverColumns() == 1) {
-        Row(Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(LIST_COVER).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) {
-                BasicText("+", style = Type.title.copy(color = LocalAccent.current))
-            }
-            BasicText(label, style = Type.cardTitle.copy(fontSize = 20.sp, color = Palette.textMuted), modifier = Modifier.padding(start = 18.dp))
-        }
-    } else {
-        Column(Modifier.pressable(onClick = onClick, pressedScale = 0.96f)) {
-            Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(Shapes.cover).background(Palette.surface), contentAlignment = Alignment.Center) {
-                BasicText("+", style = Type.title.copy(color = LocalAccent.current))
-            }
-            BasicText(label, style = Type.cardTitle.copy(color = Palette.textMuted), maxLines = 1, modifier = Modifier.padding(start = 4.dp, top = 10.dp))
+    // The whole row is the button: a divider above, the plus with its label under it, centred.
+    Column(Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
+        Column(Modifier.padding(vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PlusIcon(LocalAccent.current, size = 28.dp)
+            BasicText(label, style = Type.cardTitle.copy(color = Palette.textMuted), maxLines = 1)
         }
     }
 }

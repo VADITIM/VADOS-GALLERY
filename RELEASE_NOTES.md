@@ -1,3 +1,4 @@
-# v0.112
+# v0.113
 
-- Icons are parsed once instead of once per use, so grids with many hearts scroll as before.
+- More room between groups and the albums that sit outside any group.
+- New album and New group are one full-width row: a divider above, the plus centred with its label under it, and the whole row taps.
