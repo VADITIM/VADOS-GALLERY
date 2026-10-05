@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.animation.animateContentSize
+
 import androidx.compose.ui.graphics.Color
 import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalDensity
@@ -393,6 +395,8 @@ private fun Library(viewModel: GalleryViewModel) {
     val targetGroupsLabel = targetGroups.singleOrNull()?.name?.uppercase() ?: "${targetGroups.size} GROUPS"
 
     // The items of the grid on screen, which is what a selection is made of.
+    // Only the favourites of the photo grid on screen; changing place lets it go.
+    var isFavoritesOnly by remember { mutableStateOf(false) }
     val gridItems: List<MediaItem> = when {
         isPrivateMode && section == Section.RECENT -> privateRecent
         isPrivateMode && section == Section.FAVORITES -> when {
@@ -411,7 +415,7 @@ private fun Library(viewModel: GalleryViewModel) {
         openLocation != null -> openLocation.items
         place is AlbumsPlace.Trash -> trash
         else -> emptyList()
-    }
+    }.favoritesOnlyIf(isFavoritesOnly)
     val selectedItems = gridItems.filter { it.id in selectedIds }
     val isSelecting = selectedItems.isNotEmpty()
     val selection = Selection(selectedIds) { item ->
@@ -427,6 +431,7 @@ private fun Library(viewModel: GalleryViewModel) {
     }
     LaunchedEffect(section, albumsPlace, favoritesView, isPrivateMode, openPrivateFavoriteGroup, isPrivateFavoritesGrouped) {
         clearSelection()
+        isFavoritesOnly = false
         isRearranging = false
     }
     // Inside Private, back from its Recent or Favorites goes to its groups, and from a group opened in its Favorites back to those; backing out of the groups leaves Private.
@@ -575,6 +580,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 CompositionLocalProvider(
                     LocalAccent provides if (isPrivateShown || (shown == Section.ALBUMS && isPrivateMode)) Palette.privateRed else shown.accent,
                     LocalSettingsView provides ownView,
+                    LocalFavoritesOnly provides isFavoritesOnly,
                 ) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(
@@ -863,18 +869,35 @@ private fun Library(viewModel: GalleryViewModel) {
                 isSelecting -> BottomBar.PHOTOS
                 else -> BottomBar.NAVIGATION
             }
-            // The month's photos out of the whole view's, in the corner just above the nav.
-            var lastCount by remember { mutableStateOf("") }
-            if (visibleMonth.label.isNotEmpty()) lastCount = "${visibleMonth.count}/${gridItems.size}"
+            val cornerPadding = 14.dp + with(LocalDensity.current) { navigationHeight.toDp() } + 8.dp
+            // The month's photos out of the whole view's, in the left corner just above the nav.
+            var lastMonthCount by remember { mutableIntStateOf(0) }
+            var lastTotal by remember { mutableIntStateOf(0) }
+            if (visibleMonth.label.isNotEmpty()) {
+                lastMonthCount = visibleMonth.count
+                lastTotal = gridItems.size
+            }
             AnimatedVisibility(
                 visibleMonth.label.isNotEmpty(),
                 enter = TOP_ENTER,
                 exit = TOP_EXIT,
-                modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding()
-                    .padding(end = 16.dp, bottom = 14.dp + with(LocalDensity.current) { navigationHeight.toDp() } + 8.dp),
+                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = cornerPadding),
             ) {
-                Box(Modifier.glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                    TypewriterText(lastCount, style = Type.microLabel.copy(fontSize = 9.sp), isTypedIn = true)
+                PhotoCount(lastMonthCount, lastTotal)
+            }
+            // Only favourites in the grid on screen, in the right corner; Favorites and the trash have nothing to narrow.
+            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash
+            AnimatedVisibility(
+                canNarrowToFavorites,
+                enter = TOP_ENTER,
+                exit = TOP_EXIT,
+                modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = cornerPadding),
+            ) {
+                Box(
+                    Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBody, size = 14.dp)
                 }
             }
             Column(
@@ -1813,3 +1836,16 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
         BasicText(text.uppercase(), style = Type.microLabel, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
+
+// The count in the corner: only the month's number types itself over, padded to the total's length in the mono face, so the pill keeps its width while scrolling and only resizes when the total itself changes.
+@Composable
+private fun PhotoCount(monthCount: Int, total: Int) {
+    val totalText = total.toString()
+    val style = Type.microLabel.copy(fontSize = 9.sp)
+    Row(Modifier.glass(Shapes.capsule).animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut)).padding(horizontal = 10.dp, vertical = 6.dp)) {
+        TypewriterText(monthCount.toString().padStart(totalText.length, ' '), style = style, isTypedIn = true, isCaretShown = false)
+        BasicText("/$totalText", style = style, maxLines = 1, softWrap = false)
+    }
+}
+
+private fun List<MediaItem>.favoritesOnlyIf(isFavoritesOnly: Boolean): List<MediaItem> = if (isFavoritesOnly) filter { it.isFavorite } else this

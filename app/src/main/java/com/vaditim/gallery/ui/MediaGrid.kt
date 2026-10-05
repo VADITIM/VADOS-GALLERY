@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -92,6 +93,9 @@ private val GAP = 3.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yy", Locale.ENGLISH)
 
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
+// Whether the photo grids of the main view show only favourites, set by the toggle in the corner above the bar.
+val LocalFavoritesOnly = compositionLocalOf { false }
+
 class GridMemory(val view: SettingsView = Settings.view, private val isStacking: Boolean = true) {
     val state = LazyGridState()
     var isPositioned = false
@@ -173,7 +177,10 @@ fun MediaGrid(
     badge: ((MediaItem) -> String?)? = null,
 ) {
     val state = memory.state
-    val entries = remember(items, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
+    // Narrowed to favourites by the corner toggle; a tap still opens the photo by its place among all of them.
+    val isFavoritesOnly = LocalFavoritesOnly.current
+    val shownItems = remember(items, isFavoritesOnly) { if (isFavoritesOnly) items.filter { it.isFavorite } else items }
+    val entries = remember(shownItems, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -194,7 +201,7 @@ fun MediaGrid(
         if (scrollToNewestRequest != requestOnArrival && entries.isNotEmpty()) state.animateScrollToItem(entries.lastIndex)
     }
 
-    if (items.isEmpty()) {
+    if (shownItems.isEmpty()) {
         Box(modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
             BasicText(emptyCaption, style = Type.caption.copy(color = Palette.textFaint))
         }
@@ -275,7 +282,7 @@ fun MediaGrid(
                                     memory.openStacks = memory.openStacks + item.id
                                     Haptics.tick(context)
                                 }
-                                else -> onOpen(entry.index)
+                                else -> onOpen(if (shownItems === items) entry.index else items.indexOf(shownItems[entry.index]))
                             }
                         },
                     )

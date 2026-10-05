@@ -23,7 +23,7 @@ import kotlinx.coroutines.delay
 
 // Text that, when it changes, deletes back to what the old and new share and types the rest in, as VADOS Bubble does; the first text shows at once unless it is to type itself in.
 @Composable
-fun TypewriterText(text: String, style: TextStyle, modifier: Modifier = Modifier, isTypedIn: Boolean = false) {
+fun TypewriterText(text: String, style: TextStyle, modifier: Modifier = Modifier, isTypedIn: Boolean = false, isCaretShown: Boolean = true) {
     var shown by remember { mutableStateOf(if (isTypedIn) "" else text) }
     var isTyping by remember { mutableStateOf(false) }
     var isCaretOn by remember { mutableStateOf(true) }
@@ -51,7 +51,7 @@ fun TypewriterText(text: String, style: TextStyle, modifier: Modifier = Modifier
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         BasicText(shown, style = style, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
         // The block caret of a terminal, in the text's own colour.
-        if (isTyping) {
+        if (isTyping && isCaretShown) {
             Box(
                 Modifier
                     .padding(start = fontSize * 0.12f)
