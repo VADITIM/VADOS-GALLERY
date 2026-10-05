@@ -71,6 +71,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private val coverStore = CoverStore(application)
     private val coverIds = MutableStateFlow(coverStore.read())
+    // Favorites albums read their covers from the same store, under the id their name gives them.
+    val covers: StateFlow<Map<Long, Long>> = coverIds
 
     val albums: StateFlow<List<Album>> =
         combine(library, coverIds) { items, covers -> groupIntoAlbums(items, covers) }
@@ -131,6 +133,12 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     fun setAlbumCover(albumId: Long, item: MediaItem) {
         coverStore.set(albumId, item.id)
+        coverIds.value = coverStore.read()
+    }
+
+    // A renamed Favorites album takes a new id, and its cover with it.
+    fun moveAlbumCover(from: Long, to: Long) {
+        coverIds.value[from]?.let { coverStore.set(to, it) }
         coverIds.value = coverStore.read()
     }
 

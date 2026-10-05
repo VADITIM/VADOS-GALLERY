@@ -1,5 +1,6 @@
-# 0.79
+# 0.80
 
-- The timeline always fits its window: the whole strip is shown, and its curve tightens only as much as the number of years and months needs.
-- Gaps scale with the labels, so they shrink with them and never stay large.
-- No extra gap before the outermost years.
+- Favorites albums have the cover button when one photo is selected.
+- Long-pressing an album in Favorites shows the same menu as in Albums, including Select, Move to private and Hide from Recent. Favorites groups have Select too.
+- Album menus are tidier: Select / rearrange, Move to group / private, and Hide from Recent / delete each share a row.
+- Group menus start the same everywhere: Rename, then Select / rearrange. Hide from Recent is no longer on album groups.

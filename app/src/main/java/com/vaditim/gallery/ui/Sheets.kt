@@ -122,7 +122,7 @@ fun SheetRow(text: String, trailing: String? = null, color: Color = Palette.text
 
 // Two moves that are alternatives share one row: the main one in words on the left, the other as only its icon over the right 30%, split by a slash that reads as "or".
 @Composable
-fun SplitSheetRow(text: String, icon: @Composable (Color) -> Unit, onClick: () -> Unit, sideIcon: @Composable (Color) -> Unit, onSide: () -> Unit, color: Color = Palette.textBright) {
+fun SplitSheetRow(text: String, icon: @Composable (Color) -> Unit, onClick: () -> Unit, sideIcon: @Composable (Color) -> Unit, onSide: () -> Unit, color: Color = Palette.textBright, sideColor: Color = color) {
     Row(Modifier.fillMaxWidth().rowDivider(), verticalAlignment = Alignment.CenterVertically) {
         Row(
             Modifier.weight(0.7f).pressable(onClick = onClick, pressedScale = 0.98f).padding(horizontal = 20.dp, vertical = 15.dp),
@@ -134,7 +134,7 @@ fun SplitSheetRow(text: String, icon: @Composable (Color) -> Unit, onClick: () -
         }
         BasicText("/", style = Type.cardTitle.copy(color = Palette.textFaint))
         Box(Modifier.weight(0.3f).pressable(onClick = onSide, pressedScale = 0.98f).padding(vertical = 15.dp), contentAlignment = Alignment.Center) {
-            sideIcon(color)
+            sideIcon(sideColor)
         }
     }
 }

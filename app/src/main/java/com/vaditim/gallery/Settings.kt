@@ -212,6 +212,9 @@ object Settings {
 
 data class FavoriteAlbum(val name: String, val ids: List<Long>)
 
+// A Favorites album kept out of Recent sits in the same set as hidden folders; a folder's path never holds a tab, so this key cannot meet one.
+fun hiddenFavoriteKey(name: String): String = "\t$name"
+
 // Photos join a Favorites album, or one made for them; an album renamed onto another's name joins it.
 fun List<FavoriteAlbum>.withPhotos(albumName: String, ids: List<Long>): List<FavoriteAlbum> {
     val name = AlbumStack.cleanName(albumName).ifEmpty { return this }
