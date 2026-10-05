@@ -1,4 +1,5 @@
-# v0.98
+# v0.99
 
-- The rows at the end of Albums (Locations, Trash, Private) sit together again, without lines between them.
-- One line with a wider gap now separates them from the albums above.
+- Groups in Albums sit as close together as they did before v0.94.
+- Opening or closing a group still pushes the groups below instead of overlapping them.
+- The Private button in Albums has a lock icon, like Locations and Trash have theirs.

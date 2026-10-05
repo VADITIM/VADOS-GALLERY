@@ -437,12 +437,12 @@ private fun GroupRow(
             val shutScale = small.toFloat() / cell * stackScale(depth)
             CardPlacement(shut.x + (open.x - shut.x) * p, shut.y + (open.y - shut.y) * p, shutScale + (1f - shutScale) * p, p, depth, isHeld)
         }
-        // The row is as tall as its cards reach at this frame, so the rows below are pushed by the cards themselves, never crossed by them.
+        // At rest the row keeps its own height; moving, it grows to where the pictures reach, so the rows below are pushed, never crossed.
         val reach = cards.indices.maxOfOrNull { index ->
             val placement = placements[index]
-            if (placements[index].isHeld) 0f else placement.y + cell / 2f + (cards[index].height - cell / 2f) * placement.scale
+            if (placement.isHeld) 0f else placement.y + cell / 2f + cell / 2f * placement.scale
         } ?: 0f
-        val height = maxOf(small.toFloat(), (headingSpace * openness), reach).roundToInt()
+        val height = maxOf(small + (openHeight - small) * openness, reach).roundToInt()
         layout(width, height) {
             header.place(labelStart, 0)
             heading.place(0, (headingHeight - heading.height) / 2)

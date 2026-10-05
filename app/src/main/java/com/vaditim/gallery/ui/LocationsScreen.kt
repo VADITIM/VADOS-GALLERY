@@ -29,7 +29,7 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 
-// A row at the foot of Albums (Locations, Trash), shaped like the Private row below them.
+// A row at the foot of Albums (Locations, Trash, Private): its icon and name in its place's colour.
 @Composable
 fun FolderEntry(title: String, color: Color, icon: @Composable (Color) -> Unit, onClick: () -> Unit, count: Int? = null) {
     Row(
