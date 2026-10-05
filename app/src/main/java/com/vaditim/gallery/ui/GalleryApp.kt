@@ -547,7 +547,7 @@ private fun Library(viewModel: GalleryViewModel) {
         }
     }
 
-    CompositionLocalProvider(LocalAccent provides accent, LocalHazeState provides hazeState) {
+    CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
             // A section change is a cut, not a dissolve: the outgoing section is gone fast and at once, the incoming one lands from just below on the overshoot.
             // Recent and Favorites inside Private are their own screens, so going in or out of Private changes them as a section change does.
@@ -993,6 +993,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         }
                         var lastPill by remember { mutableStateOf(placePill ?: "") }
                         if (placePill != null) lastPill = placePill
+                        val pillAccent = rememberOwnAccent(placePill != null)
                         AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
                             Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.pressable(onClick = {
@@ -1001,8 +1002,8 @@ private fun Library(viewModel: GalleryViewModel) {
                                         // Out of Locations entirely, from a location as from the list.
                                         else -> albumsPlace = AlbumsPlace.Folders
                                     }
-                                }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(accent, size = 16.dp) }
-                                Box(Modifier.background(accent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(pillAccent, size = 16.dp) }
+                                Box(Modifier.background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
                                     BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
                                 }
                             }
@@ -1736,6 +1737,7 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit)
     var lastClick by remember { mutableStateOf(onClick) }
     if (onClick != null) lastClick = onClick
     val isShown = onClick != null
+    val ownAccent = rememberOwnAccent(isShown)
     val room = remember { Animatable(if (isShown) 1f else 0f) }
     val pop = remember { Animatable(if (isShown) 1f else 0f) }
     LaunchedEffect(isShown) {
@@ -1754,7 +1756,7 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit)
                 scaleX = pop.value
                 scaleY = pop.value
                 alpha = pop.value.coerceIn(0f, 1f)
-            }) { TopButton({ lastClick?.invoke() }, icon) }
+            }) { CompositionLocalProvider(LocalAccent provides ownAccent) { TopButton({ lastClick?.invoke() }, icon) } }
         },
     ) { measurables, constraints ->
         val button = measurables.first().measure(constraints.copy(minWidth = 0))
@@ -1779,9 +1781,12 @@ private val TOP_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn
 private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, isGapAfter: Boolean = false, icon: @Composable () -> Unit) {
     var lastClick by remember { mutableStateOf(onClick) }
     if (onClick != null) lastClick = onClick
+    val ownAccent = rememberOwnAccent(onClick != null)
     AnimatedVisibility(onClick != null, enter = TOP_ENTER, exit = TOP_EXIT) {
         // The gap rides inside, so it comes and goes with the button.
-        Box(if (isGapAfter) Modifier.padding(end = 8.dp) else Modifier.padding(start = 8.dp)) { TopButton({ lastClick?.invoke() }, icon) }
+        Box(if (isGapAfter) Modifier.padding(end = 8.dp) else Modifier.padding(start = 8.dp)) {
+            CompositionLocalProvider(LocalAccent provides ownAccent) { TopButton({ lastClick?.invoke() }, icon) }
+        }
     }
 }
 

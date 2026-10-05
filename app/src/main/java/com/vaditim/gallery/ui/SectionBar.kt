@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -33,6 +35,7 @@ import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.glass
 import com.vaditim.gallery.vas.pressable
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // The chosen section's label grows by this much, landing on the overshoot.
@@ -62,6 +65,12 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
             launch { right.animateTo(toRight, if (isMovingRight) lead else trail) }
         }
     }
+    // The new section's label takes its colour on the cut, once the outgoing section has left, as every other accent does.
+    var inkActive by remember { mutableStateOf(active) }
+    LaunchedEffect(active) {
+        delay(Motion.SECTION_LEAVE_MS.toLong())
+        inkActive = active
+    }
     val wash = Palette.pressedWash
     Row(
         modifier
@@ -75,7 +84,7 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
     ) {
         Section.entries.forEach { section ->
             val isActive = section == active
-            val ink by animateColorAsState(if (isActive) accentOf(section) else Palette.textMuted, tween(Motion.STATE_MS), label = "section-ink")
+            val ink by animateColorAsState(if (section == inkActive) accentOf(section) else Palette.textMuted, tween(Motion.STATE_MS), label = "section-ink")
             val labelScale by animateFloatAsState(if (isActive) ACTIVE_LABEL_SCALE else 1f, tween(Motion.NAV_SLIDE_MS, easing = Motion.backOut), label = "section-scale")
             Box(
                 Modifier

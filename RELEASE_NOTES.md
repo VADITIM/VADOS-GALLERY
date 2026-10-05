@@ -1,5 +1,5 @@
-# v0.103
+# v0.104
 
-- Place names inside Locations are in Locations' blue.
-- The back button above the bar in Locations now leaves Locations entirely, even from inside a place.
-- In Private and Locations the photos end a little higher, so the pill above the bar no longer covers them.
+- Switching sections no longer recolours anything early: buttons on their way out keep the old section's colour until they are gone.
+- Buttons coming in already have the new colour.
+- The nav label and any buttons that stay change colour only once the old section has left.
