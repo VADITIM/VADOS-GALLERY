@@ -1,5 +1,5 @@
-# v0.102
+# v0.103
 
-- Every delete button now works like the one in the trash: a CONFIRM pill appears above the bar and only that tap deletes.
-- In the photo viewer, CONFIRM appears above the buttons, for ordinary, private and trashed photos.
-- Delete in an album's or group's long-press menu closes the menu and waits for CONFIRM, instead of asking for a second tap.
+- Place names inside Locations are in Locations' blue.
+- The back button above the bar in Locations now leaves Locations entirely, even from inside a place.
+- In Private and Locations the photos end a little higher, so the pill above the bar no longer covers them.

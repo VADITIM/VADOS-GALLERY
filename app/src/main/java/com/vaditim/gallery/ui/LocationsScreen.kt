@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -84,14 +85,15 @@ fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onOpen: (Int) -> Uni
 @Composable
 fun LocationsScreen(groups: List<LocationGroup>, onOpen: (LocationGroup) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, state: LazyGridState) {
     BackHandler(onBack = onBack)
-    CoverGrid(state, contentPadding) {
+    // Each place's name takes Locations' colour, as the albums inside Private take Private's.
+    CompositionLocalProvider(LocalAccentedCoverNames provides true) { CoverGrid(state, contentPadding) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Locations", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
         items(groups, key = { it.key }, contentType = { "location" }) { group ->
             CoverCard(group.city, group.cover, group.items.size, onClick = { onOpen(group) }, modifier = Modifier.entrance())
         }
-    }
+    } }
 }
 
 @Composable

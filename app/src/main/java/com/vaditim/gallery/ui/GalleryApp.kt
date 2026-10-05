@@ -117,6 +117,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 
 private val BAR_ROOM = 84.dp
+private val PILL_ROOM = 40.dp
 private val HEADER_ROOM = 56.dp
 private val MONTH_CHIP_WIDTH = 148.dp
 // How far the viewer has grown into place before its buttons start arriving.
@@ -339,9 +340,11 @@ private fun Library(viewModel: GalleryViewModel) {
         accent = accentTarget
     }
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // The PRIVATE or LOCATIONS pill sits over the bar, so the content ends that much higher to stay clear of it.
+    val isPlacePillShown = isPrivateMode || (section == Section.ALBUMS && (albumsPlace == AlbumsPlace.Locations || albumsPlace is AlbumsPlace.Location))
     val insetPadding = PaddingValues(
         top = statusBarHeight + HEADER_ROOM,
-        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + BAR_ROOM,
+        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + BAR_ROOM + if (isPlacePillShown) PILL_ROOM else 0.dp,
     )
 
     val place = if (section == Section.ALBUMS) albumsPlace else null
@@ -995,7 +998,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 Box(Modifier.pressable(onClick = {
                                     when {
                                         isPrivateMode -> leavePrivate()
-                                        place is AlbumsPlace.Location -> albumsPlace = AlbumsPlace.Locations
+                                        // Out of Locations entirely, from a location as from the list.
                                         else -> albumsPlace = AlbumsPlace.Folders
                                     }
                                 }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(accent, size = 16.dp) }
