@@ -1,5 +1,4 @@
-# v0.109
+# v0.110
 
-- A heart in the bottom right corner, above the nav, shows only the favourites of the grid you are in (Recent, an album, a group, a location); leaving the place turns it off.
-- The photo count moved to the bottom left corner.
-- Only the month's number in the count changes as you scroll; the pill no longer changes width while scrolling.
+- Opening a group: the arrow comes out of the end of the name near the end of its sweep and slides right to the end of the row.
+- Closing: the arrow slides back to the name (with the finger when pulled shut), and the name is cut the moment it reaches it.
