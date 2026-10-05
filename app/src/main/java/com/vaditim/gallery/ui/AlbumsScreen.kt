@@ -255,7 +255,7 @@ private fun GroupRow(
     var heldOffset by remember { mutableStateOf(Offset.Zero) }
     val haptic = LocalHapticFeedback.current
 
-    // Card `index` of `slots` (the albums, then the closing card): the deeper ones leave a little later and come back a little sooner, and opening overshoots slightly.
+    // Card `index` of the albums: the deeper ones leave a little later and come back a little sooner, and opening overshoots slightly.
     fun progressOf(index: Int): Float {
         val start = index.toFloat() / count * STAGGER_SPAN
         val local = ((time.value - start) / (1f - STAGGER_SPAN)).coerceIn(0f, 1f)
@@ -376,8 +376,9 @@ private fun GroupRow(
                     )
                 }
             }
-            CollapseCard(onClick = { onOpenChange(false) }, isList = false)
             LabelReveal(stack.name, isShown = isOpen, style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current), presence = { time.value })
+            // Folding the group back sits at the right end of its heading; shut, it is not there at all, so it never takes a tap meant for opening the group.
+            Box { if (!isShut) CollapseButton(onClick = { onOpenChange(false) }) }
         },
     ) { measurables, constraints ->
         val width = constraints.maxWidth
@@ -386,9 +387,10 @@ private fun GroupRow(
         val small = LIST_COVER.roundToPx()
         val labelStart = small + GROUP_LABEL_GAP.roundToPx() + stackShift(GROUP_COLUMNS).roundToPx()
         val header = measurables.first().measure(Constraints.fixed((width - labelStart).coerceAtLeast(0), small))
-        val heading = measurables.last().measure(Constraints(maxWidth = width))
-        val cards = measurables.subList(1, measurables.size - 1).map { it.measure(Constraints.fixedWidth(cell)) }
-        val rowHeight = cards.maxOf { it.height }
+        val back = measurables.last().measure(Constraints())
+        val heading = measurables[measurables.size - 2].measure(Constraints(maxWidth = (width - back.width).coerceAtLeast(0)))
+        val cards = measurables.subList(1, measurables.size - 2).map { it.measure(Constraints.fixedWidth(cell)) }
+        val rowHeight = cards.maxOfOrNull { it.height } ?: cell
         val rowGap = GROUP_ROW_GAP.roundToPx()
         geometry.cell = cell.toFloat()
         geometry.gap = gap.toFloat()
@@ -396,20 +398,20 @@ private fun GroupRow(
         geometry.rowGap = rowGap.toFloat()
         val rows = (cards.size + GROUP_COLUMNS - 1) / GROUP_COLUMNS
         // Opened, the group's name stands over its cards as a heading.
-        val headingSpace = heading.height + GROUP_HEADING_GAP.roundToPx()
-        val openHeight = headingSpace + rows * rowHeight + (rows - 1) * rowGap
+        val headingHeight = maxOf(heading.height, back.height)
+        val headingSpace = headingHeight + GROUP_HEADING_GAP.roundToPx()
+        val openHeight = headingSpace + rows * rowHeight + (rows - 1).coerceAtLeast(0) * rowGap
         val openness = Motion.powerThreeInOut.transform(time.value)
         val height = (small + (openHeight - small) * openness).roundToInt()
         layout(width, height) {
             header.placeWithLayer(labelStart, 0) { alpha = (1f - openness * 2f).coerceIn(0f, 1f) }
-            heading.place(0, 0)
+            heading.place(0, (headingHeight - heading.height) / 2)
+            back.placeWithLayer(width - back.width, (headingHeight - back.height) / 2) { alpha = openness }
             cards.forEachIndexed { index, card ->
-                val isCloser = index == count
                 val p = progressOf(index)
                 val depth = min(index, STACK_DEPTH)
-                val isHeld = !isCloser && albums[index].id == heldId
+                val isHeld = albums[index].id == heldId
                 val open = Offset(0f, headingSpace.toFloat()) + when {
-                    isCloser -> geometry.slot(count)
                     isHeld -> geometry.slot(index) + heldOffset
                     else -> geometry.slot(slotStates[index].value)
                 }
@@ -424,8 +426,8 @@ private fun GroupRow(
                     scaleX = scale
                     scaleY = scale
                     rotationZ = stackTilt(depth) * (1f - p)
-                    // Deeper cards lie darker, as in the stack; the ground is near black, so fading darkens. Past the visible layers, and the closing card, they are hidden until they leave.
-                    val shade = if (isCloser || index > STACK_DEPTH) 0f else stackShade(depth)
+                    // Deeper cards lie darker, as in the stack; the ground is near black, so fading darkens. Past the visible layers they are hidden until they leave.
+                    val shade = if (index > STACK_DEPTH) 0f else stackShade(depth)
                     alpha = shade + (1f - shade) * p.coerceIn(0f, 1f)
                 }
             }

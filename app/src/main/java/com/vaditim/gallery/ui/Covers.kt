@@ -148,14 +148,11 @@ private const val STACK_SHRINK = 0.05f
 private const val STACK_DARKEN = 0.2f
 private const val STACK_VISIBLE_LAYERS = 4
 
-// The card at the end of an opened stack that lays it back down: the glyph alone, since the group's name is its heading.
+// The arrow at the right end of an opened group's heading that lays the group back down.
 @Composable
-fun CollapseCard(onClick: () -> Unit, modifier: Modifier = Modifier, isList: Boolean = Settings.coverColumns == 1) {
-    val glyph = @Composable { BasicText("‹", style = Type.title.copy(color = LocalAccent.current)) }
-    if (isList) {
-        Box(modifier.size(LIST_COVER).pressable(onClick = onClick, pressedScale = 0.9f), contentAlignment = Alignment.Center) { glyph() }
-    } else {
-        Box(modifier.fillMaxWidth().aspectRatio(1f).pressable(onClick = onClick, pressedScale = 0.9f), contentAlignment = Alignment.Center) { glyph() }
+fun CollapseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.pressable(onClick = onClick, pressedScale = 0.9f).padding(horizontal = 14.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+        BasicText("‹", style = Type.title.copy(color = LocalAccent.current))
     }
 }
 

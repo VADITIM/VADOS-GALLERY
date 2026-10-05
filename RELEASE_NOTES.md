@@ -1,3 +1,3 @@
-# 0.82
+# 0.83
 
-- Long-press menus for albums and groups are split into General and Edit, with Select / rearrange at the very bottom.
+- In an opened group, the back arrow now sits at the right end of the group's name instead of taking a card slot of its own.
