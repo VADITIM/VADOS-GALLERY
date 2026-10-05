@@ -1,3 +1,4 @@
-# 0.76
+# 0.77
 
-- Fixed: the timeline sometimes stopped moving the photos after you had scrolled, until you left the view and came back.
+- Month and week headers and the day stamps now sit on the right, opposite the timeline.
+- The similar-shots count moved to the top left of its tile to make room.
