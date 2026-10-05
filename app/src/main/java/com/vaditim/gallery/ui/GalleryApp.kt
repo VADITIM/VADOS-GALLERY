@@ -150,6 +150,13 @@ private sealed interface AlbumsPlace {
     data object Trash : AlbumsPlace
 }
 
+private fun settingsViewOf(place: AlbumsPlace): SettingsView = when (place) {
+    AlbumsPlace.Locations, is AlbumsPlace.Location -> SettingsView.LOCATIONS
+    AlbumsPlace.Trash -> SettingsView.TRASH
+    AlbumsPlace.PrivateGroups, is AlbumsPlace.PrivateFolder -> SettingsView.PRIVATE
+    else -> SettingsView.ALBUMS
+}
+
 private val AlbumsPlace.isPrivate: Boolean
     get() = this is AlbumsPlace.PrivateGroups || this is AlbumsPlace.PrivateFolder
 
@@ -635,7 +642,11 @@ private fun Library(viewModel: GalleryViewModel) {
                                 .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                         },
                         label = "place",
-                    ) { shownPlace -> CompositionLocalProvider(LocalAccent provides (placeAccentOf(shownPlace) ?: LocalAccent.current)) { when (shownPlace) {
+                    ) { shownPlace -> CompositionLocalProvider(
+                        LocalAccent provides (placeAccentOf(shownPlace) ?: LocalAccent.current),
+                        // Each place keeps its own view's settings while it leaves, so the albums never take Locations' columns, nor Locations the albums'.
+                        LocalSettingsView provides settingsViewOf(shownPlace),
+                    ) { when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
                             openStacks = openAlbumStacks,
                             onOpenStacksChange = { openAlbumStacks = it },

@@ -1,4 +1,3 @@
-# v0.105
+# v0.106
 
-- When the app opens, the nav labels, the month and the photo count type themselves in.
-- Recent's colour is now #2FDE75.
+- Leaving Locations no longer squeezes the albums or locations into a single column: each keeps its own grid while switching.
