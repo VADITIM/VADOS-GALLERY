@@ -10,8 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.fragment.app.FragmentActivity
-import com.vaditim.gallery.ui.ExternalViewer
-import com.vaditim.gallery.ui.GalleryApp
+import com.vaditim.gallery.library.GalleryApp
+import com.vaditim.gallery.viewer.ExternalViewer
 
 // A FragmentActivity only because BiometricPrompt needs one to unlock Private.
 class MainActivity : FragmentActivity() {
