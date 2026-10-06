@@ -49,6 +49,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.blur
@@ -610,7 +612,8 @@ private fun Library(viewModel: GalleryViewModel) {
     // The screen softens behind the settings, so the sheet reads as the one thing in front.
     // Pulling the sheet down clears the blur with the finger.
     var settingsPull by remember { mutableFloatStateOf(0f) }
-    val settingsBlur by animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
+    // Read only where the layer draws, so the blur moving each frame never recomposes the app.
+    val settingsBlur = animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize().onSizeChanged { screenWidth = it.width }) {
             // A section change is a cut, not a dissolve: the outgoing section is gone fast and at once, the incoming one lands from just below on the overshoot.
@@ -623,7 +626,11 @@ private fun Library(viewModel: GalleryViewModel) {
                         .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                 },
                 label = "section",
-                modifier = Modifier.zIndex(-2f).fillMaxSize().blur(settingsBlur * (1f - settingsPull)).hazeSource(hazeState),
+                modifier = Modifier.zIndex(-2f).fillMaxSize().graphicsLayer {
+                    val radius = settingsBlur.value.toPx() * (1f - settingsPull)
+                    renderEffect = if (radius > 0f) BlurEffect(radius, radius, TileMode.Clamp) else null
+                    clip = true
+                }.hazeSource(hazeState),
             ) { (shown, isPrivateShown) ->
                 // While this section is the one shown it follows the current view; leaving, it keeps the last one it had.
                 var ownView by remember { mutableStateOf(settingsView) }
@@ -633,6 +640,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     LocalAccent provides if (isPrivateShown || (shown == Section.ALBUMS && isPrivateMode)) Palette.privateRed else shown.accent,
                     LocalSettingsView provides ownView,
                     LocalFavoritesOnly provides isFavoritesOnly,
+                    LocalScreenCovered provides (sheet == AppSheet.SETTINGS),
                 ) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(

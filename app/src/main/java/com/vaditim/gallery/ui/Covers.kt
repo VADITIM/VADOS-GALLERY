@@ -76,6 +76,7 @@ val COVER_GAP = 14.dp
 @Composable
 fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: LazyGridScope.() -> Unit) {
     val haptic = LocalHapticFeedback.current
+    HoldUnderSheet(state)
     ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(coverColumns()),

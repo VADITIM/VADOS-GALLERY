@@ -3,6 +3,7 @@ package com.vaditim.gallery.ui
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
+import coil3.memory.MemoryCache
 
 // Where each visible grid tile is on screen, so the viewer can grow out of a tile and shrink back into it. Tiles register while composed and drop out when they scroll away; the bounds are read on demand, so they are never stale.
 object TileBounds {
@@ -20,6 +21,17 @@ object TileBounds {
         val placed = coordinates[mediaId ?: return null] ?: return null
         return if (placed.isAttached) placed.boundsInWindow() else null
     }
+}
+
+// The upright picture each tile last drew, so the viewer opens on it at once instead of on black while the full photo decodes.
+object TileImages {
+    private val keys = HashMap<Long, MemoryCache.Key>()
+
+    fun register(mediaId: Long, key: MemoryCache.Key?) {
+        if (key != null) keys[mediaId] = key
+    }
+
+    fun of(mediaId: Long): MemoryCache.Key? = keys[mediaId]
 }
 
 // The box a photo occupies when shown "fit" inside a screen, which is where the viewer draws it.

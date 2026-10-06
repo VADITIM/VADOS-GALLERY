@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.items
@@ -97,6 +98,15 @@ private val DAY_FORMAT = DateTimeFormatter.ofPattern("EEE dd/MM", Locale.ENGLISH
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
 // Whether the photo grids of the main view show only favourites, set by the toggle in the corner above the bar.
 val LocalFavoritesOnly = compositionLocalOf { false }
+// True while a sheet covers the screen: a grid still gliding stops, so the blur behind the sheet is not redrawn every frame of its arrival.
+val LocalScreenCovered = compositionLocalOf { false }
+
+// Stops a fling the moment a sheet covers the grid.
+@Composable
+fun HoldUnderSheet(state: LazyGridState) {
+    val isCovered = LocalScreenCovered.current
+    LaunchedEffect(isCovered) { if (isCovered) state.stopScroll() }
+}
 
 class GridMemory(val view: SettingsView = Settings.view, private val isStacking: Boolean = true) {
     val state = LazyGridState()
@@ -195,6 +205,7 @@ fun MediaGrid(
     isMarked: (MediaItem) -> Boolean = { false },
 ) {
     val state = memory.state
+    HoldUnderSheet(state)
     // Narrowed to favourites by the corner toggle; a tap still opens the photo by its place among all of them.
     val isFavoritesOnly = LocalFavoritesOnly.current
     val shownItems = remember(items, isFavoritesOnly) { if (isFavoritesOnly) items.filter { it.isFavorite } else items }
@@ -543,7 +554,7 @@ private fun Tile(
             .background(Palette.sunken),
     ) {
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        if (sharpRequest != null) AsyncImage(model = sharpRequest, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (sharpRequest != null) AsyncImage(model = sharpRequest, contentDescription = null, contentScale = ContentScale.Crop, onSuccess = { TileImages.register(item.id, it.result.memoryCacheKey) }, modifier = Modifier.fillMaxSize())
         // Top left, away from the timeline: the day this photo opens, on a backdrop so it reads over any picture.
         if (stampDay != null) {
             BasicText(

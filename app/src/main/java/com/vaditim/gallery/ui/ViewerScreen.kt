@@ -587,7 +587,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     clip = true
                 },
         ) {
-            FullPhoto(item.uri, item.name, isZoomed = scale > 1.01f, onRatio = { ratio = it }, modifier = Modifier.fillMaxSize())
+            FullPhoto(item.uri, item.name, isZoomed = scale > 1.01f, placeholderKey = TileImages.of(item.id), onRatio = { ratio = it }, modifier = Modifier.fillMaxSize())
             // The still frame shows until the video has its first picture, then the video draws over it.
             if (video != null) VideoSurface(video, Modifier.fillMaxSize())
             motion?.let { VideoSurface(it, Modifier.fillMaxSize()) }

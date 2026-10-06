@@ -1,4 +1,4 @@
-# v1.0.3
+# v1.0.4
 
-- The favourite heart no longer flashes red when you deselect the last photo.
-- New group and New album sit side by side, group on the left. With groups off, New album stands alone in the centre.
+- Settings opens and closes smoothly, even while the grid behind it is still scrolling.
+- Opening a photo no longer flickers: it starts on the tile you tapped and keeps its shape while the full photo loads.

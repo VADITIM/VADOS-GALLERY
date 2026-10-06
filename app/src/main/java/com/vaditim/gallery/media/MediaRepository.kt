@@ -89,6 +89,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.DURATION,
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.ORIENTATION,
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.DATA,
             MediaStore.MediaColumns.DATE_EXPIRES,
@@ -120,6 +121,7 @@ class MediaRepository(private val context: Context) {
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
             val widthColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.WIDTH)
             val heightColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.HEIGHT)
+            val orientationColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.ORIENTATION)
             val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
             // DATA is deprecated for apps without file access; this app has All files access, and hiding a photo into Private is a plain file move that needs the real path.
             val pathOnDiskColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
@@ -128,6 +130,8 @@ class MediaRepository(private val context: Context) {
                 val id = cursor.getLong(idColumn)
                 val isVideo = cursor.getInt(typeColumn) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
                 val taken = cursor.getLong(takenColumn)
+                // Stored sizes are as the sensor wrote them; a photo turned a quarter is taller than wide, and the viewer frame must know before it decodes.
+                val isTurned = cursor.getInt(orientationColumn) % 180 == 90
                 items += MediaItem(
                     id = id,
                     uri = ContentUris.withAppendedId(if (isVideo) VIDEOS else IMAGES, id),
@@ -141,8 +145,8 @@ class MediaRepository(private val context: Context) {
                     relativePath = cursor.getString(pathColumn) ?: "",
                     isFavorite = cursor.getInt(favoriteColumn) == 1,
                     durationMillis = cursor.getLong(durationColumn),
-                    width = cursor.getInt(widthColumn),
-                    height = cursor.getInt(heightColumn),
+                    width = cursor.getInt(if (isTurned) heightColumn else widthColumn),
+                    height = cursor.getInt(if (isTurned) widthColumn else heightColumn),
                     sizeBytes = cursor.getLong(sizeColumn),
                     absolutePath = cursor.getString(pathOnDiskColumn) ?: "",
                     expiresMillis = if (isTrashed) cursor.getLong(expiresColumn) * 1000 else 0,
