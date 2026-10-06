@@ -92,6 +92,7 @@ private const val PINCH_STEP = 1.28f
 private const val AUTO_SCROLL_STEP = 22f
 private val GAP = 3.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yy", Locale.ENGLISH)
+private val DAY_FORMAT = DateTimeFormatter.ofPattern("EEE dd/MM", Locale.ENGLISH)
 
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
 // Whether the photo grids of the main view show only favourites, set by the toggle in the corner above the bar.
@@ -109,11 +110,11 @@ class GridMemory(val view: SettingsView = Settings.view, private val isStacking:
     fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilarIn(view), view)
 }
 
-// A grid is photos with a header in front of the first photo of each year, month and week it is cut into. `index` is the photo's place in the original list, which is what the viewer opens at.
+// A grid is photos with a header in front of the first photo of each year, month, week and day it is cut into. `index` is the photo's place in the original list, which is what the viewer opens at.
 sealed interface GridEntry {
     data class Header(val label: String, val key: String, val group: DateGroup) : GridEntry
     // `stack` holds every shot of a similar-shot stack the photo belongs to (the newest is its cover); `isStackOpen` says the stack is laid out tile by tile rather than folded into the cover.
-    // `stampDay` is set on the first photo of each day when there are no weeks, which carries the day on its corner.
+    // `stampDay` is set on the first photo of each day when there are no day or week headers, which carries the day on its corner.
     data class Photo(val item: MediaItem, val index: Int, val stack: List<MediaItem> = emptyList(), val isStackOpen: Boolean = false, val stampDay: LocalDate? = null) : GridEntry {
         val isFoldedStack: Boolean get() = stack.isNotEmpty() && !isStackOpen
     }
@@ -123,6 +124,7 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
     val entries = ArrayList<GridEntry>(items.size + 24)
     val groups = Settings.dateGroupsIn(view)
     val isWeeks = DateGroup.WEEKS in groups
+    val isDays = DateGroup.DAYS in groups
     var currentYear: Int? = null
     var currentMonth: YearMonth? = null
     var currentDay: LocalDate? = null
@@ -169,7 +171,8 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
             }
             weekLast = day
         }
-        entries += GridEntry.Photo(item, index, stack.orEmpty(), isOpen, stampDay = if (!isWeeks && day != currentDay) day else null)
+        if (isDays && day != currentDay) entries += GridEntry.Header(DAY_FORMAT.format(day).uppercase(Locale.ENGLISH), "day-$day", DateGroup.DAYS)
+        entries += GridEntry.Photo(item, index, stack.orEmpty(), isOpen, stampDay = if (!isWeeks && !isDays && day != currentDay) day else null)
         currentDay = day
     }
     closeWeek()
@@ -277,6 +280,7 @@ fun MediaGrid(
                     // Without labels a cut is only the room it leaves.
                     !Settings.headersIn(memory.view) -> Box(Modifier.height(HEADER_GAP))
                     entry.group == DateGroup.WEEKS -> WeekHeader(entry.label)
+                    entry.group == DateGroup.DAYS -> DayHeader(entry.label)
                     entry.group == DateGroup.YEARS -> YearHeader(entry.label)
                     else -> MonthHeader(entry.label, isRoomy = DateGroup.WEEKS in Settings.dateGroupsIn(memory.view))
                 }
@@ -326,6 +330,11 @@ suspend fun GridMemory.revealItem(items: List<MediaItem>, mediaId: Long) {
 private fun MonthHeader(label: String, isRoomy: Boolean) {
     // Dates sit at the left, across the grid from the timeline, in the section colour so they read as the grid's markers.
     BasicText(label, style = Type.cardTitle.copy(fontSize = 16.sp, color = LocalAccent.current), modifier = Modifier.padding(start = 4.dp, top = if (isRoomy) 34.dp else 18.dp, bottom = 8.dp))
+}
+
+@Composable
+private fun DayHeader(label: String) {
+    BasicText(label, style = Type.microLabel.copy(fontSize = 10.sp, color = Palette.textMuted), maxLines = 1, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 3.dp))
 }
 
 @Composable

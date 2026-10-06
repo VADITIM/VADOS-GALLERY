@@ -305,5 +305,5 @@ fun List<AlbumStack>.renamed(old: String, new: String): List<AlbumStack> {
 fun List<AlbumStack>.withoutAlbum(path: String): List<AlbumStack> =
     map { it.copy(paths = it.paths - path) }.filter { it.paths.isNotEmpty() }
 
-// What a photo grid is cut into; any of them at once, each under its own header. Without weeks the first photo of each day carries the day.
-enum class DateGroup(val label: String) { WEEKS("Weeks"), MONTHS("Months"), YEARS("Years") }
+// What a photo grid is cut into; any of them at once, each under its own header. Without days or weeks the first photo of each day carries the day.
+enum class DateGroup(val label: String) { DAYS("Days"), WEEKS("Weeks"), MONTHS("Months"), YEARS("Years") }

@@ -339,7 +339,7 @@ private fun SettingsSteps(label: String, range: IntRange, value: Int, isEnabled:
 
 private val STEPS_HEIGHT = 36.dp
 
-// Weeks, months and years can be on together; None turns them all off and greys them, and picking any of them again ends None.
+// Days, weeks, months and years can be on together; None turns them all off and greys them, and picking any of them again ends None.
 @Composable
 private fun LayoutChoice(groups: Set<DateGroup>, onChange: (Set<DateGroup>) -> Unit) {
     val isNone = groups.isEmpty()
