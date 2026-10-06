@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 
-import androidx.compose.animation.animateContentSize
 
 import androidx.compose.ui.graphics.Color
 import kotlin.math.roundToInt
@@ -90,7 +89,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicText
@@ -933,6 +931,7 @@ private fun Library(viewModel: GalleryViewModel) {
             Box(viewerRise) { TopRow(
                 month = visibleMonth,
                 title = folderName.takeUnless { Settings.folderLabel },
+                isMonthFilled = !Settings.folderLabel,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
                 // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
@@ -1131,22 +1130,13 @@ private fun Library(viewModel: GalleryViewModel) {
                         val leavePlace: () -> Unit = { if (isPrivateMode) { leavePrivate() } else { albumsPlace = AlbumsPlace.Folders } }
                         // Where you are, in the section's colour; not a control, so no arrow and no press.
                         var lastFolderName by remember { mutableStateOf(folderName.orEmpty()) }
-                        if (isFolderLabelShown) lastFolderName = folderName.orEmpty()
-                        val folderAccent = rememberOwnAccent(isFolderLabelShown)
+                        var lastFolderAccent by remember { mutableStateOf(accentTarget) }
+                        if (isFolderLabelShown) {
+                            lastFolderName = folderName.orEmpty()
+                            lastFolderAccent = accentTarget
+                        }
                         AnimatedVisibility(isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            // The pill grows and shrinks from its middle as the name types itself over: the text sits centred, unbounded, inside a box whose size animates.
-                            Box(
-                                Modifier.padding(bottom = 8.dp)
-                                    .animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
-                                    .widthIn(max = FOLDER_LABEL_MAX_WIDTH)
-                                    .background(folderAccent, Shapes.capsule),
-                            ) {
-                                Box(Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                    FadingOverflow(Modifier.widthIn(max = FOLDER_LABEL_MAX_WIDTH - 24.dp)) {
-                                        TypewriterText(lastFolderName, style = Type.microLabel.copy(color = Palette.sunkenDeep))
-                                    }
-                                }
-                            }
+                            TypedLabel(lastFolderName, lastFolderAccent, Modifier.padding(bottom = 8.dp), maxWidth = FOLDER_LABEL_MAX_WIDTH)
                         }
                         // Empties the whole trash for good, so it waits for Confirm.
                         AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
@@ -1929,7 +1919,7 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: VisibleMonth, title: String?, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
@@ -1949,10 +1939,16 @@ private fun TopRow(month: VisibleMonth, title: String?, selectedCount: Int, onBa
                 if (isMonthShown) lastLabel = title ?: month.label.uppercase()
                 MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                    // The whole pill takes the section colour, ink on it, as the folder label above the nav does.
-                    Box(Modifier.width(MONTH_CHIP_WIDTH).background(LocalAccent.current, Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        FadingOverflow { TypewriterText(lastLabel, style = Type.microLabel.copy(color = Palette.sunkenDeep), isTypedIn = true) }
-                    }
+                    // A section-coloured pill while it names the folder; with the folder named above the nav, only the month's text in the section colour.
+                    TypedLabel(
+                        lastLabel,
+                        LocalAccentTarget.current ?: LocalAccent.current,
+                        isFilled = isMonthFilled,
+                        fixedWidth = MONTH_CHIP_WIDTH,
+                        padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.CenterStart,
+                        isTypedIn = true,
+                    )
                 }
                 Box(Modifier.weight(1f))
                 ShownTopButton(onAdd) { PlusIcon(LocalAccent.current) }
