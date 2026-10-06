@@ -58,17 +58,23 @@ private val MONTH_CHIP_WIDTH = 148.dp
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-internal fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+internal fun TopRow(isHidden: Boolean, month: VisibleMonth, title: String?, isMonthFilled: Boolean, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row: what stands there pops away, each on its own, then the new buttons pop in; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
-        targetState = selectedCount > 0,
+        targetState = when {
+            isHidden -> TopMode.HIDDEN
+            selectedCount > 0 -> TopMode.SELECTING
+            else -> TopMode.NORMAL
+        },
         transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false)) },
         label = "topRow",
-    ) { isSelecting ->
+    ) { mode ->
         val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT)
         // As tall as a button, whether or not one is shown, so the month pill never moves up or down as back and add come and go.
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).height(TOP_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
-            if (isSelecting) {
+            if (mode == TopMode.HIDDEN) {
+                // Nothing while a photo is open; the buttons pop away and come back.
+            } else if (mode == TopMode.SELECTING) {
                 Box(pop) { TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) } }
                 Box(Modifier.weight(1f))
                 Chip("$selectedCount selected", pop)
@@ -186,3 +192,5 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
         BasicText(text.uppercase(), style = Type.microLabel, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
+
+private enum class TopMode { NORMAL, SELECTING, HIDDEN }

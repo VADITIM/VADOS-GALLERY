@@ -182,13 +182,12 @@ private fun Library(viewModel: GalleryViewModel) {
             TimelineAboveHost(timelineAbove, Modifier.zIndex(-0.5f))
 
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
-            // As the photo grows the top row leaves off the top and the navigation off the bottom, with the photo, and both come back as it shrinks, so the photo passes behind them.
-            val viewerRise = if (viewer.shown == null) Modifier else Modifier.graphicsLayer { translationY = -viewer.growth() * (size.height + 12.dp.toPx()) }
-            val viewerSink = if (viewer.shown == null) Modifier else Modifier.graphicsLayer { translationY = viewer.growth() * (size.height + 12.dp.toPx()) }
+            // With a photo open the top buttons and the navigation pop away the way they do when a selection begins, and pop back in when it closes.
             val visibleMonth = screen.folderMemory?.let { rememberVisibleMonth(screen.gridItems, it).value } ?: VisibleMonth("", 0)
             val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-            Box(viewerRise) {
+            Box {
                 TopRow(
+                    isHidden = viewer.isOpen,
                     month = visibleMonth,
                     title = screen.folderName.takeUnless { Settings.folderLabel },
                     isMonthFilled = !Settings.folderLabel,
@@ -201,8 +200,8 @@ private fun Library(viewModel: GalleryViewModel) {
                     onSettings = { sheets.show(AppSheet.SETTINGS) },
                 )
             }
-            FavoritesCorner(controller, screen, visibleMonth, metrics, viewerSink)
-            BottomControls(controller, content, screen, metrics, Modifier.align(Alignment.BottomCenter).then(viewerSink).navigationBarsPadding().padding(bottom = 14.dp))
+            FavoritesCorner(controller, screen, visibleMonth, metrics)
+            BottomControls(controller, content, screen, metrics, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp))
 
             LibrarySheetHost(controller, content, screen)
             SettingsSheet(

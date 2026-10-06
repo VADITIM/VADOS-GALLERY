@@ -179,5 +179,5 @@ class LibraryScreen(
     val isShowingPrivate: Boolean = isPrivateMode || navigation.review.isPrivate
 }
 
-// What the bottom bar is showing: the sections, a selection's actions, or the end of rearranging.
-enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }
+// What the bottom bar is showing: the sections, a selection's actions, the end of rearranging, or nothing while a photo is open.
+enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING, HIDDEN }

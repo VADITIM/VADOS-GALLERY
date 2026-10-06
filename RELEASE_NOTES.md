@@ -1,3 +1,3 @@
-# 1.1.39
+# 1.1.40
 
-- The nav's highlight no longer sits slightly to the right and slides back when a selection ends; it is in place from the start.
+- Opening a photo pops the top buttons and the navigation away one by one, as when a selection begins, and closing it pops them back in. Tapping a photo to hide its buttons still slides them out.

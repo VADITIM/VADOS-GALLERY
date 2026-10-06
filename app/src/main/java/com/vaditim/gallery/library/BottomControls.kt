@@ -84,7 +84,7 @@ class BarMetrics {
 
 // In the nav's row, centred in the room right of the nav: the favourites-only heart, and the count small under it, both straight on the photos with a shadow.
 @Composable
-internal fun BoxScope.FavoritesCorner(controller: LibraryController, screen: LibraryScreen, month: VisibleMonth, metrics: BarMetrics, viewerSink: Modifier) {
+internal fun BoxScope.FavoritesCorner(controller: LibraryController, screen: LibraryScreen, month: VisibleMonth, metrics: BarMetrics) {
     val selection = controller.selection
     // The month's photos out of the whole view's; kept while it hides, so it leaves showing what it had.
     var lastMonthCount by remember { mutableIntStateOf(0) }
@@ -97,12 +97,11 @@ internal fun BoxScope.FavoritesCorner(controller: LibraryController, screen: Lib
     val canNarrow = screen.canNarrowToFavorites
     val navigationRight = (metrics.screenWidth + metrics.navigationWidth) / 2f
     AnimatedVisibility(
-        (canNarrow || isCountShown) && screen.bottomBar == BottomBar.NAVIGATION && metrics.navigationWidth > 0,
+        (canNarrow || isCountShown) && controller.shownBar(screen) == BottomBar.NAVIGATION && metrics.navigationWidth > 0,
         enter = TOP_ENTER,
         exit = TOP_EXIT,
         modifier = Modifier
             .align(Alignment.BottomStart)
-            .then(viewerSink)
             .navigationBarsPadding()
             .padding(bottom = 14.dp)
             .layout { measurable, constraints ->
@@ -136,7 +135,7 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         ConfirmPill(selection.pendingDelete, onDone = { selection.pendingDelete = null })
         // The pills above the nav go with it, popping away as a selection's bar comes.
-        AnimatedVisibility(screen.bottomBar == BottomBar.NAVIGATION, enter = TOP_ENTER, exit = TOP_EXIT) {
+        AnimatedVisibility(controller.shownBar(screen) == BottomBar.NAVIGATION, enter = TOP_ENTER, exit = TOP_EXIT) {
             PlacePills(controller, content, screen)
         }
         // Private's red reaches the nav on the cut, once the outgoing view has left, like every other accent.
@@ -147,14 +146,14 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
         }
         // The nav's wash fades with its buttons, coming back only once they pop in.
         val washAlpha by animateFloatAsState(
-            if (screen.bottomBar == BottomBar.NAVIGATION) 1f else 0f,
-            tween(Motion.STATE_MS, delayMillis = if (screen.bottomBar == BottomBar.NAVIGATION) Motion.STATE_MS else 0),
+            if (controller.shownBar(screen) == BottomBar.NAVIGATION) 1f else 0f,
+            tween(Motion.STATE_MS, delayMillis = if (controller.shownBar(screen) == BottomBar.NAVIGATION) Motion.STATE_MS else 0),
             label = "nav-wash",
         )
         // One glass pill for every kind of bar: the old buttons pop away and the new ones pop in, each on its own, while the pill's width follows from one to the other.
         Box(Modifier.glass(Shapes.capsule)) {
             AnimatedContent(
-                targetState = screen.bottomBar,
+                targetState = controller.shownBar(screen),
                 transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
                 contentAlignment = Alignment.Center,
                 label = "bottomBar",
@@ -167,6 +166,7 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                         }
                         BottomBar.COVERS -> CoverActions(controller, screen)
                         BottomBar.PHOTOS -> PhotoActions(controller, content, screen)
+                        BottomBar.HIDDEN -> Box {}
                         BottomBar.NAVIGATION -> SectionBar(
                             hasGlass = false,
                             itemModifier = pop,
@@ -341,3 +341,6 @@ private fun PhotoCount(monthCount: Int, total: Int, modifier: Modifier = Modifie
 
 // Every digit as wide as every other, so a number's width depends only on how many digits it has.
 private val COUNT_STYLE = Type.microLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp, fontFeatureSettings = "tnum")
+
+// With a photo open the bar is gone, its buttons popping away as they do when a selection begins, and back in when the photo closes.
+internal fun LibraryController.shownBar(screen: LibraryScreen): BottomBar = if (viewer.isOpen) BottomBar.HIDDEN else screen.bottomBar
