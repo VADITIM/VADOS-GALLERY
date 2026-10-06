@@ -641,6 +641,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     LocalSettingsView provides ownView,
                     LocalFavoritesOnly provides isFavoritesOnly,
                     LocalScreenCovered provides (sheet == AppSheet.SETTINGS),
+                    LocalChromeFade provides { if (shownViewer == null) 1f else 1f - viewerProgress.value * (1f - viewerPull) },
                 ) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(

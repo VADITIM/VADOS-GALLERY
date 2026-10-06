@@ -98,6 +98,9 @@ private val DAY_FORMAT = DateTimeFormatter.ofPattern("EEE dd/MM", Locale.ENGLISH
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
 // Whether the photo grids of the main view show only favourites, set by the toggle in the corner above the bar.
 val LocalFavoritesOnly = compositionLocalOf { false }
+// How much of the screen's chrome shows while the viewer opens or closes over it, 1 to 0: the timeline fades with it, as the nav does, so a photo never lies over it.
+val LocalChromeFade = compositionLocalOf<() -> Float> { { 1f } }
+
 // True while a sheet covers the screen: a grid still gliding stops, so the blur behind the sheet is not redrawn every frame of its arrival.
 val LocalScreenCovered = compositionLocalOf { false }
 
@@ -328,7 +331,8 @@ fun MediaGrid(
         }
     }
     }
-    GridTimeline(entries, state, contentPadding, timelineGrab, Modifier.align(Alignment.TopEnd))
+    val chromeFade = LocalChromeFade.current
+    GridTimeline(entries, state, contentPadding, timelineGrab, Modifier.align(Alignment.TopEnd).graphicsLayer { alpha = chromeFade() })
     }
 }
 

@@ -1,4 +1,3 @@
-# v1.0.4
+# v1.0.5
 
-- Settings opens and closes smoothly, even while the grid behind it is still scrolling.
-- Opening a photo no longer flickers: it starts on the tile you tapped and keeps its shape while the full photo loads.
+- The timeline fades out as a photo opens and returns as it closes, so the photo no longer passes over it.
