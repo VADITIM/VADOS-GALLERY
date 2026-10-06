@@ -892,7 +892,7 @@ private fun Library(viewModel: GalleryViewModel) {
             }
             // Only favourites in the grid on screen; Favorites and the trash have nothing to narrow.
             val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash
-            // One pill in the nav's row, centred in the room right of the nav: the favourites-only heart, and the count small under it.
+            // In the nav's row, centred in the room right of the nav: the favourites-only heart in its pill, and the count small in its own pill under it.
             val navigationRight = (screenWidth + navigationWidth) / 2f
             AnimatedVisibility(
                 (canNarrowToFavorites || isCountShown) && bottomBar == BottomBar.NAVIGATION && navigationWidth > 0,
@@ -908,16 +908,14 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
             ) {
                 Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
-                    Column(
-                        Modifier.width(cornerPillWidth(lastTotal)).glass(Shapes.capsule).padding(vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
+                    val pillWidth = cornerPillWidth(lastTotal)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (canNarrowToFavorites) {
-                            Box(Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).padding(4.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.width(pillWidth).pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).glass(Shapes.capsule).padding(6.dp), contentAlignment = Alignment.Center) {
                                 HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBody, size = 15.dp)
                             }
                         }
-                        if (isCountShown) PhotoCount(lastMonthCount, lastTotal, Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                        if (isCountShown) PhotoCount(lastMonthCount, lastTotal, Modifier.width(pillWidth).glass(Shapes.capsule).padding(horizontal = 8.dp, vertical = 3.dp))
                     }
                 }
             }
