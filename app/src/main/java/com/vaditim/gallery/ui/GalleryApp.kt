@@ -732,7 +732,11 @@ private fun Library(viewModel: GalleryViewModel) {
                     ) { when (shownPlace) {
                         AlbumsPlace.Folders -> AlbumsScreen(
                             openStacks = openAlbumStacks,
-                            onOpenStacksChange = { openAlbumStacks = it },
+                            onOpenStacksChange = { opened ->
+                                // A group closing lets go of the selection, so no album stays picked out of sight.
+                                if (isSelectingCovers && !opened.containsAll(openAlbumStacks)) clearSelection()
+                                openAlbumStacks = opened
+                            },
                             albums = arrangedAlbums,
                             isRearranging = isRearranging,
                             onArrange = { Settings.updateAlbumOrder(it) },
@@ -859,7 +863,11 @@ private fun Library(viewModel: GalleryViewModel) {
                             isAccented = true,
                             stacks = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) Settings.favoriteStacks else emptyList(),
                             openStacks = openFavoriteStacks,
-                            onOpenStacksChange = { openFavoriteStacks = it },
+                            onOpenStacksChange = { opened ->
+                                // A group closing lets go of the selection, so no album stays picked out of sight.
+                                if (isSelectingCovers && !opened.containsAll(openFavoriteStacks)) clearSelection()
+                                openFavoriteStacks = opened
+                            },
                             isRearranging = isRearranging,
                             onArrange = { Settings.updateFavoriteAlbumOrder(it) },
                             selectedPaths = selectedCovers,
@@ -1034,6 +1042,16 @@ private fun Library(viewModel: GalleryViewModel) {
                         } else {
                             val isFavorites = section == Section.FAVORITES
                             if (Settings.groupedAlbums) IconButton(onClick = { sheet = if (isFavorites) AppSheet.FAVORITE_ALBUM_STACK else AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
+                            // Only the selected albums that sit in a group can leave one; a Favorites album is held by its name, which is its path.
+                            val stacks = if (isFavorites) Settings.favoriteStacks else Settings.albumStacks
+                            val groupedPaths = selectedAlbums.map { it.relativePath }.filter { path -> stacks.any { path in it.paths } }
+                            if (Settings.groupedAlbums && groupedPaths.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    val ungrouped = groupedPaths.fold(stacks) { remaining, path -> remaining.withoutAlbum(path) }
+                                    if (isFavorites) Settings.updateFavoriteStacks(ungrouped) else Settings.updateAlbumStacks(ungrouped)
+                                    clearSelection()
+                                }) { CloseIcon(Palette.textBody) }
+                            }
                             IconButton(onClick = { sheet = AppSheet.ALBUM_GROUP }) { LockIcon(Palette.textBody) }
                             // Whole albums at once, so it waits for Confirm even though the trash can give them back; a Favorites album only lets its photos go, but cannot be brought back.
                             IconButton(onClick = {

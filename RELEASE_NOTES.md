@@ -1,3 +1,4 @@
-# v1.1.14
+# v1.1.15
 
-- Opening a folder, the date or folder pill now pops in where it belongs next to the back button instead of sliding over from the left. It slides only when back leaves, or when back arrives while the pill is already showing.
+- Selecting albums that sit in a group now shows a remove from group button in the bar.
+- Closing a group while albums are selected now clears the selection.
