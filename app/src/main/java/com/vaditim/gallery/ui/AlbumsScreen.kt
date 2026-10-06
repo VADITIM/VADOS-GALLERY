@@ -408,7 +408,14 @@ private fun GroupRow(
                     stack.name,
                     isShown = !isHeadingShown,
                     style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current),
-                    presence = { if (isOpen || isPushed) 1f - time.value else 1f },
+                    // Gone while the heading stands, closing included, until the closed name sweeps back in.
+                    presence = {
+                        when {
+                            isOpen || isPushed -> 1f - time.value
+                            isHeadingShown -> 0f
+                            else -> 1f
+                        }
+                    },
                     isRevealedAtStart = true,
                     isCutFromStart = true,
                 )

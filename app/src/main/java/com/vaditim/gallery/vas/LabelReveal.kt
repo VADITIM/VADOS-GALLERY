@@ -46,10 +46,11 @@ fun LabelReveal(text: String, isShown: Boolean, style: TextStyle, modifier: Modi
         modifier.drawWithContent {
             val open = opened.value.coerceIn(0f, 1f)
             val present = presence().coerceIn(0f, 1f)
-            // The sweep always opens from the left; presence cuts from the right end, or from the left one when isCutFromStart.
+            // The sweep always opens from the left; presence cuts from the right end, or, with isCutFromStart, from the left one only, leaving is then the presence's alone.
             val start = if (isCutFromStart) size.width * (1f - present) else 0f
-            val end = size.width * if (isCutFromStart) open else open * present
-            clipRect(left = start, right = end) { this@drawWithContent.drawContent() }
+            val end = size.width * if (isCutFromStart) (if (isShown) open else 1f) else open * present
+            // A crossed clip would be read back to front and show a strip, so nothing is drawn once the cuts meet.
+            if (end > start) clipRect(left = start, right = end) { this@drawWithContent.drawContent() }
             val width = size.width * bar.value
             // The bar overhangs the line a little, so no ascender or descender shows past it.
             val overhang = size.height * 0.06f

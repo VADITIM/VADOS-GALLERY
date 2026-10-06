@@ -1,3 +1,3 @@
-# v1.1.19
+# v1.1.20
 
-- Tapping Recent (or any photo grid's section) again now scrolls continuously all the way down to the newest photos instead of jumping.
+- Opening a group, its closed name is now cut away from the left only and is fully gone, instead of a strip staying behind.
