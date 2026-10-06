@@ -40,7 +40,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.Layout
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.geometry.lerp
@@ -1951,13 +1950,13 @@ private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, 
                     )
                 }
                 Box(Modifier.weight(1f))
-                ShownTopButton(onAdd) { PlusIcon(LocalAccent.current) }
-                // The icon shows where a tap goes: the grid of every favourite, or the albums.
-                ShownTopButton(onToggleView) {
-                    AnimatedContent(isAlbumsView, transitionSpec = { (fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS), initialScale = 0.6f)).togetherWith(fadeOut(tween(Motion.STATE_MS))) }, label = "toggle") { isAlbums ->
-                        if (isAlbums) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current)
-                    }
+                // The toggle's icon shows where a tap goes: the grid of every favourite, or the albums.
+                val action = when {
+                    onAdd != null -> TopAction.ADD
+                    onToggleView != null -> if (isAlbumsView) TopAction.SHOW_GRID else TopAction.SHOW_ALBUMS
+                    else -> null
                 }
+                TopActionButton(action, onAdd ?: onToggleView)
                 Box(Modifier.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
             }
         }
@@ -2013,19 +2012,44 @@ private val BAR_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn
 private val TOP_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
 private val TOP_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f)
 
-// A top button that is there only while it has something to do; it keeps its last action while it leaves.
+// What the button beside settings does.
+private enum class TopAction { ADD, SHOW_GRID, SHOW_ALBUMS }
+
+// One button beside settings for adding and for switching Favorites' view, so one never leaves while another arrives; a new action or colour pops it away and back in, as the nav's albums icon does.
 @Composable
-private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, isGapAfter: Boolean = false, icon: @Composable () -> Unit) {
+private fun TopActionButton(action: TopAction?, onClick: (() -> Unit)?) {
     var lastClick by remember { mutableStateOf(onClick) }
     if (onClick != null) lastClick = onClick
-    val ownAccent = rememberOwnAccent(onClick != null)
-    AnimatedVisibility(onClick != null, enter = TOP_ENTER, exit = TOP_EXIT) {
-        // The gap rides inside, so it comes and goes with the button.
-        Box(if (isGapAfter) Modifier.padding(end = 8.dp) else Modifier.padding(start = 8.dp)) {
-            CompositionLocalProvider(LocalAccent provides ownAccent) { TopButton({ lastClick?.invoke() }, icon) }
+    val target = LocalAccentTarget.current ?: LocalAccent.current
+    // Held while it leaves, so the button goes as it was instead of popping to a new look on its way out.
+    var shown by remember { mutableStateOf(action?.let { it to target }) }
+    if (action != null) shown = action to target
+    AnimatedVisibility(action != null, enter = TOP_ENTER, exit = TOP_EXIT) {
+        Box(Modifier.padding(start = 8.dp)) {
+            AnimatedContent(
+                targetState = shown,
+                transitionSpec = { TOP_POP_IN.togetherWith(TOP_POP_OUT).using(SizeTransform(clip = false)) },
+                contentAlignment = Alignment.Center,
+                label = "top-action",
+            ) { look ->
+                val (kind, accent) = look ?: return@AnimatedContent
+                CompositionLocalProvider(LocalAccent provides accent) {
+                    TopButton({ lastClick?.invoke() }) {
+                        when (kind) {
+                            TopAction.ADD -> PlusIcon(accent)
+                            TopAction.SHOW_GRID -> GridIcon(accent)
+                            TopAction.SHOW_ALBUMS -> AlbumsIcon(accent)
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+// The old look pops away to nothing, then the new one pops in past full size.
+private val TOP_POP_IN = scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+private val TOP_POP_OUT = scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f)
 
 // The round glass button of the top row; the crop screen's back is this same button.
 @Composable

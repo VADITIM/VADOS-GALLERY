@@ -1,4 +1,3 @@
-# v1.1.12
+# v1.1.13
 
-- The Confirm button for deleting is half again as big and sits a little higher.
-- The restore pill after moving photos to the trash now stays for 2.5 seconds.
+- The button beside settings no longer has one button leaving while another arrives: when it changes between add, grid and albums, or takes a new section's colour, it pops away and back in with its new icon, like the albums icon in the nav.
