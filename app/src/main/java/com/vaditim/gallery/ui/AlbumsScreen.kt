@@ -188,14 +188,13 @@ fun AlbumsScreen(
 }
 
 // Extra room above and below a group, so groups read as separate rows.
-private val GROUP_GAP = 20.dp
+private val GROUP_GAP = 15.5.dp
 // How much of the row's width a swipe left takes to pull an opened group all the way shut, and how far through it letting go closes it.
 private const val PULL_REACH = 0.8f
 private const val PULL_CLOSE = 0.3f
 private const val PUSH_OPEN = 0.3f
-// How far through the heading's sweep the arrow comes out of the name, and how quickly over its way it reaches full size.
-private const val ARROW_AFTER_SWEEP = 0.8f
-private const val ARROW_POP = 4f
+// The share of the arrow's way, centred on its middle, over which it turns from pointing right to pointing left.
+private const val ARROW_TURN = 0.5f
 // Opened, a group lays its albums out this many to a row, whatever the album columns are.
 private const val GROUP_COLUMNS = 3
 // How much of the opening the albums' departures are spread over; each album then takes the rest to arrive.
@@ -266,18 +265,14 @@ private fun GroupRow(
     var isPulled by remember(stack.name) { mutableStateOf(false) }
     // A swipe right opening the shut group by the finger, so its name is sliced away in step as the heading's is when pulled shut.
     var isPushed by remember(stack.name) { mutableStateOf(false) }
-    // Where the arrow is, 0 at the end of the heading's name to 1 at the right end of the row. Opening, it pops out of the name late in the sweep and slides right; closing, it slides back, and the name is cut the moment it reaches it, then the closed name sweeps in.
+    // Where the arrow is, 0 left of the shut group's name, pointing right, to 1 at the right end of the heading, pointing left; it turns half way. Closing, the heading is cut the moment it is back, then the closed name sweeps in.
     val arrow = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     var isHeadingShown by remember(stack.name) { mutableStateOf(isOpen) }
     // Before the effect below, which clears isPulled, so it can still tell a pull from a tap.
     LaunchedEffect(isOpen) {
         if (isOpen) {
             isHeadingShown = true
-            if (arrow.value < 1f) {
-                arrow.snapTo(0f)
-                delay(((Motion.SWEEP_GROW_MS + Motion.SWEEP_RETRACT_MS) * ARROW_AFTER_SWEEP).roundToInt().toLong())
-                arrow.animateTo(1f, tween(Motion.STACK_MS, easing = Motion.backOut))
-            }
+            if (arrow.value < 1f) arrow.animateTo(1f, tween((Motion.STACK_MS * (1f - arrow.value)).roundToInt(), easing = Motion.backOut))
         } else {
             // From wherever the finger left it, so a pull carries straight on.
             arrow.animateTo(0f, tween((Motion.STACK_MS * arrow.value).roundToInt(), easing = if (isPulled) Motion.powerTwoOut else Motion.powerThreeInOut))
@@ -493,8 +488,8 @@ private fun GroupRow(
                 presence = { if (isOpen && !isPulled) 1f else time.value },
                 isRevealedAtStart = true,
             )
-            // Folding the group back sits at the right end of its heading; shut, it is not there at all, so it never takes a tap meant for opening the group.
-            Box { if (!isShut) CollapseButton(onClick = { onOpenChange(false) }) }
+            // Shut, it stands left of the name pointing right and opens the group; opened, it folds the group back from the right end of its heading.
+            CollapseButton(onClick = { if (isOpen) onOpenChange(false) else openGroup() })
         },
     ) { measurables, constraints ->
         val width = constraints.maxWidth
@@ -502,8 +497,9 @@ private fun GroupRow(
         val cell = (width - gap * (GROUP_COLUMNS - 1)) / GROUP_COLUMNS
         val small = LIST_COVER.roundToPx()
         val labelStart = small + GROUP_LABEL_GAP.roundToPx() + stackShift(GROUP_COLUMNS).roundToPx()
-        val header = measurables.first().measure(Constraints.fixed((width - labelStart).coerceAtLeast(0), small))
         val back = measurables.last().measure(Constraints())
+        // The name and count stand right of the arrow lying shut there.
+        val header = measurables.first().measure(Constraints.fixed((width - labelStart - back.width).coerceAtLeast(0), small))
         val heading = measurables[measurables.size - 2].measure(Constraints(maxWidth = (width - back.width).coerceAtLeast(0)))
         val cards = measurables.subList(1, measurables.size - 2).map { it.measure(Constraints.fixedWidth(cell)) }
         val rowHeight = cards.maxOfOrNull { it.height } ?: cell
@@ -539,15 +535,17 @@ private fun GroupRow(
         } ?: 0f
         val height = maxOf(small + (openHeight - small) * openness, reach).roundToInt()
         layout(width, height) {
-            header.place(labelStart, 0)
+            header.place(labelStart + back.width, 0)
             heading.place(0, (headingHeight - heading.height) / 2)
-            back.placeWithLayer(width - back.width, (headingHeight - back.height) / 2) {
-                // It travels from just past the end of the name to the right end, popping up to full size over the first part of the way.
-                translationX = -(1f - arrow.value) * (width - back.width - heading.width).coerceAtLeast(0)
-                val pop = (arrow.value * ARROW_POP).coerceIn(0f, 1f)
-                alpha = pop
-                scaleX = pop
-                scaleY = pop
+            // From left of the shut name to the right end of the heading, turning from right to left over the middle of its way.
+            val shutX = labelStart.toFloat()
+            val shutY = (small - back.height) / 2f
+            val openX = (width - back.width).toFloat()
+            val openY = (headingHeight - back.height) / 2f
+            back.placeWithLayer(0, 0) {
+                translationX = shutX + (openX - shutX) * arrow.value
+                translationY = shutY + (openY - shutY) * arrow.value.coerceIn(0f, 1f)
+                rotationZ = 180f * (1f - ((arrow.value - (1f - ARROW_TURN) / 2f) / ARROW_TURN).coerceIn(0f, 1f))
             }
             cards.forEachIndexed { index, card ->
                 val (x, y, scale, p, depth, isHeld) = placements[index]

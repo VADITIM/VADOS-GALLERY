@@ -1198,6 +1198,8 @@ private fun Library(viewModel: GalleryViewModel) {
                             hasGlass = false,
                             itemModifier = pop,
                             washAlpha = { washAlpha },
+                            // Inside Private, Recent and Favorites show only Private's own photos.
+                            isMarked = { isPrivateMode && it != Section.ALBUMS },
                             modifier = Modifier.onSizeChanged {
                                 navigationHeight = it.height
                                 navigationWidth = it.width
