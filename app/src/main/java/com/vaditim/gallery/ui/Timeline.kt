@@ -52,7 +52,6 @@ import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
-import com.vaditim.gallery.vas.glass
 import androidx.compose.foundation.MutatePriority
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -345,14 +344,14 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         heldMark?.let { mark ->
             BasicText(
                 BUBBLE_FORMAT.format(mark.month).uppercase(Locale.ENGLISH),
-                style = Type.microLabel.copy(color = Palette.textBright),
+                // Straight on the photos with a shadow, no pill behind it.
+                style = Type.microLabel.copy(color = Palette.textBright, shadow = Type.dropShadow),
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .offset { IntOffset(0, (placement.marker - labelHalf * 1.6f).roundToInt()) }
                     .padding(end = 76.dp)
                     .graphicsLayer { alpha = reveal }
-                    .glass(Shapes.capsule)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }

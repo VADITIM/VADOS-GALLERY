@@ -1,3 +1,4 @@
-# v0.125
+# v0.126
 
-- The photo count has its own small pill, under the favourites-only heart's pill, right of the nav.
+- The favourites-only heart and the photo count right of the nav stand straight on the photos with a black drop shadow instead of pills.
+- The month shown while holding the timeline has the same drop shadow instead of a pill.

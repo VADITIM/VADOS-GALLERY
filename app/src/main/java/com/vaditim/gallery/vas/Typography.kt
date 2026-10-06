@@ -1,5 +1,8 @@
 package com.vaditim.gallery.vas
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -21,4 +24,6 @@ object Type {
     val value = TextStyle(fontFamily = Faces.mono, fontSize = 13.sp, color = Palette.textMuted)
     val caption = TextStyle(fontFamily = Faces.mono, fontSize = 13.sp, lineHeight = 19.sp, color = Palette.textBody)
     val action = TextStyle(fontFamily = Faces.mono, fontSize = 11.sp, letterSpacing = 2.sp)
+    // Text standing straight on the photos, with no pill behind it, reads by this.
+    val dropShadow = Shadow(Color.Black, Offset(0f, 2f), blurRadius = 8f)
 }
