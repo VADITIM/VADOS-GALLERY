@@ -612,6 +612,9 @@ private fun Library(viewModel: GalleryViewModel) {
     // The screen softens behind the settings, so the sheet reads as the one thing in front.
     // Pulling the sheet down clears the blur with the finger.
     var settingsPull by remember { mutableFloatStateOf(0f) }
+    val timelineAbove = remember { TimelineAbove() }
+    val timelineAboveId = if (shownViewer != null && isViewerShrunk) viewerCurrentId else null
+    SideEffect { timelineAbove.mediaId = timelineAboveId }
     // Read only where the layer draws, so the blur moving each frame never recomposes the app.
     val settingsBlur = animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
@@ -641,7 +644,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     LocalSettingsView provides ownView,
                     LocalFavoritesOnly provides isFavoritesOnly,
                     LocalScreenCovered provides (sheet == AppSheet.SETTINGS),
-                    LocalChromeFade provides { if (shownViewer == null) 1f else 1f - viewerProgress.value * (1f - viewerPull) },
+                    LocalTimelineAbove provides timelineAbove,
                 ) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(
@@ -881,10 +884,14 @@ private fun Library(viewModel: GalleryViewModel) {
                 }
             }
 
+            // The grid's timeline over the photo while it is on its way to or from its tile, under everything below.
+            TimelineAboveHost(timelineAbove, Modifier.zIndex(-0.5f))
+
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
-            // The navigation gives way to the viewer as the photo grows over it, and comes back as it shrinks, so the photo passes behind it.
-            val viewerFade = if (shownViewer == null) Modifier else Modifier.graphicsLayer { alpha = 1f - viewerProgress.value * (1f - viewerPull) }
-            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.4f).then(viewerFade).fadingGlass())
+            // As the photo grows the top row leaves off the top and the navigation off the bottom, with the photo, and both come back as it shrinks, so the photo passes behind them.
+            val viewerRise = if (shownViewer == null) Modifier else Modifier.graphicsLayer { translationY = -viewerProgress.value * (1f - viewerPull) * (size.height + 12.dp.toPx()) }
+            val viewerSink = if (shownViewer == null) Modifier else Modifier.graphicsLayer { translationY = viewerProgress.value * (1f - viewerPull) * (size.height + 12.dp.toPx()) }
+            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.4f).then(viewerRise).fadingGlass())
 
             // Sorting through the photos on screen, from the settings sheet; a place of covers has none to go through.
             val reviewAction: (() -> Unit)? = when {
@@ -910,7 +917,7 @@ private fun Library(viewModel: GalleryViewModel) {
             } else {
                 (section == Section.ALBUMS && place != AlbumsPlace.Folders) || (section == Section.FAVORITES && openFavoriteAlbum != null)
             }
-            Box(viewerFade) { TopRow(
+            Box(viewerRise) { TopRow(
                 month = visibleMonth,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
@@ -958,7 +965,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 exit = TOP_EXIT,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .then(viewerFade)
+                    .then(viewerSink)
                     .navigationBarsPadding()
                     .padding(bottom = 14.dp)
                     .layout { measurable, constraints ->
@@ -981,7 +988,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 }
             }
             Column(
-                Modifier.align(Alignment.BottomCenter).then(viewerFade).navigationBarsPadding().padding(bottom = 14.dp),
+                Modifier.align(Alignment.BottomCenter).then(viewerSink).navigationBarsPadding().padding(bottom = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
             ConfirmPill(pendingDelete, onDone = { pendingDelete = null })
