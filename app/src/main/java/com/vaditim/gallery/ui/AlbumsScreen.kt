@@ -263,9 +263,7 @@ private fun GroupRow(
     val time = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     // A swipe left pulls the opened group shut by the finger: it drives the same time, on the closing curve, so letting go carries on from where the cards are.
     var isPulled by remember(stack.name) { mutableStateOf(false) }
-    // A swipe right opening the shut group by the finger, so its name is sliced away in step as the heading's is when pulled shut.
-    var isPushed by remember(stack.name) { mutableStateOf(false) }
-    // Where the arrow is, 0 left of the shut group's name, pointing right, to 1 at the right end of the heading, pointing left; it turns half way. Closing, the heading is cut the moment it is back, then the closed name sweeps in.
+    // Where the arrow is, 0 left of the shut group's name, pointing right, to 1 at the right end of the heading, pointing left; it turns half way. Closing, the heading is cut the moment it is back.
     val arrow = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     var isHeadingShown by remember(stack.name) { mutableStateOf(isOpen) }
     // Before the effect below, which clears isPulled, so it can still tell a pull from a tap.
@@ -280,7 +278,7 @@ private fun GroupRow(
         }
     }
     LaunchedEffect(isOpen) {
-        if (!isOpen) isPulled = false else isPushed = false
+        if (!isOpen) isPulled = false
         val target = if (isOpen) 1f else 0f
         // Started part way, by a pull, it takes only the share of the time that is left.
         time.animateTo(target, tween((Motion.STACK_MS * abs(target - time.value)).roundToInt(), easing = LinearEasing))
@@ -363,7 +361,6 @@ private fun GroupRow(
                     val settle = {
                         scope.launch {
                             time.animateTo(0f, tween((Motion.STATE_MS * time.value).roundToInt(), easing = Motion.powerTwoOut))
-                            isPushed = false
                             onMotion(false)
                         }
                         Unit
@@ -371,7 +368,6 @@ private fun GroupRow(
                     detectHorizontalDragGestures(
                         onDragStart = {
                             pushed = 0f
-                            isPushed = true
                             onMotion(true)
                         },
                         onDragEnd = {
@@ -403,19 +399,12 @@ private fun GroupRow(
                 if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(albums) else onStackLongPress() } }),
                 verticalArrangement = Arrangement.Center,
             ) {
-                // Closing, the name sweeps back in as the heading does on opening, over its own width; opening, or pushed open, it is sliced away from its left end in step with the cards.
+                // Never swept: opening, or pushed open, it is sliced away from its left end in step with the cards, and closing gives it back the same way.
                 LabelReveal(
                     stack.name,
-                    isShown = !isHeadingShown,
+                    isShown = true,
                     style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current),
-                    // Gone while the heading stands, closing included, until the closed name sweeps back in.
-                    presence = {
-                        when {
-                            isOpen || isPushed -> 1f - time.value
-                            isHeadingShown -> 0f
-                            else -> 1f
-                        }
-                    },
+                    presence = { 1f - time.value },
                     isRevealedAtStart = true,
                     isCutFromStart = true,
                 )
@@ -505,8 +494,7 @@ private fun GroupRow(
         val small = LIST_COVER.roundToPx()
         val labelStart = small + GROUP_LABEL_GAP.roundToPx() + stackShift(GROUP_COLUMNS).roundToPx()
         val back = measurables.last().measure(Constraints())
-        // The name and count stand right of the arrow lying shut there.
-        val header = measurables.first().measure(Constraints.fixed((width - labelStart - back.width).coerceAtLeast(0), small))
+        val header = measurables.first().measure(Constraints.fixed((width - labelStart).coerceAtLeast(0), small))
         val heading = measurables[measurables.size - 2].measure(Constraints(maxWidth = (width - back.width).coerceAtLeast(0)))
         val cards = measurables.subList(1, measurables.size - 2).map { it.measure(Constraints.fixedWidth(cell)) }
         val rowHeight = cards.maxOfOrNull { it.height } ?: cell
@@ -542,10 +530,11 @@ private fun GroupRow(
         } ?: 0f
         val height = maxOf(small + (openHeight - small) * openness, reach).roundToInt()
         layout(width, height) {
-            header.place(labelStart + back.width, 0)
+            header.place(labelStart, 0)
             heading.place(0, (headingHeight - heading.height) / 2)
             // From left of the shut name to the right end of the heading, turning from right to left over the middle of its way.
-            val shutX = labelStart.toFloat()
+            // Shut, its glyph stands centred in the gap between the stack and the name, so the name keeps its place.
+            val shutX = labelStart - GROUP_LABEL_GAP.toPx() / 2f - back.width / 2f
             val shutY = (small - back.height) / 2f
             val openX = (width - back.width).toFloat()
             val openY = (headingHeight - back.height) / 2f
