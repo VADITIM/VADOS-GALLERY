@@ -2,7 +2,8 @@ package com.vaditim.gallery.components
 
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.toSize
 import coil3.memory.MemoryCache
 
 // Where each visible grid tile is on screen, so the viewer can grow out of a tile and shrink back into it. Tiles register while composed and drop out when they scroll away; the bounds are read on demand, so they are never stale.
@@ -19,7 +20,8 @@ object TileBounds {
 
     fun of(mediaId: Long?): Rect? {
         val placed = coordinates[mediaId ?: return null] ?: return null
-        return if (placed.isAttached) placed.boundsInWindow() else null
+        // The whole tile even where the grid hides part of it, so a tile at the edge flies with the same shape and rounding as any other.
+        return if (placed.isAttached) Rect(placed.positionInWindow(), placed.size.toSize()) else null
     }
 }
 

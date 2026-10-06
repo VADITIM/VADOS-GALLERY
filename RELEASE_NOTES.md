@@ -1,4 +1,3 @@
-# 1.1.37
+# 1.1.38
 
-- Swiping down on a photo and back up no longer opens its details.
-- Pulling a photo down rounds the black behind it at once, instead of rounding slowly from a sharp edge.
+- A photo flying to or from its tile keeps the same rounding wherever the tile sits in the grid, including tiles cut off by the screen edge.
