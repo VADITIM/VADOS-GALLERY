@@ -114,6 +114,8 @@ class FavoriteAlbums(private val key: String, private val stacks: AlbumStacks) :
     fun addPhotos(albumName: String, ids: List<Long>) = update(all.withPhotos(albumName, ids))
 
     fun delete(names: Collection<String>) = update(all.filter { it.name !in names })
+
+    fun rename(old: String, new: String) = update(all.renamedAlbum(old, new))
 }
 
 // An album's name as shown, by folder path; renaming only ever changes this, never the folder, so nothing that saves into it is thrown off.

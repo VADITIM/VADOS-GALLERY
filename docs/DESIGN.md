@@ -14,7 +14,7 @@ VAS's Android advice is to host `dna.css` in a WebView. A gallery is the case th
 cover: tens of thousands of thumbnails at 120Hz, pinch-zoom and a shared-element zoom from grid to
 viewer. All of that is native work, and a hybrid would split one transition across two renderers.
 
-So the identity is **re-expressed in Compose**, under `app/src/main/java/com/vaditim/gallery/vas/`:
+So the identity is **re-expressed in Compose**, under `core/design/src/main/java/com/vaditim/gallery/vas/`:
 
 | VAS | Here |
 |---|---|
