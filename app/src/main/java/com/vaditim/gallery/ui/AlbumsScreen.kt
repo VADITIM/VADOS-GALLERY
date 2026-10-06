@@ -354,12 +354,13 @@ private fun GroupRow(
                     }
                 },
             )
-            // Closed, a swipe right opens it by the finger the same way; letting go far enough carries it on, otherwise the cards go back.
+            // Closed, a swipe right opens it by the finger the same way, the arrow going with it; letting go far enough carries it on, otherwise the cards go back.
             .then(
                 if (isOpen || isRearranging || isPicking) Modifier else Modifier.pointerInput(stack.name) {
                     var pushed = 0f
                     val settle = {
                         scope.launch {
+                            launch { arrow.animateTo(0f, tween((Motion.STATE_MS * arrow.value).roundToInt(), easing = Motion.powerTwoOut)) }
                             time.animateTo(0f, tween((Motion.STATE_MS * time.value).roundToInt(), easing = Motion.powerTwoOut))
                             onMotion(false)
                         }
@@ -383,7 +384,11 @@ private fun GroupRow(
                         change.consume()
                         pushed = (pushed + amount).coerceAtLeast(0f)
                         val reach = size.width * PULL_REACH
-                        scope.launch { time.snapTo((pushed / reach).coerceIn(0f, 1f)) }
+                        val shown = (pushed / reach).coerceIn(0f, 1f)
+                        scope.launch {
+                            time.snapTo(shown)
+                            arrow.snapTo(shown)
+                        }
                     }
                 },
             )

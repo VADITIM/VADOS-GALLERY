@@ -1,3 +1,3 @@
-# 1.1.28
+# 1.1.29
 
-- A shut group's arrow sits a little further right again.
+- Swiping a shut group open moves its arrow with your finger.
