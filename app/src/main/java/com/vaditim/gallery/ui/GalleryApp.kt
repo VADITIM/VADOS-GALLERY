@@ -612,9 +612,6 @@ private fun Library(viewModel: GalleryViewModel) {
     // The screen softens behind the settings, so the sheet reads as the one thing in front.
     // Pulling the sheet down clears the blur with the finger.
     var settingsPull by remember { mutableFloatStateOf(0f) }
-    val timelineAbove = remember { TimelineAbove() }
-    val timelineAboveId = if (shownViewer != null && isViewerShrunk) viewerCurrentId else null
-    SideEffect { timelineAbove.mediaId = timelineAboveId }
     // Read only where the layer draws, so the blur moving each frame never recomposes the app.
     val settingsBlur = animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
@@ -644,7 +641,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     LocalSettingsView provides ownView,
                     LocalFavoritesOnly provides isFavoritesOnly,
                     LocalScreenCovered provides (sheet == AppSheet.SETTINGS),
-                    LocalTimelineAbove provides timelineAbove,
+                    LocalViewerGrowth provides { if (shownViewer == null) 0f else viewerProgress.value * (1f - viewerPull) },
                 ) {
                 if (isPrivateShown && shown == Section.RECENT) {
                     MediaGrid(
@@ -883,9 +880,6 @@ private fun Library(viewModel: GalleryViewModel) {
                 }
                 }
             }
-
-            // The grid's timeline over the photo while it is on its way to or from its tile, under everything below.
-            TimelineAboveHost(timelineAbove, Modifier.zIndex(-0.5f))
 
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
             // As the photo grows the top row leaves off the top and the navigation off the bottom, with the photo, and both come back as it shrinks, so the photo passes behind them.

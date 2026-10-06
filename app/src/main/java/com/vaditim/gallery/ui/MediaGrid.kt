@@ -1,13 +1,5 @@
 package com.vaditim.gallery.ui
 
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.runtime.SideEffect
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
-import kotlin.math.roundToInt
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.mutableStateOf
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.SettingsView
@@ -106,29 +98,8 @@ private val DAY_FORMAT = DateTimeFormatter.ofPattern("EEE dd/MM", Locale.ENGLISH
 // The scroll position and whether the grid has been put at its newest end yet. Held above the grid so leaving a section and coming back finds it where it was; the column count rides along so a folder keeps the zoom it was left at.
 // Whether the photo grids of the main view show only favourites, set by the toggle in the corner above the bar.
 val LocalFavoritesOnly = compositionLocalOf { false }
-// While a photo grows out of its grid or shrinks back into it, that grid's timeline is drawn a second time on a layer above the photo, so the photo passes under it as it does under the nav.
-class TimelineAbove {
-    var mediaId by mutableStateOf<Long?>(null)
-    var content by mutableStateOf<(@Composable () -> Unit)?>(null)
-    var bounds by mutableStateOf(Rect.Zero)
-    var isDrawn by mutableStateOf(false)
-    var owner: Any? = null
-}
-
-val LocalTimelineAbove = compositionLocalOf<TimelineAbove?> { null }
-
-// Where the timeline above the photo stands: over its grid, exactly where the grid's own one is.
-@Composable
-fun BoxScope.TimelineAboveHost(above: TimelineAbove, modifier: Modifier = Modifier) {
-    val content = above.content ?: return
-    val bounds = above.bounds
-    val density = LocalDensity.current
-    Box(modifier.offset { IntOffset(bounds.left.roundToInt(), bounds.top.roundToInt()) }.size(with(density) { bounds.width.toDp() }, with(density) { bounds.height.toDp() })) { content() }
-    DisposableEffect(above) {
-        above.isDrawn = true
-        onDispose { above.isDrawn = false }
-    }
-}
+// How far the viewer has grown over the grid, 0 to 1: the timeline slides off the right edge with it and back in as the photo shrinks, as the top row and the nav leave by theirs.
+val LocalViewerGrowth = compositionLocalOf<() -> Float> { { 0f } }
 
 // True while a sheet covers the screen: a grid still gliding stops, so the blur behind the sheet is not redrawn every frame of its arrival.
 val LocalScreenCovered = compositionLocalOf { false }
@@ -304,8 +275,7 @@ fun MediaGrid(
         }
     }
     val timelineGrab = remember { TimelineGrab() }
-    val gridBounds = remember { mutableStateOf(Rect.Zero) }
-    Box(modifier.fillMaxSize().onGloballyPositioned { gridBounds.value = it.boundsInWindow() }.timelineGrab(timelineGrab)) {
+    Box(modifier.fillMaxSize().timelineGrab(timelineGrab)) {
     ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -361,25 +331,8 @@ fun MediaGrid(
         }
     }
     }
-    val above = LocalTimelineAbove.current
-    val isAbove = above != null && above.mediaId != null && entries.any { it is GridEntry.Photo && (it.item.id == above.mediaId || it.stack.any { member -> member.id == above.mediaId }) }
-    // The copy above only shows; the grid's own one keeps the finger.
-    val aboveGrab = remember { TimelineGrab() }
-    val owner = remember { Any() }
-    if (above != null) {
-        SideEffect {
-            if (isAbove) {
-                above.owner = owner
-                above.bounds = gridBounds.value
-                above.content = { GridTimeline(entries, state, contentPadding, aboveGrab, Modifier.fillMaxSize()) }
-            } else if (above.owner === owner) {
-                above.owner = null
-                above.content = null
-            }
-        }
-        DisposableEffect(above) { onDispose { if (above.owner === owner) { above.owner = null; above.content = null } } }
-    }
-    GridTimeline(entries, state, contentPadding, timelineGrab, Modifier.align(Alignment.TopEnd).graphicsLayer { alpha = if (above != null && above.owner === owner && above.isDrawn) 0f else 1f })
+    val viewerGrowth = LocalViewerGrowth.current
+    GridTimeline(entries, state, contentPadding, timelineGrab, Modifier.align(Alignment.TopEnd).graphicsLayer { translationX = viewerGrowth() * TIMELINE_LEAVE.toPx() })
     }
 }
 
@@ -711,3 +664,6 @@ fun formatDuration(millis: Long): String {
     val totalSeconds = millis / 1000
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 }
+
+// Far enough right that the strip and its labels are off the screen.
+private val TIMELINE_LEAVE = 96.dp
