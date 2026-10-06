@@ -272,8 +272,10 @@ private fun Library(viewModel: GalleryViewModel) {
     // A delete that waits for the Confirm above the bar; anything else the user does lets it go.
     // The nav bar's own height, so what sits above it (the count in the corner) clears it.
     var navigationHeight by remember { mutableIntStateOf(0) }
-    // Where the Favorites icon stands across the screen, so the favourites-only heart sits right over it.
-    var favoritesIconX by remember { mutableFloatStateOf(Float.NaN) }
+    // The nav's width, the settings button's and the screen's, so the favourites-only heart can stand midway between the nav and settings.
+    var navigationWidth by remember { mutableIntStateOf(0) }
+    var settingsButtonWidth by remember { mutableIntStateOf(0) }
+    var screenWidth by remember { mutableIntStateOf(0) }
     var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
@@ -572,7 +574,7 @@ private fun Library(viewModel: GalleryViewModel) {
     var settingsPull by remember { mutableFloatStateOf(0f) }
     val settingsBlur by animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().onSizeChanged { screenWidth = it.width }) {
             // A section change is a cut, not a dissolve: the outgoing section is gone fast and at once, the incoming one lands from just below on the overshoot.
             // Recent and Favorites inside Private are their own screens, so going in or out of Private changes them as a section change does.
             AnimatedContent(
@@ -896,7 +898,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 14.dp),
             ) {
                 Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
-                    Box(Modifier.pressable(onClick = { sheet = AppSheet.SETTINGS }).glass(Shapes.capsule).padding(11.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.onSizeChanged { settingsButtonWidth = it.width }.pressable(onClick = { sheet = AppSheet.SETTINGS }).glass(Shapes.capsule).padding(9.dp), contentAlignment = Alignment.Center) {
                         SettingsIcon(Palette.textBright, size = 18.dp)
                     }
                 }
@@ -912,8 +914,10 @@ private fun Library(viewModel: GalleryViewModel) {
                     PhotoCount(lastMonthCount, lastTotal)
                 }
             }
-            // Only favourites in the grid on screen, standing over the Favorites icon; Favorites and the trash have nothing to narrow.
-            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash && bottomBar == BottomBar.NAVIGATION && !favoritesIconX.isNaN()
+            // Only favourites in the grid on screen, in the nav's row midway between the nav and settings; Favorites and the trash have nothing to narrow.
+            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash && bottomBar == BottomBar.NAVIGATION && navigationWidth > 0
+            val navigationRight = (screenWidth + navigationWidth) / 2f
+            val settingsLeft = screenWidth - with(LocalDensity.current) { 16.dp.toPx() } - settingsButtonWidth
             AnimatedVisibility(
                 canNarrowToFavorites,
                 enter = TOP_ENTER,
@@ -921,17 +925,19 @@ private fun Library(viewModel: GalleryViewModel) {
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .navigationBarsPadding()
-                    .padding(bottom = cornerPadding)
+                    .padding(bottom = 14.dp)
                     .layout { measurable, constraints ->
                         val placeable = measurable.measure(constraints)
-                        layout(placeable.width, placeable.height) { placeable.place((favoritesIconX - placeable.width / 2f).roundToInt(), 0) }
+                        layout(placeable.width, placeable.height) { placeable.place(((navigationRight + settingsLeft) / 2f - placeable.width / 2f).roundToInt(), 0) }
                     },
             ) {
-                Box(
-                    Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBody, size = 14.dp)
+                Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).glass(Shapes.capsule).padding(7.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBody, size = 14.dp)
+                    }
                 }
             }
             Column(
@@ -1089,10 +1095,12 @@ private fun Library(viewModel: GalleryViewModel) {
                             }
                         }
                         SectionBar(
-                            modifier = Modifier.onSizeChanged { navigationHeight = it.height },
+                            modifier = Modifier.onSizeChanged {
+                                navigationHeight = it.height
+                                navigationWidth = it.width
+                            },
                             active = section,
                             accentOf = { if (isPrivateMode) Palette.privateRed else if (it == Section.ALBUMS) placeAccentOf(albumsPlace) ?: it.accent else it.accent },
-                            onIconPlaced = { placed, x -> if (placed == Section.FAVORITES) favoritesIconX = x },
                             onSelect = { selected ->
                                 if (selected == section) {
                                     when {
@@ -1877,32 +1885,41 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count as a diagonal fraction on one row: the month's number raised before the slash, the total lowered after it, each in a slot as wide as the total's digits so neither moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
+// The count as one line tilted up along the slash's slope, month first at the bottom left and the total at the top right, so it takes little width. Each number has a slot as wide as the total's digits so neither moves the other; the slash tilts with the line and crosses it. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
 @Composable
 private fun PhotoCount(monthCount: Int, total: Int) {
     val totalText = total.toString()
     // Tight tracking: the count has only the room between the screen's edge and the nav.
-    val style = Type.microLabel.copy(fontSize = 10.sp, letterSpacing = 0.5.sp)
+    val style = Type.microLabel.copy(fontSize = 9.sp, letterSpacing = 0.sp)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val digits = remember(totalText.length) { measurer.measure("0".repeat(totalText.length), style).size }
     val slotWidth = with(density) { digits.width.toDp() }
-    val line = with(density) { digits.height.toDp() }
-    val rise = line * COUNT_RISE
-    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 9.dp, vertical = 4.dp)) {
-        Row(Modifier.height(line + rise * 2), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.width(slotWidth).offset(y = -rise), contentAlignment = Alignment.CenterEnd) {
+    Box(Modifier.tilted(COUNT_TILT)) {
+        Row(Modifier.glass(Shapes.capsule).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(slotWidth), contentAlignment = Alignment.CenterEnd) {
                 TypewriterText(monthCount.toString(), style = style, isTypedIn = true, isCaretShown = false)
             }
             BasicText("/", style = style.copy(color = Palette.textFaint), modifier = Modifier.padding(horizontal = 1.dp))
-            Box(Modifier.width(slotWidth).offset(y = rise), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.width(slotWidth), contentAlignment = Alignment.CenterStart) {
                 TypewriterText(totalText, style = style, isTypedIn = true, isCaretShown = false)
             }
         }
     }
 }
 
-// How far each number sits off the slash's line, as a share of a line.
-private const val COUNT_RISE = 0.4f
+// The slope of the count, counter-clockwise from level, close to the slash's own.
+private const val COUNT_TILT = 60f
+
+// Turns the content counter-clockwise and takes the room of its turned bounds, so whatever sits beside it makes room for the tilt.
+private fun Modifier.tilted(degrees: Float): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = Constraints.Infinity, maxHeight = Constraints.Infinity))
+    val radians = Math.toRadians(degrees.toDouble())
+    val cos = kotlin.math.abs(kotlin.math.cos(radians)).toFloat()
+    val sin = kotlin.math.abs(kotlin.math.sin(radians)).toFloat()
+    val width = (placeable.width * cos + placeable.height * sin).roundToInt()
+    val height = (placeable.width * sin + placeable.height * cos).roundToInt()
+    layout(width, height) { placeable.placeWithLayer((width - placeable.width) / 2, (height - placeable.height) / 2) { rotationZ = -degrees } }
+}
 
 private fun List<MediaItem>.favoritesOnlyIf(isFavoritesOnly: Boolean): List<MediaItem> = if (isFavoritesOnly) filter { it.isFavorite } else this

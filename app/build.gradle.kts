@@ -13,8 +13,8 @@ android {
         // Android 11 is the floor because favourites and the trash live in MediaStore columns (IS_FAVORITE, IS_TRASHED) that only exist from API 30.
         minSdk = 30
         targetSdk = 36
-        versionCode = 122
-        versionName = "0.122"
+        versionCode = 123
+        versionName = "0.123"
     }
 
     signingConfigs {
