@@ -6,6 +6,8 @@ import androidx.compose.ui.graphics.Color
 import kotlin.math.roundToInt
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.rememberTextMeasurer
 import kotlinx.coroutines.delay
 
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,6 +81,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -268,6 +271,8 @@ private fun Library(viewModel: GalleryViewModel) {
     // A delete that waits for the Confirm above the bar; anything else the user does lets it go.
     // The nav bar's own height, so what sits above it (the count in the corner) clears it.
     var navigationHeight by remember { mutableIntStateOf(0) }
+    // Where the Favorites icon stands across the screen, so the favourites-only heart sits right over it.
+    var favoritesIconX by remember { mutableFloatStateOf(Float.NaN) }
     var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
@@ -880,12 +885,12 @@ private fun Library(viewModel: GalleryViewModel) {
                 lastMonthCount = visibleMonth.count
                 lastTotal = gridItems.size
             }
-            // Settings sit small at the left end of the nav's row, leaving the top row to the date and the place's own buttons.
+            // Settings sit small at the right end of the nav's row, leaving the top row to the date and the place's own buttons.
             AnimatedVisibility(
                 bottomBar == BottomBar.NAVIGATION,
                 enter = TOP_ENTER,
                 exit = TOP_EXIT,
-                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = 14.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 14.dp),
             ) {
                 Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
                     Box(Modifier.pressable(onClick = { sheet = AppSheet.SETTINGS }).glass(Shapes.capsule).padding(11.dp), contentAlignment = Alignment.Center) {
@@ -901,13 +906,20 @@ private fun Library(viewModel: GalleryViewModel) {
             ) {
                 PhotoCount(lastMonthCount, lastTotal)
             }
-            // Only favourites in the grid on screen, in the right corner; Favorites and the trash have nothing to narrow.
-            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash
+            // Only favourites in the grid on screen, standing over the Favorites icon; Favorites and the trash have nothing to narrow.
+            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash && bottomBar == BottomBar.NAVIGATION && !favoritesIconX.isNaN()
             AnimatedVisibility(
                 canNarrowToFavorites,
                 enter = TOP_ENTER,
                 exit = TOP_EXIT,
-                modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = cornerPadding),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .navigationBarsPadding()
+                    .padding(bottom = cornerPadding)
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, placeable.height) { placeable.place((favoritesIconX - placeable.width / 2f).roundToInt(), 0) }
+                    },
             ) {
                 Box(
                     Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1074,6 +1086,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             modifier = Modifier.onSizeChanged { navigationHeight = it.height },
                             active = section,
                             accentOf = { if (isPrivateMode) Palette.privateRed else if (it == Section.ALBUMS) placeAccentOf(albumsPlace) ?: it.accent else it.accent },
+                            onIconPlaced = { placed, x -> if (placed == Section.FAVORITES) favoritesIconX = x },
                             onSelect = { selected ->
                                 if (selected == section) {
                                     when {
@@ -1854,14 +1867,26 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count in the corner: only the month's number types itself over, padded to the total's length in the mono face, so the pill keeps its width while scrolling and only resizes when the total itself changes.
+// The count in the corner, set diagonally as a fraction to stay narrow: the month's number high on the left, the total low on the right, each in a slot as wide as the total's digits so neither moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
 @Composable
 private fun PhotoCount(monthCount: Int, total: Int) {
     val totalText = total.toString()
     val style = Type.microLabel.copy(fontSize = 9.sp)
-    Row(Modifier.glass(Shapes.capsule).animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut)).padding(horizontal = 10.dp, vertical = 6.dp)) {
-        TypewriterText(monthCount.toString().padStart(totalText.length, ' '), style = style, isTypedIn = true, isCaretShown = false)
-        BasicText("/$totalText", style = style, maxLines = 1, softWrap = false)
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val digits = remember(totalText.length) { measurer.measure("0".repeat(totalText.length), style).size }
+    val slot = with(density) { digits.width.toDp() }
+    val line = with(density) { digits.height.toDp() }
+    Box(Modifier.glass(Shapes.capsule).animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+        Box(Modifier.size(width = slot * 2 + line * 0.5f, height = line * 1.6f)) {
+            Box(Modifier.align(Alignment.TopStart).width(slot), contentAlignment = Alignment.CenterEnd) {
+                TypewriterText(monthCount.toString(), style = style, isTypedIn = true, isCaretShown = false)
+            }
+            BasicText("/", style = style.copy(color = Palette.textFaint), modifier = Modifier.align(Alignment.Center))
+            Box(Modifier.align(Alignment.BottomEnd).width(slot), contentAlignment = Alignment.CenterStart) {
+                TypewriterText(totalText, style = style, isTypedIn = true, isCaretShown = false)
+            }
+        }
     }
 }
 

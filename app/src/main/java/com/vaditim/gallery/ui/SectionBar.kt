@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.vas.Motion
@@ -43,7 +44,8 @@ private const val ACTIVE_LABEL_SCALE = 1.06f
 
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
-fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }) {
+// `onIconPlaced` gives each section's icon centre across the screen, so buttons can stand over it.
+fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }, onIconPlaced: (Section, Float) -> Unit = { _, _ -> }) {
     // Where each section's pill sits in the bar, left edge and right edge, so the highlight knows where to slide.
     val spans = remember { mutableStateMapOf<Section, Pair<Float, Float>>() }
     val left = remember { Animatable(Float.NaN) }
@@ -88,7 +90,10 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
             val labelScale by animateFloatAsState(if (isActive) ACTIVE_LABEL_SCALE else 1f, tween(Motion.NAV_SLIDE_MS, easing = Motion.backOut), label = "section-scale")
             Box(
                 Modifier
-                    .onPlaced { placed -> spans[section] = placed.positionInParent().x.let { it to it + placed.size.width } }
+                    .onPlaced { placed ->
+                        spans[section] = placed.positionInParent().x.let { it to it + placed.size.width }
+                        onIconPlaced(section, placed.positionInRoot().x + placed.size.width / 2f)
+                    }
                     .pressable(onClick = { onSelect(section) })
                     .padding(horizontal = 18.dp, vertical = 13.dp),
             ) {
