@@ -74,6 +74,10 @@ private const val TRACK_SHARE = 0.3f
 private const val END_REACH = 0.02f
 // The strip a finger takes hold of along each edge, besides the labels themselves; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
+// How much bigger the labels are while the strip is held, growing to the left from the screen edge.
+private const val HELD_GROWTH = 1.5f
+// How far the held month moves left to stay clear of the grown labels.
+private val BUBBLE_GROWN_SHIFT = 24.dp
 // Room around a label that still counts as taking hold of it.
 private val LABEL_GRAB_SLACK = 6.dp
 // Each label's full height on the strip, a year's being the larger.
@@ -247,7 +251,9 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val monthHeight = with(density) { MONTH_HEIGHT.toPx() }
         val yearHeight = with(density) { YEAR_HEIGHT.toPx() }
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
-        fun fullHeightOf(slot: Int): Float = if (labels[slot].month == null) yearHeight else monthHeight
+        // Held, the labels grow toward the photos, so they stand further apart to keep clear of each other.
+        fun grown(): Float = 1f + (HELD_GROWTH - 1f) * reveal
+        fun fullHeightOf(slot: Int): Float = (if (labels[slot].month == null) yearHeight else monthHeight) * grown()
         // The strip's length end to end with every label at its size; neighbours stand apart by the mean of their heights and a share of it.
         fun lengthOf(sizes: FloatArray): Float {
             var length = (fullHeightOf(0) * sizes[0] + fullHeightOf(labels.lastIndex) * sizes[labels.lastIndex]) / 2f
@@ -320,7 +326,7 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                                 alpha = placement.presence.getOrElse(slot) { 0f }
                                 // Shrinks toward the edge of the screen, so every label keeps its right side on the line.
                                 transformOrigin = TransformOrigin(1f, 0.5f)
-                                scaleX = placement.sizes.getOrElse(slot) { 0f }
+                                scaleX = placement.sizes.getOrElse(slot) { 0f } * grown()
                                 scaleY = scaleX
                             }
                             .clip(Shapes.capsule)
@@ -352,7 +358,11 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                     .align(Alignment.TopEnd)
                     .offset { IntOffset(0, (placement.marker - labelHalf * 1.6f).roundToInt()) }
                     .padding(end = 76.dp)
-                    .graphicsLayer { alpha = reveal }
+                    // Kept clear of the labels as they grow toward it.
+                    .graphicsLayer {
+                        alpha = reveal
+                        translationX = -BUBBLE_GROWN_SHIFT.toPx() * reveal
+                    }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
