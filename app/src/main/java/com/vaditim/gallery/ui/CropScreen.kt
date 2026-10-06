@@ -2,6 +2,7 @@ package com.vaditim.gallery.ui
 
 import android.graphics.RectF
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -51,7 +52,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -97,6 +100,24 @@ private const val MIN_TRIM_MS = 500L
 private const val TRIM_FRAMES = 8
 private const val PREVIEW_PIXELS = 2048
 private val FULL = Rect(0f, 0f, 1f, 1f)
+// Unavailable actions keep their accent, faded.
+private const val UNAVAILABLE_ALPHA = 0.38f
+
+// One state of everything crop can change, as the undo history keeps it.
+private data class CropEdit(val crop: Rect, val aspect: Aspect, val zoom: Float, val pan: Offset, val startMs: Long, val endMs: Long)
+
+// A glass capsule around one accent icon; it fades while there is nothing for it to do.
+@Composable
+private fun CropAction(onClick: () -> Unit, isEnabled: Boolean, onLongClick: (() -> Unit)? = null, icon: @Composable (Color) -> Unit) {
+    val shade by animateFloatAsState(if (isEnabled) 1f else UNAVAILABLE_ALPHA, tween(Motion.STATE_MS), label = "crop-action")
+    Box(
+        Modifier
+            .pressable(onClick = onClick, onLongClick = onLongClick)
+            .glass(Shapes.capsule, Palette.viewerGround)
+            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .graphicsLayer { alpha = shade },
+    ) { icon(LocalAccent.current) }
+}
 private const val MAX_CROP_ZOOM = 8f
 // One notch of a mouse wheel zooms by this much.
 private const val WHEEL_ZOOM_STEP = 1.1f
@@ -202,14 +223,57 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
             if (isDone) leave()
         }
     }
+    // Every settled edit, oldest first; undo and redo walk it, and a new edit after an undo drops the steps ahead.
+    val history = remember { mutableStateListOf<CropEdit>() }
+    var step by remember { mutableIntStateOf(0) }
+    val current = CropEdit(crop, aspect, zoom, pan, startMs, endMs)
+    val isReady = video == null || endMs > 0
+    LaunchedEffect(current, isReady) {
+        if (!isReady) return@LaunchedEffect
+        if (history.isEmpty()) {
+            history.add(current)
+            return@LaunchedEffect
+        }
+        if (current == history[step]) return@LaunchedEffect
+        delay(Motion.EDIT_SETTLE_MS)
+        while (history.size > step + 1) history.removeAt(history.lastIndex)
+        history.add(current)
+        step = history.lastIndex
+    }
+    val apply: (CropEdit) -> Unit = { edit ->
+        crop = edit.crop
+        aspect = edit.aspect
+        zoom = edit.zoom
+        pan = edit.pan
+        startMs = edit.startMs
+        endMs = edit.endMs
+    }
+    // An edit still settling counts as a step of its own, so undo takes it back first.
+    val isUnsettled = history.isNotEmpty() && current != history[step]
+    val canUndo = step > 0 || isUnsettled
+    val canRedo = !isUnsettled && step < history.lastIndex
+    val undo = {
+        if (isUnsettled) {
+            apply(history[step])
+        } else if (step > 0) {
+            step--
+            apply(history[step])
+        }
+    }
+    val redo = {
+        if (canRedo) {
+            step++
+            apply(history[step])
+        }
+    }
+    // Holding undo reverts everything, as one more step that redo can take back.
     val revert = {
-        crop = FULL
-        aspect = Aspect.FREE
-        zoom = 1f
-        pan = Offset.Zero
-        if (video != null) {
-            startMs = 0L
-            endMs = duration
+        if (history.isNotEmpty() && current != history.first()) {
+            while (history.size > step + 1) history.removeAt(history.lastIndex)
+            if (current != history[step]) history.add(current)
+            history.add(history.first())
+            step = history.lastIndex
+            apply(history[step])
         }
     }
 
@@ -330,12 +394,9 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                 }
 
                 Row(Modifier.padding(top = 12.dp, bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.pressable(onClick = revert).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
-                        BasicText(if (video != null) "REVERT" else "RESET", style = Type.microLabel.copy(color = if (isChanged) Palette.textBody else Palette.textMuted))
-                    }
-                    Box(Modifier.pressable(onClick = save).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
-                        BasicText("SAVE", style = Type.microLabel.copy(color = if (isChanged) LocalAccent.current else Palette.textMuted))
-                    }
+                    CropAction(onClick = undo, isEnabled = canUndo, onLongClick = revert) { UndoIcon(it) }
+                    CropAction(onClick = redo, isEnabled = canRedo) { RedoIcon(it) }
+                    CropAction(onClick = save, isEnabled = isChanged) { CheckIcon(it) }
                 }
             }
         }

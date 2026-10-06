@@ -67,6 +67,9 @@ object Motion {
     const val UNTYPE_MS = 30L
     const val CARET_BLINK_MS = 250L
 
+    // An edit in crop goes into its undo history once the finger has rested this long, so one drag is one step.
+    const val EDIT_SETTLE_MS = 350L
+
     // How long a delete or a move can still be taken back from the pill above the bar.
     const val UNDO_MS = 4500
 }

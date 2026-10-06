@@ -249,6 +249,28 @@ fun ResetIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, s
     }, color, style = stroke)
 }
 
+// An arrow back along a hook: one step back.
+@Composable
+fun UndoIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(9f * u, 5f * u); lineTo(4.5f * u, 9.5f * u); lineTo(9f * u, 14f * u)
+        moveTo(4.5f * u, 9.5f * u); lineTo(14.5f * u, 9.5f * u)
+        arcTo(Rect(9.5f * u, 9.5f * u, 19.5f * u, 19.5f * u), -90f, 180f, false)
+        lineTo(10f * u, 19.5f * u)
+    }, color, style = stroke)
+}
+
+// The undo arrow mirrored: one step forward again.
+@Composable
+fun RedoIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(15f * u, 5f * u); lineTo(19.5f * u, 9.5f * u); lineTo(15f * u, 14f * u)
+        moveTo(19.5f * u, 9.5f * u); lineTo(9.5f * u, 9.5f * u)
+        arcTo(Rect(4.5f * u, 9.5f * u, 14.5f * u, 19.5f * u), -90f, -180f, false)
+        lineTo(14f * u, 19.5f * u)
+    }, color, style = stroke)
+}
+
 @Composable
 fun RestoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
     drawPath(path(unit) { u ->
