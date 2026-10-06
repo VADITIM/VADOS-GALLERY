@@ -1,3 +1,4 @@
-# 1.1.22
+# 1.1.23
 
-- A group's arrow stays at the height it has on the opened heading, shut or open.
+- Less room between groups.
+- A shut group's arrow sits further left of its name.

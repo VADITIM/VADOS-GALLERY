@@ -188,7 +188,7 @@ fun AlbumsScreen(
 }
 
 // Extra room above and below a group, so groups read as separate rows.
-private val GROUP_GAP = 15.5.dp
+private val GROUP_GAP = 12.4.dp
 // How much of the row's width a swipe left takes to pull an opened group all the way shut, and how far through it letting go closes it.
 private const val PULL_REACH = 0.8f
 private const val PULL_CLOSE = 0.3f
@@ -533,8 +533,8 @@ private fun GroupRow(
             header.place(labelStart, 0)
             heading.place(0, (headingHeight - heading.height) / 2)
             // From left of the shut name to the right end of the heading, always at the heading's height, turning from right to left over the middle of its way.
-            // Shut, its glyph stands centred in the gap between the stack and the name, so the name keeps its place.
-            val shutX = labelStart - GROUP_LABEL_GAP.toPx() / 2f - back.width / 2f
+            // Shut, its glyph stands in the gap between the stack and the name, nearer the stack, so the name keeps its place.
+            val shutX = labelStart - GROUP_LABEL_GAP.toPx() * 0.8f - back.width / 2f
             val openX = (width - back.width).toFloat()
             val openY = (headingHeight - back.height) / 2f
             back.placeWithLayer(0, 0) {
