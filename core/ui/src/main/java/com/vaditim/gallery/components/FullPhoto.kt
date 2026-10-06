@@ -1,13 +1,9 @@
 package com.vaditim.gallery.components
 
-import android.content.pm.ActivityInfo
 import android.net.Uri
-import android.os.Build
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,15 +42,3 @@ fun FullPhoto(uri: Uri, contentDescription: String?, isZoomed: Boolean, modifier
     }
 }
 
-// Photos shot in Ultra HDR carry a brightness map that only shows when the window asks for HDR, the way the Samsung gallery does; without it they look flat and dim.
-@Composable
-fun HighRangeWindow() {
-    val activity = LocalActivity.current ?: return
-    DisposableEffect(activity) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return@DisposableEffect onDispose {}
-        val window = activity.window
-        val before = window.colorMode
-        window.colorMode = ActivityInfo.COLOR_MODE_HDR
-        onDispose { window.colorMode = before }
-    }
-}

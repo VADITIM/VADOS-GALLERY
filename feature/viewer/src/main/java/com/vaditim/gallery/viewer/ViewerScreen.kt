@@ -68,7 +68,6 @@ import com.vaditim.gallery.components.CropIcon
 import com.vaditim.gallery.components.FullPhoto
 import com.vaditim.gallery.components.GroupPickerSheet
 import com.vaditim.gallery.components.HeartIcon
-import com.vaditim.gallery.components.HighRangeWindow
 import com.vaditim.gallery.components.IconButton
 import com.vaditim.gallery.components.ImageIcon
 import com.vaditim.gallery.components.InfoIcon
@@ -158,7 +157,6 @@ fun BoxScope.ViewerScreen(
         LaunchedEffect(Unit) { onClose() }
         return
     }
-    HighRangeWindow()
     val pagerState = rememberPagerState(initialPage = startIndex.coerceIn(0, items.lastIndex)) { items.size }
     var isChromeVisible by remember { mutableStateOf(true) }
     var overlay by remember { mutableStateOf(Overlay.NONE) }

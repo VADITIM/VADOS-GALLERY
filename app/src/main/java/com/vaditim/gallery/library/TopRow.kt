@@ -88,8 +88,8 @@ internal fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean,
                         LocalAccentTarget.current ?: LocalAccent.current,
                         isFilled = isMonthFilled,
                         fixedWidth = MONTH_CHIP_WIDTH,
-                        padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                        contentAlignment = Alignment.CenterStart,
+                        padding = PaddingValues(start = 17.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                        contentAlignment = Alignment.Center,
                         isTypedIn = true,
                     )
                 }

@@ -1,4 +1,4 @@
-# 1.1.35
+# 1.1.36
 
-- Holding the timeline at its very bottom takes the grid all the way to the newest photo, not just to the top of the last month.
-- Tapping Recent again glides all the way down again, without the jump, and stays smooth from far up.
+- The screen no longer brightens in the photo viewer, so swiping down on a photo no longer lights up the whole screen.
+- The month and folder name in the top pill is centred.

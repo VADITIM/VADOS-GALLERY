@@ -53,7 +53,6 @@ import coil3.request.ImageRequest
 import coil3.video.VideoFrameDecoder
 import com.vaditim.gallery.components.CheckIcon
 import com.vaditim.gallery.components.CloseIcon
-import com.vaditim.gallery.components.HighRangeWindow
 import com.vaditim.gallery.components.IconButton
 import com.vaditim.gallery.components.OverlaySheet
 import com.vaditim.gallery.components.ResetIcon
@@ -98,7 +97,6 @@ private val REVIEW_STAMP = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGL
 // One photo at a time, newest first: swipe left to let it go, right to keep it. Nothing is touched until the end, where the photos let go are deleted in one go — to the trash, or for good inside Private, which is why that last step is always shown.
 @Composable
 fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String, onDelete: (List<MediaItem>) -> Unit, onClose: () -> Unit) {
-    HighRangeWindow()
     val context = LocalContext.current
     val progress = remember { ReviewProgress(context) }
     // Held as they were when review began, so the library refreshing underneath does not reshuffle the stack.
