@@ -898,13 +898,16 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 }
             }
+            // The count stands at the left end of the nav's row, as settings do at the right.
             AnimatedVisibility(
-                visibleMonth.label.isNotEmpty(),
+                visibleMonth.label.isNotEmpty() && bottomBar == BottomBar.NAVIGATION,
                 enter = TOP_ENTER,
                 exit = TOP_EXIT,
-                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = cornerPadding),
+                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = 14.dp),
             ) {
-                PhotoCount(lastMonthCount, lastTotal)
+                Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
+                    PhotoCount(lastMonthCount, lastTotal)
+                }
             }
             // Only favourites in the grid on screen, standing over the Favorites icon; Favorites and the trash have nothing to narrow.
             val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash && bottomBar == BottomBar.NAVIGATION && !favoritesIconX.isNaN()
@@ -1867,7 +1870,7 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count in the corner, set diagonally as a fraction to stay narrow: the month's number high on the left, the total low on the right, each in a slot as wide as the total's digits so neither moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
+// The count as a three-by-three grid of equal cells, each as wide as the total's digits: the month's number top left, the slash in the middle, the total bottom right, so neither number ever moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
 @Composable
 private fun PhotoCount(monthCount: Int, total: Int) {
     val totalText = total.toString()
@@ -1875,15 +1878,15 @@ private fun PhotoCount(monthCount: Int, total: Int) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val digits = remember(totalText.length) { measurer.measure("0".repeat(totalText.length), style).size }
-    val slot = with(density) { digits.width.toDp() }
-    val line = with(density) { digits.height.toDp() }
-    Box(Modifier.glass(Shapes.capsule).animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut)).padding(horizontal = 10.dp, vertical = 5.dp)) {
-        Box(Modifier.size(width = slot * 2 + line * 0.5f, height = line * 1.6f)) {
-            Box(Modifier.align(Alignment.TopStart).width(slot), contentAlignment = Alignment.CenterEnd) {
+    val cellWidth = with(density) { digits.width.toDp() }
+    val cellHeight = with(density) { digits.height.toDp() }
+    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Box(Modifier.size(width = cellWidth * 3, height = cellHeight * 3)) {
+            Box(Modifier.align(Alignment.TopStart).size(cellWidth, cellHeight), contentAlignment = Alignment.CenterEnd) {
                 TypewriterText(monthCount.toString(), style = style, isTypedIn = true, isCaretShown = false)
             }
             BasicText("/", style = style.copy(color = Palette.textFaint), modifier = Modifier.align(Alignment.Center))
-            Box(Modifier.align(Alignment.BottomEnd).width(slot), contentAlignment = Alignment.CenterStart) {
+            Box(Modifier.align(Alignment.BottomEnd).size(cellWidth, cellHeight), contentAlignment = Alignment.CenterStart) {
                 TypewriterText(totalText, style = style, isTypedIn = true, isCaretShown = false)
             }
         }

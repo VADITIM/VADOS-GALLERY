@@ -1,5 +1,3 @@
-# v0.116
+# v0.117
 
-- The settings button sits at the right of the nav.
-- The favourites-only heart stands right above the Favorites icon.
-- The photo count is set diagonally (45 over /320) to stay narrow; each number keeps its own fixed place, only the month number changes while scrolling, and the total types in once.
+- The photo count sits at the left end of the nav row, level with the nav, as a small three-by-three grid: the month count top left, the slash in the middle, the total bottom right.
