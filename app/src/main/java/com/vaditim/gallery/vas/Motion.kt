@@ -57,6 +57,8 @@ object Motion {
 
     // Holding a tile to select waits this much past the system's long press, so a resting thumb does not select by accident.
     const val SELECT_HOLD_EXTRA_MS = 120L
+    // Once a selection is open the long press has already been made, so a brief rest is enough to tell a swipe-select from a scroll.
+    const val SELECT_HOLD_ACTIVE_MS = 150L
     // A finger that lands while the grid moves faster than this (pixels per second) is stopping a scroll, not starting a selection; slower, it is a slight drift and selects.
     const val SELECT_FAST_SCROLL_PX_PER_S = 400f
 

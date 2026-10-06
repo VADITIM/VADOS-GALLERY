@@ -156,7 +156,7 @@ section bar is replaced by the selection's own bar:
 | Recent, Favorites, an album | SHARE · MOVE (to an album) · PRIVATE (to a group) · DELETE (to the trash) |
 | A private group, Private Favorites | SHARE · GROUP (to another group) · OUT (back to an album) · DELETE (forever, after Confirm) |
 
-*Planned:* dragging across thumbnails to select a run (the Apple swipe-select).
+**Drag to select:** hold a thumbnail and slide across others to select or unselect the run. With nothing selected the hold is a long press; once a selection is open a brief rest (150 ms) is enough, so swiping across more photos starts almost at once.
 
 **Long-press an album** for its menu: **Move album to private** — every photo in the folder goes into a
 private group, an existing one or a new one named after the album by default.

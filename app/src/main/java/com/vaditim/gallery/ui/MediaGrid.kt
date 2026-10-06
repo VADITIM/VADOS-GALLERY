@@ -401,7 +401,8 @@ private fun Modifier.dragSelect(
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         // Taken by the timeline, or landing on a grid that is really moving: that finger is stopping a scroll, not selecting. A slight drift does not count.
         if (down.isConsumed || scrollSpeed() > Motion.SELECT_FAST_SCROLL_PX_PER_S) return@awaitEachGesture
-        val isHeld = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis + Motion.SELECT_HOLD_EXTRA_MS) {
+        val holdMs = if (selection()?.isActive == true) Motion.SELECT_HOLD_ACTIVE_MS else viewConfiguration.longPressTimeoutMillis + Motion.SELECT_HOLD_EXTRA_MS
+        val isHeld = withTimeoutOrNull(holdMs) {
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 val change = event.changes.firstOrNull() ?: break
