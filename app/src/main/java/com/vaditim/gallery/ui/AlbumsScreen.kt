@@ -532,15 +532,14 @@ private fun GroupRow(
         layout(width, height) {
             header.place(labelStart, 0)
             heading.place(0, (headingHeight - heading.height) / 2)
-            // From left of the shut name to the right end of the heading, turning from right to left over the middle of its way.
+            // From left of the shut name to the right end of the heading, always at the heading's height, turning from right to left over the middle of its way.
             // Shut, its glyph stands centred in the gap between the stack and the name, so the name keeps its place.
             val shutX = labelStart - GROUP_LABEL_GAP.toPx() / 2f - back.width / 2f
-            val shutY = (small - back.height) / 2f
             val openX = (width - back.width).toFloat()
             val openY = (headingHeight - back.height) / 2f
             back.placeWithLayer(0, 0) {
                 translationX = shutX + (openX - shutX) * arrow.value
-                translationY = shutY + (openY - shutY) * arrow.value.coerceIn(0f, 1f)
+                translationY = openY
                 rotationZ = 180f * (1f - ((arrow.value - (1f - ARROW_TURN) / 2f) / ARROW_TURN).coerceIn(0f, 1f))
             }
             cards.forEachIndexed { index, card ->
