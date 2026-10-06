@@ -1,3 +1,3 @@
-# v1.1.4
+# v1.1.5
 
-- The blur at the top edge of the screen is gone.
+- The top pill is filled with the section colour.

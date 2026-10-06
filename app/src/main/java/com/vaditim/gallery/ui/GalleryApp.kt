@@ -1945,8 +1945,9 @@ private fun TopRow(month: VisibleMonth, title: String?, selectedCount: Int, onBa
                 if (isMonthShown) lastLabel = title ?: month.label.uppercase()
                 MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                    Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        FadingOverflow { TypewriterText(lastLabel, style = Type.microLabel.copy(color = LocalAccent.current), isTypedIn = true) }
+                    // The whole pill takes the section colour, ink on it, as the folder label above the nav does.
+                    Box(Modifier.width(MONTH_CHIP_WIDTH).background(LocalAccent.current, Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
+                        FadingOverflow { TypewriterText(lastLabel, style = Type.microLabel.copy(color = Palette.sunkenDeep), isTypedIn = true) }
                     }
                 }
                 Box(Modifier.weight(1f))
