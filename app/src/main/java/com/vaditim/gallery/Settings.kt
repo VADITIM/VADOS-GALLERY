@@ -14,14 +14,17 @@ object Settings {
     const val MIN_COLUMNS = 1
     const val MAX_COLUMNS = 6
 
-    private const val DEFAULT_BLUR_DP = 26f
-    private const val DEFAULT_OPACITY = 0.55f
-    private const val DEFAULT_COLUMNS = 4
+    private const val DEFAULT_BLUR_DP = 50f
+    private const val DEFAULT_OPACITY = 0.85f
+    private const val DEFAULT_COLUMNS = 3
+    // Recent is the whole library, so it starts denser than a folder.
+    private const val DEFAULT_RECENT_COLUMNS = 5
     const val MAX_ALBUM_COLUMNS = 4
-    private const val DEFAULT_ALBUM_COLUMNS = 2
-    // The ground's grey, as a share of the lightest it may go; the VAS ground (#181818) sits at the default.
+    private const val DEFAULT_ALBUM_COLUMNS = 3
+    // The ground's grey, as a share of the lightest it may go.
     const val MAX_GROUND_LEVEL = 64f
-    private const val DEFAULT_GROUND_BRIGHTNESS = 24f / MAX_GROUND_LEVEL
+    private const val DEFAULT_GROUND_BRIGHTNESS = 17.5f / MAX_GROUND_LEVEL
+    private val DEFAULT_DATE_GROUPS = setOf(DateGroup.DAYS, DateGroup.MONTHS, DateGroup.YEARS)
 
     private lateinit var preferences: SharedPreferences
 
@@ -38,13 +41,14 @@ object Settings {
     private val groupedAlbumsByView = mutableStateMapOf<SettingsView, Boolean>()
     private val albumColumnsByView = mutableStateMapOf<SettingsView, Int>()
 
-    fun columnsIn(view: SettingsView): Int = columnsByView[view] ?: DEFAULT_COLUMNS
+    fun columnsIn(view: SettingsView): Int = columnsByView[view] ?: defaultColumnsIn(view)
+    private fun defaultColumnsIn(view: SettingsView): Int = if (view == SettingsView.RECENT) DEFAULT_RECENT_COLUMNS else DEFAULT_COLUMNS
     // Empty is the layout without any cut: one run of photos.
-    fun dateGroupsIn(view: SettingsView): Set<DateGroup> = dateGroupsByView[view] ?: setOf(DateGroup.MONTHS)
+    fun dateGroupsIn(view: SettingsView): Set<DateGroup> = dateGroupsByView[view] ?: DEFAULT_DATE_GROUPS
     // Off, the grid has no cuts at all; the layout picked stays stored for when they come back on.
     fun headersIn(view: SettingsView): Boolean = headersByView[view] ?: true
     fun activeDateGroupsIn(view: SettingsView): Set<DateGroup> = if (headersIn(view)) dateGroupsIn(view) else emptySet()
-    fun stackSimilarIn(view: SettingsView): Boolean = stackSimilarByView[view] ?: true
+    fun stackSimilarIn(view: SettingsView): Boolean = stackSimilarByView[view] ?: false
     fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbumsByView[view] ?: (view == SettingsView.FAVORITES)
     fun albumColumnsIn(view: SettingsView): Int = albumColumnsByView[view] ?: DEFAULT_ALBUM_COLUMNS
 
@@ -54,10 +58,10 @@ object Settings {
     var autoplayVideos by mutableStateOf(true)
         private set
     // The day pill at the top left of a day's first photo, everywhere at once.
-    var dayStamps by mutableStateOf(true)
+    var dayStamps by mutableStateOf(false)
         private set
     // The open folder's name above the nav; off, it takes the month's place in the top pill.
-    var folderLabel by mutableStateOf(true)
+    var folderLabel by mutableStateOf(false)
         private set
     // The random private favourite at the top of Private's groups.
     var todaysSelection by mutableStateOf(true)
@@ -102,25 +106,28 @@ object Settings {
         glassOpacity = preferences.getFloat("opacity", DEFAULT_OPACITY)
         // Each view starts from what the single setting was before views kept their own.
         for (each in SettingsView.entries) {
-            columnsByView[each] = preferences.getInt("columns.${each.name}", preferences.getInt("columns", DEFAULT_COLUMNS))
+            columnsByView[each] = preferences.getInt("columns.${each.name}", preferences.getInt("columns", defaultColumnsIn(each)))
             // Before the groups could be combined, a view had months (with or without their headers) or weeks inside months.
             val stored = preferences.getString("dateGroups.${each.name}", null)
+            val hasLegacyLayout = listOf("monthHeaders.${each.name}", "monthHeaders", "photoLayout.${each.name}", "photoLayout").any { preferences.contains(it) }
             dateGroupsByView[each] = if (stored != null) {
                 stored.split(',').mapNotNull { name -> DateGroup.entries.firstOrNull { it.name == name } }.toSet()
+            } else if (!hasLegacyLayout) {
+                DEFAULT_DATE_GROUPS
             } else {
                 val hasMonths = preferences.getBoolean("monthHeaders.${each.name}", preferences.getBoolean("monthHeaders", true))
                 val hasWeeks = (preferences.getString("photoLayout.${each.name}", null) ?: preferences.getString("photoLayout", null)) == "WEEKS"
                 setOfNotNull(DateGroup.MONTHS.takeIf { hasMonths }, DateGroup.WEEKS.takeIf { hasWeeks })
             }
             headersByView[each] = preferences.getBoolean("headers.${each.name}", true)
-            stackSimilarByView[each] = preferences.getBoolean("stackSimilar.${each.name}", preferences.getBoolean("stackSimilar", true))
+            stackSimilarByView[each] = preferences.getBoolean("stackSimilar.${each.name}", preferences.getBoolean("stackSimilar", false))
             // Favorites always showed its groups before it had the setting, so it starts with them on.
             groupedAlbumsByView[each] = preferences.getBoolean("groupedAlbums.${each.name}", if (each == SettingsView.FAVORITES) true else preferences.getBoolean("groupedAlbums", false))
             albumColumnsByView[each] = preferences.getInt("albumColumns.${each.name}", preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS))
         }
         autoplayVideos = preferences.getBoolean("autoplay", true)
-        dayStamps = preferences.getBoolean("dayStamps", true)
-        folderLabel = preferences.getBoolean("folderLabel", true)
+        dayStamps = preferences.getBoolean("dayStamps", false)
+        folderLabel = preferences.getBoolean("folderLabel", false)
         todaysSelection = preferences.getBoolean("todaysSelection", true)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
