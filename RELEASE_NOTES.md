@@ -1,4 +1,4 @@
-# v1.1.11
+# v1.1.12
 
-- A shut group's name is now cut away with the swipe that opens it, the same way the open group's heading is cut by the swipe that closes it.
-- New group and New album now sit centred between the lines above and below them.
+- The Confirm button for deleting is half again as big and sits a little higher.
+- The restore pill after moving photos to the trash now stays for 2.5 seconds.

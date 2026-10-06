@@ -32,6 +32,7 @@ import com.vaditim.gallery.media.MediaRepository
 import com.vaditim.gallery.media.SamsungTrash
 import com.vaditim.gallery.vault.PrivateGroup
 import com.vaditim.gallery.vault.PrivateVault
+import com.vaditim.gallery.vas.Motion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -145,7 +146,7 @@ class MediaActions(
         startRequest(MediaStore.createTrashRequest(context.contentResolver, uris, true)) { isDone ->
             if (isDone) {
                 Haptics.confirm(context)
-                undoOffer = UndoOffer(summary(items.size, items.size, "Moved to trash")) {
+                undoOffer = UndoOffer(summary(items.size, items.size, "Moved to trash"), Motion.TRASH_UNDO_MS) {
                     startRequest(MediaStore.createTrashRequest(context.contentResolver, uris, false)) { isRestored -> if (isRestored) Haptics.confirm(context) }
                 }
             } else {

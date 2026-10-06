@@ -33,7 +33,7 @@ import kotlinx.coroutines.delay
 private val PILL_HEIGHT = 52.dp
 
 // A change shown for a few seconds: what happened, and how to reverse it when it can be; one that cannot (a new cover) only says so.
-class UndoOffer(val message: String, val revert: (() -> Unit)? = null)
+class UndoOffer(val message: String, val durationMs: Int = Motion.UNDO_MS, val revert: (() -> Unit)? = null)
 
 // The pill that stands above the bar after a delete, a move or a new cover. It keeps the last offer while sliding out, so its text does not vanish mid-animation.
 @Composable
@@ -42,7 +42,7 @@ fun UndoPill(offer: UndoOffer?, onUndo: (UndoOffer) -> Unit, onExpired: (UndoOff
     if (offer != null) shown = offer
     LaunchedEffect(offer) {
         if (offer != null) {
-            delay(Motion.UNDO_MS.toLong())
+            delay(offer.durationMs.toLong())
             onExpired(offer)
         }
     }

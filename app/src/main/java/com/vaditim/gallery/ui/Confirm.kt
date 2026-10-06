@@ -24,16 +24,17 @@ import com.vaditim.gallery.vas.pressable
 fun ConfirmPill(pending: (() -> Unit)?, onDone: () -> Unit) {
     AnimatedVisibility(pending != null, enter = CONFIRM_ENTER, exit = CONFIRM_EXIT) {
         Box(
-            Modifier.padding(bottom = 8.dp)
+            Modifier.padding(bottom = 14.dp)
                 .pressable(onClick = {
                     val delete = pending
                     onDone()
                     delete?.invoke()
                 })
                 .background(Palette.danger, Shapes.capsule)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 24.dp, vertical = 12.dp),
         ) {
-            BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep))
+            // Half again the size of the other labels, so the one irreversible tap is the easiest to find.
+            BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep, fontSize = Type.microLabel.fontSize * 1.5f, letterSpacing = Type.microLabel.letterSpacing * 1.5f))
         }
     }
 }

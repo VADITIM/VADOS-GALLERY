@@ -72,4 +72,7 @@ object Motion {
 
     // How long a delete or a move can still be taken back from the pill above the bar.
     const val UNDO_MS = 4500
+
+    // A delete's restore pill leaves sooner: the trash keeps the photo anyway.
+    const val TRASH_UNDO_MS = 2500
 }
