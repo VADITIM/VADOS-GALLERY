@@ -70,6 +70,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1870,7 +1871,7 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count as a three-by-three grid, the outer columns as wide as the total's digits: the month's number top left, the slash in the middle, the total bottom right, so neither number ever moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
+// The count as a diagonal fraction on one row: the month's number raised before the slash, the total lowered after it, each in a slot as wide as the total's digits so neither moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
 @Composable
 private fun PhotoCount(monthCount: Int, total: Int) {
     val totalText = total.toString()
@@ -1879,21 +1880,23 @@ private fun PhotoCount(monthCount: Int, total: Int) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val digits = remember(totalText.length) { measurer.measure("0".repeat(totalText.length), style).size }
-    val cellWidth = with(density) { digits.width.toDp() }
-    val cellHeight = with(density) { digits.height.toDp() }
-    // The middle column holds only the slash, so it is as narrow as the slash.
-    val slashWidth = with(density) { remember { measurer.measure("/", style).size.width }.toDp() }
-    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 4.dp)) {
-        Box(Modifier.size(width = cellWidth * 2 + slashWidth, height = cellHeight * 3)) {
-            Box(Modifier.align(Alignment.TopStart).size(cellWidth, cellHeight), contentAlignment = Alignment.CenterEnd) {
+    val slotWidth = with(density) { digits.width.toDp() }
+    val line = with(density) { digits.height.toDp() }
+    val rise = line * COUNT_RISE
+    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 9.dp, vertical = 4.dp)) {
+        Row(Modifier.height(line + rise * 2), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(slotWidth).offset(y = -rise), contentAlignment = Alignment.CenterEnd) {
                 TypewriterText(monthCount.toString(), style = style, isTypedIn = true, isCaretShown = false)
             }
-            BasicText("/", style = style.copy(color = Palette.textFaint), modifier = Modifier.align(Alignment.Center))
-            Box(Modifier.align(Alignment.BottomEnd).size(cellWidth, cellHeight), contentAlignment = Alignment.CenterStart) {
+            BasicText("/", style = style.copy(color = Palette.textFaint), modifier = Modifier.padding(horizontal = 1.dp))
+            Box(Modifier.width(slotWidth).offset(y = rise), contentAlignment = Alignment.CenterStart) {
                 TypewriterText(totalText, style = style, isTypedIn = true, isCaretShown = false)
             }
         }
     }
 }
+
+// How far each number sits off the slash's line, as a share of a line.
+private const val COUNT_RISE = 0.4f
 
 private fun List<MediaItem>.favoritesOnlyIf(isFavoritesOnly: Boolean): List<MediaItem> = if (isFavoritesOnly) filter { it.isFavorite } else this

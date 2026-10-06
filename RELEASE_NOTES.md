@@ -1,4 +1,3 @@
-# v0.118
+# v0.119
 
-- The photo count in the nav row is narrower and no longer runs under the nav.
-- Every sheet (settings, menus, pickers) can be pulled down with the finger; let go far enough or flick it and it closes, otherwise it springs back.
+- The photo count is a compact diagonal fraction on one row: the month count raised before the slash, the total lowered after it.
