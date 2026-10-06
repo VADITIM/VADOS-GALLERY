@@ -12,7 +12,7 @@ import androidx.compose.runtime.setValue
 object Settings {
     const val MAX_BLUR_DP = 60f
     const val MIN_COLUMNS = 1
-    const val MAX_COLUMNS = 5
+    const val MAX_COLUMNS = 6
 
     private const val DEFAULT_BLUR_DP = 26f
     private const val DEFAULT_OPACITY = 0.55f
@@ -32,22 +32,24 @@ object Settings {
     // The view on screen, whose own settings the sheet shows and changes; every view keeps its grid and album settings apart.
     var view by mutableStateOf(SettingsView.RECENT)
     private val columnsByView = mutableStateMapOf<SettingsView, Int>()
-    private val monthHeadersByView = mutableStateMapOf<SettingsView, Boolean>()
-    private val photoLayoutByView = mutableStateMapOf<SettingsView, PhotoLayout>()
+    private val dateGroupsByView = mutableStateMapOf<SettingsView, Set<DateGroup>>()
+    private val headersByView = mutableStateMapOf<SettingsView, Boolean>()
     private val stackSimilarByView = mutableStateMapOf<SettingsView, Boolean>()
     private val groupedAlbumsByView = mutableStateMapOf<SettingsView, Boolean>()
     private val albumColumnsByView = mutableStateMapOf<SettingsView, Int>()
 
     fun columnsIn(view: SettingsView): Int = columnsByView[view] ?: DEFAULT_COLUMNS
-    fun monthHeadersIn(view: SettingsView): Boolean = monthHeadersByView[view] ?: true
-    fun photoLayoutIn(view: SettingsView): PhotoLayout = photoLayoutByView[view] ?: PhotoLayout.MONTHS
+    // Empty is the layout without any cut: one run of photos.
+    fun dateGroupsIn(view: SettingsView): Set<DateGroup> = dateGroupsByView[view] ?: setOf(DateGroup.MONTHS)
+    // Off, the grid keeps its cuts but shows no date on them nor on its tiles.
+    fun headersIn(view: SettingsView): Boolean = headersByView[view] ?: true
     fun stackSimilarIn(view: SettingsView): Boolean = stackSimilarByView[view] ?: true
     fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbumsByView[view] ?: (view == SettingsView.FAVORITES)
     fun albumColumnsIn(view: SettingsView): Int = albumColumnsByView[view] ?: DEFAULT_ALBUM_COLUMNS
 
     val defaultColumns: Int get() = columnsIn(view)
-    val showMonthHeaders: Boolean get() = monthHeadersIn(view)
-    val photoLayout: PhotoLayout get() = photoLayoutIn(view)
+    val dateGroups: Set<DateGroup> get() = dateGroupsIn(view)
+    val headers: Boolean get() = headersIn(view)
     var autoplayVideos by mutableStateOf(true)
         private set
     val albumColumns: Int get() = albumColumnsIn(view)
@@ -93,9 +95,16 @@ object Settings {
         // Each view starts from what the single setting was before views kept their own.
         for (each in SettingsView.entries) {
             columnsByView[each] = preferences.getInt("columns.${each.name}", preferences.getInt("columns", DEFAULT_COLUMNS))
-            monthHeadersByView[each] = preferences.getBoolean("monthHeaders.${each.name}", preferences.getBoolean("monthHeaders", true))
-            val layoutName = preferences.getString("photoLayout.${each.name}", null) ?: preferences.getString("photoLayout", null)
-            photoLayoutByView[each] = PhotoLayout.entries.firstOrNull { it.name == layoutName } ?: PhotoLayout.MONTHS
+            // Before the groups could be combined, a view had months (with or without their headers) or weeks inside months.
+            val stored = preferences.getString("dateGroups.${each.name}", null)
+            dateGroupsByView[each] = if (stored != null) {
+                stored.split(',').mapNotNull { name -> DateGroup.entries.firstOrNull { it.name == name } }.toSet()
+            } else {
+                val hasMonths = preferences.getBoolean("monthHeaders.${each.name}", preferences.getBoolean("monthHeaders", true))
+                val hasWeeks = (preferences.getString("photoLayout.${each.name}", null) ?: preferences.getString("photoLayout", null)) == "WEEKS"
+                setOfNotNull(DateGroup.MONTHS.takeIf { hasMonths }, DateGroup.WEEKS.takeIf { hasWeeks })
+            }
+            headersByView[each] = preferences.getBoolean("headers.${each.name}", true)
             stackSimilarByView[each] = preferences.getBoolean("stackSimilar.${each.name}", preferences.getBoolean("stackSimilar", true))
             // Favorites always showed its groups before it had the setting, so it starts with them on.
             groupedAlbumsByView[each] = preferences.getBoolean("groupedAlbums.${each.name}", if (each == SettingsView.FAVORITES) true else preferences.getBoolean("groupedAlbums", false))
@@ -179,14 +188,14 @@ object Settings {
         preferences.edit().putInt("columns.${view.name}", defaultColumns).apply()
     }
 
-    fun updateShowMonthHeaders(value: Boolean) {
-        monthHeadersByView[view] = value
-        preferences.edit().putBoolean("monthHeaders.${view.name}", value).apply()
+    fun updateDateGroups(value: Set<DateGroup>) {
+        dateGroupsByView[view] = value
+        preferences.edit().putString("dateGroups.${view.name}", value.joinToString(",") { it.name }).apply()
     }
 
-    fun updatePhotoLayout(value: PhotoLayout) {
-        photoLayoutByView[view] = value
-        preferences.edit().putString("photoLayout.${view.name}", value.name).apply()
+    fun updateHeaders(value: Boolean) {
+        headersByView[view] = value
+        preferences.edit().putBoolean("headers.${view.name}", value).apply()
     }
 
     fun updateAlbumColumns(value: Int) {
@@ -296,5 +305,5 @@ fun List<AlbumStack>.renamed(old: String, new: String): List<AlbumStack> {
 fun List<AlbumStack>.withoutAlbum(path: String): List<AlbumStack> =
     map { it.copy(paths = it.paths - path) }.filter { it.paths.isNotEmpty() }
 
-// How a photo grid is cut: whole months with each day's first photo stamped, or months split into calendar weeks.
-enum class PhotoLayout(val label: String) { MONTHS("Months"), WEEKS("Weeks") }
+// What a photo grid is cut into; any of them at once, each under its own header. Without weeks the first photo of each day carries the day.
+enum class DateGroup(val label: String) { WEEKS("Weeks"), MONTHS("Months"), YEARS("Years") }

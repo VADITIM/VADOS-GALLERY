@@ -3,7 +3,7 @@ package com.vaditim.gallery.ui
 import androidx.compose.runtime.mutableStateOf
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.SettingsView
-import com.vaditim.gallery.PhotoLayout
+import com.vaditim.gallery.DateGroup
 import java.time.LocalDate
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateFloatAsState
@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -84,7 +85,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private const val MIN_COLUMNS = 1
-private const val MAX_COLUMNS = 5
+private const val MAX_COLUMNS = 6
 
 // How far a pinch has to travel before the grid steps one column: spreading past this shows fewer, larger photos.
 private const val PINCH_STEP = 1.28f
@@ -108,11 +109,11 @@ class GridMemory(val view: SettingsView = Settings.view, private val isStacking:
     fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilarIn(view), view)
 }
 
-// A grid is photos with a month header in front of each month's first photo, and in the week layout a week header in front of each week's. `index` is the photo's place in the original list, which is what the viewer opens at.
+// A grid is photos with a header in front of the first photo of each year, month and week it is cut into. `index` is the photo's place in the original list, which is what the viewer opens at.
 sealed interface GridEntry {
-    data class Header(val label: String, val key: String, val isWeek: Boolean = false) : GridEntry
+    data class Header(val label: String, val key: String, val group: DateGroup) : GridEntry
     // `stack` holds every shot of a similar-shot stack the photo belongs to (the newest is its cover); `isStackOpen` says the stack is laid out tile by tile rather than folded into the cover.
-    // `stampDay` is set on the first photo of each day in the month layout, which carries the day on its corner.
+    // `stampDay` is set on the first photo of each day when there are no weeks, which carries the day on its corner.
     data class Photo(val item: MediaItem, val index: Int, val stack: List<MediaItem> = emptyList(), val isStackOpen: Boolean = false, val stampDay: LocalDate? = null) : GridEntry {
         val isFoldedStack: Boolean get() = stack.isNotEmpty() && !isStackOpen
     }
@@ -120,7 +121,9 @@ sealed interface GridEntry {
 
 fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false, view: SettingsView = Settings.view): List<GridEntry> {
     val entries = ArrayList<GridEntry>(items.size + 24)
-    val isWeeks = Settings.photoLayoutIn(view) == PhotoLayout.WEEKS
+    val groups = Settings.dateGroupsIn(view)
+    val isWeeks = DateGroup.WEEKS in groups
+    var currentYear: Int? = null
     var currentMonth: YearMonth? = null
     var currentDay: LocalDate? = null
     // The open week's header is put in when its first photo comes and labelled once its last day is known.
@@ -130,7 +133,7 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
     fun closeWeek() {
         val first = weekFirst ?: return
         val last = weekLast ?: first
-        entries[weekHeaderAt] = GridEntry.Header(weekStamp(first, last), "week-${YearMonth.from(first)}-${calendarWeekOf(first)}", isWeek = true)
+        entries[weekHeaderAt] = GridEntry.Header(weekStamp(first, last), "week-${YearMonth.from(first)}-${calendarWeekOf(first)}", DateGroup.WEEKS)
         weekFirst = null
     }
     val stackAt = arrayOfNulls<List<MediaItem>>(items.size)
@@ -142,16 +145,26 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
         if (stack != null && !isOpen && item !== stack.last()) return@forEachIndexed
         val day = dayOf(item.timestampMillis)
         val month = YearMonth.from(day)
+        // A week is cut where a larger group starts, so a header never stands inside a week.
+        if (day.year != currentYear) {
+            if (DateGroup.YEARS in groups) {
+                closeWeek()
+                entries += GridEntry.Header(day.year.toString(), "year-${day.year}", DateGroup.YEARS)
+            }
+            currentYear = day.year
+        }
         if (month != currentMonth) {
-            closeWeek()
-            if (Settings.monthHeadersIn(view)) entries += GridEntry.Header(MONTH_FORMAT.format(month), "month-$month")
+            if (DateGroup.MONTHS in groups) {
+                closeWeek()
+                entries += GridEntry.Header(MONTH_FORMAT.format(month), "month-$month", DateGroup.MONTHS)
+            }
             currentMonth = month
         }
         if (isWeeks) {
             if (weekFirst == null || calendarWeekOf(day) != calendarWeekOf(weekFirst!!)) {
                 closeWeek()
                 weekHeaderAt = entries.size
-                entries += GridEntry.Header("", "")
+                entries += GridEntry.Header("", "", DateGroup.WEEKS)
                 weekFirst = day
             }
             weekLast = day
@@ -180,7 +193,7 @@ fun MediaGrid(
     // Narrowed to favourites by the corner toggle; a tap still opens the photo by its place among all of them.
     val isFavoritesOnly = LocalFavoritesOnly.current
     val shownItems = remember(items, isFavoritesOnly) { if (isFavoritesOnly) items.filter { it.isFavorite } else items }
-    val entries = remember(shownItems, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
+    val entries = remember(shownItems, Settings.dateGroupsIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -260,7 +273,13 @@ fun MediaGrid(
             contentType = { entry -> if (entry is GridEntry.Header) "header" else "tile" },
         ) { entry ->
             when (entry) {
-                is GridEntry.Header -> if (entry.isWeek) WeekHeader(entry.label) else MonthHeader(entry.label, isRoomy = Settings.photoLayoutIn(memory.view) == PhotoLayout.WEEKS)
+                is GridEntry.Header -> when {
+                    // Without labels a cut is only the room it leaves.
+                    !Settings.headersIn(memory.view) -> Box(Modifier.height(HEADER_GAP))
+                    entry.group == DateGroup.WEEKS -> WeekHeader(entry.label)
+                    entry.group == DateGroup.YEARS -> YearHeader(entry.label)
+                    else -> MonthHeader(entry.label, isRoomy = DateGroup.WEEKS in Settings.dateGroupsIn(memory.view))
+                }
                 is GridEntry.Photo -> {
                     val item = entry.item
                     Tile(
@@ -271,8 +290,8 @@ fun MediaGrid(
                         isSelected = selection != null && item.id in selection.selectedIds,
                         badge = badge?.invoke(item),
                         stackSize = if (entry.isFoldedStack) entry.stack.size else 0,
-                        stampDay = entry.stampDay,
-                        isStampShort = columns >= SHORT_STAMP_COLUMNS,
+                        // From four columns a tile is too small to carry a date over the picture.
+                        stampDay = entry.stampDay.takeIf { Settings.headersIn(memory.view) && columns <= MAX_STAMP_COLUMNS },
                         stackPlace = if (entry.isStackOpen) "${entry.stack.indexOf(item) + 1}/${entry.stack.size}" else null,
                         onCloseStack = { memory.openStacks = memory.openStacks - entry.stack.last().id },
                         onClick = {
@@ -307,6 +326,11 @@ suspend fun GridMemory.revealItem(items: List<MediaItem>, mediaId: Long) {
 private fun MonthHeader(label: String, isRoomy: Boolean) {
     // Dates sit at the left, across the grid from the timeline, in the section colour so they read as the grid's markers.
     BasicText(label, style = Type.cardTitle.copy(fontSize = 16.sp, color = LocalAccent.current), modifier = Modifier.padding(start = 4.dp, top = if (isRoomy) 34.dp else 18.dp, bottom = 8.dp))
+}
+
+@Composable
+private fun YearHeader(label: String) {
+    BasicText(label, style = Type.cardTitle.copy(fontSize = 24.sp, color = LocalAccent.current), modifier = Modifier.padding(start = 4.dp, top = 30.dp, bottom = 6.dp))
 }
 
 @Composable
@@ -420,7 +444,7 @@ private fun Modifier.dragSelect(
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<VisibleMonth> {
-    val entries = remember(items, Settings.monthHeadersIn(memory.view), Settings.photoLayoutIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
+    val entries = remember(items, Settings.dateGroupsIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     val countByMonth = remember(items) { items.groupingBy { YearMonth.from(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault())) }.eachCount() }
     return remember(entries, memory, countByMonth) {
         derivedStateOf {
@@ -461,7 +485,6 @@ private fun Tile(
     onClick: () -> Unit,
     badge: String? = null,
     stampDay: LocalDate? = null,
-    isStampShort: Boolean = false,
     stackSize: Int = 0,
     stackPlace: String? = null,
     onCloseStack: () -> Unit = {},
@@ -511,7 +534,7 @@ private fun Tile(
         // Top left, away from the timeline: the day this photo opens, on a backdrop so it reads over any picture.
         if (stampDay != null) {
             BasicText(
-                if (isStampShort) shortDayStamp(stampDay) else dayStamp(stampDay),
+                dayStamp(stampDay),
                 style = Type.value.copy(color = Palette.textBright, fontSize = 9.sp),
                 maxLines = 1,
                 softWrap = false,
@@ -595,8 +618,8 @@ private fun Tile(
 private const val SYSTEM_THUMBNAIL_PIXELS = 320
 private val TILE_HEART = 11.dp
 private const val SHARP_DELAY_MS = 120L
-// From this many columns a tile is too narrow for the year in its day stamp.
-private const val SHORT_STAMP_COLUMNS = 4
+private const val MAX_STAMP_COLUMNS = 3
+private val HEADER_GAP = 14.dp
 
 @Composable
 private fun thumbnailPixels(columns: Int, gap: Dp): Int {

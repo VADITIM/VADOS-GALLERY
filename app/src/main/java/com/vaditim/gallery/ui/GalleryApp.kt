@@ -45,6 +45,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.blur
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.geometry.CornerRadius
@@ -559,6 +561,8 @@ private fun Library(viewModel: GalleryViewModel) {
         }
     }
 
+    // The screen softens behind the settings, so the sheet reads as the one thing in front.
+    val settingsBlur by animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
             // A section change is a cut, not a dissolve: the outgoing section is gone fast and at once, the incoming one lands from just below on the overshoot.
@@ -571,7 +575,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                 },
                 label = "section",
-                modifier = Modifier.fillMaxSize().hazeSource(hazeState),
+                modifier = Modifier.fillMaxSize().blur(settingsBlur).hazeSource(hazeState),
             ) { (shown, isPrivateShown) ->
                 // While this section is the one shown it follows the current view; leaving, it keeps the last one it had.
                 var ownView by remember { mutableStateOf(settingsView) }
@@ -860,7 +864,6 @@ private fun Library(viewModel: GalleryViewModel) {
                 },
                 isAlbumsView = if (isPrivateMode) Settings.privateFavoritesAsGroups else Settings.favoritesAsAlbums,
                 onCancelSelection = clearSelection,
-                onSettings = { sheet = AppSheet.SETTINGS },
             )
 
             val bottomBar = when {
@@ -876,6 +879,19 @@ private fun Library(viewModel: GalleryViewModel) {
             if (visibleMonth.label.isNotEmpty()) {
                 lastMonthCount = visibleMonth.count
                 lastTotal = gridItems.size
+            }
+            // Settings sit small at the left end of the nav's row, leaving the top row to the date and the place's own buttons.
+            AnimatedVisibility(
+                bottomBar == BottomBar.NAVIGATION,
+                enter = TOP_ENTER,
+                exit = TOP_EXIT,
+                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = 14.dp),
+            ) {
+                Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
+                    Box(Modifier.pressable(onClick = { sheet = AppSheet.SETTINGS }).glass(Shapes.capsule).padding(11.dp), contentAlignment = Alignment.Center) {
+                        SettingsIcon(Palette.textBright, size = 18.dp)
+                    }
+                }
             }
             AnimatedVisibility(
                 visibleMonth.label.isNotEmpty(),
@@ -1728,7 +1744,7 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
@@ -1759,7 +1775,6 @@ private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)
                         if (isAlbums) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current)
                     }
                 }
-                Box(Modifier.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
             }
         }
     }
@@ -1801,6 +1816,8 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit)
 
 // What the bottom bar is showing: the sections, a selection's actions, or the end of rearranging.
 private enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }
+
+private val SETTINGS_BLUR = 6.dp
 
 // The bottom bar swaps with a smaller pop than a single button, being wide.
 private val BAR_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0.8f)
