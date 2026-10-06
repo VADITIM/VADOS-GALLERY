@@ -1136,8 +1136,15 @@ private fun Library(viewModel: GalleryViewModel) {
                         if (isFolderLabelShown) lastFolderName = folderName.orEmpty()
                         val folderAccent = rememberOwnAccent(isFolderLabelShown)
                         AnimatedVisibility(isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            FadingOverflow(Modifier.padding(bottom = 8.dp).widthIn(max = FOLDER_LABEL_MAX_WIDTH).background(folderAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                BasicText(lastFolderName, style = Type.microLabel.copy(color = Palette.sunkenDeep), maxLines = 1, softWrap = false)
+                            // The pill grows and shrinks with the name as it types itself over.
+                            FadingOverflow(
+                                Modifier.padding(bottom = 8.dp)
+                                    .animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
+                                    .widthIn(max = FOLDER_LABEL_MAX_WIDTH)
+                                    .background(folderAccent, Shapes.capsule)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                            ) {
+                                TypewriterText(lastFolderName, style = Type.microLabel.copy(color = Palette.sunkenDeep))
                             }
                         }
                         // Empties the whole trash for good, so it waits for Confirm.
@@ -1942,7 +1949,7 @@ private fun TopRow(month: VisibleMonth, title: String?, selectedCount: Int, onBa
                 MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
                     Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        FadingOverflow { TypewriterText(lastLabel, style = Type.microLabel, isTypedIn = true) }
+                        FadingOverflow { TypewriterText(lastLabel, style = Type.microLabel.copy(color = LocalAccent.current), isTypedIn = true) }
                     }
                 }
                 Box(Modifier.weight(1f))

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -162,7 +163,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 SettingsHeader("Photos")
                 SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
                 SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
-                SettingsToggle("Folder label", Settings.folderLabel) { Settings.updateFolderLabel(it) }
+                SettingsChoice("Folder label", listOf("Top", "Bottom"), if (Settings.folderLabel) 1 else 0) { Settings.updateFolderLabel(it == 1) }
                 SettingsHeader("Backup")
                 SheetRow("Back up", onClick = onBackup)
                 SheetRow("Restore", onClick = onRestore)
@@ -394,6 +395,25 @@ private fun HeadersLayout(isOn: Boolean, groups: Set<DateGroup>) {
         }
     }
 }
+
+// A setting with a few named answers side by side, the chosen one lit as the layout buttons are.
+@Composable
+private fun SettingsChoice(label: String, options: List<String>, chosen: Int, onChoose: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().rowDivider().padding(horizontal = 20.dp, vertical = 13.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(label, style = Type.cardTitle)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.forEachIndexed { index, option ->
+                LayoutChip(option, isOn = index == chosen, isGreyed = false, modifier = Modifier.width(CHOICE_WIDTH)) { onChoose(index) }
+            }
+        }
+    }
+}
+
+private val CHOICE_WIDTH = 76.dp
 
 @Composable
 private fun LayoutChip(label: String, isOn: Boolean, isGreyed: Boolean, modifier: Modifier, onClick: () -> Unit) {

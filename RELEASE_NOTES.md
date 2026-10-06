@@ -1,4 +1,5 @@
-# v1.1.2
+# v1.1.3
 
-- Private's settings can show or hide Today's selection.
-- Today's selection no longer says "for you" or shows the emoji.
+- Folder label is now a Top or Bottom choice in Settings → General.
+- The top pill's month or folder name is in the section colour.
+- The bottom folder label types itself over when it changes, and its pill resizes smoothly.
