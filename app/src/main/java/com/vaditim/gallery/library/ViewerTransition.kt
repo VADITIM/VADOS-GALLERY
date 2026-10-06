@@ -12,6 +12,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Rect
 import com.vaditim.gallery.components.TileBounds
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.viewer.ViewerBar
 import com.vaditim.gallery.vas.Motion
 
 // The viewer growing out of the tile it was opened from and shrinking back into the tile of the photo it ends on.
@@ -33,6 +34,8 @@ class ViewerTransition {
     private var revealingId: Long? = null
     private val photoRatios = HashMap<Long, Float>()
     val progress = Animatable(0f)
+    // The open photo's buttons, which the library's nav changes into.
+    val bar = ViewerBar()
 
     // Anything short of full size is on its way to or from its tile, where the navigation lies in front of it.
     val isShrunk by derivedStateOf { progress.value * (1f - pull) < 1f }
@@ -66,6 +69,7 @@ class ViewerTransition {
             tile = TileBounds.of(opened?.id)
             ratio = ratioOf(opened)
             pull = 0f
+            bar.reset()
             revealingId = null
             shown = opening
             progress.snapTo(0f)

@@ -1,11 +1,15 @@
 package com.vaditim.gallery.library
 
-import androidx.compose.foundation.layout.size
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import com.vaditim.gallery.viewer.followingPull
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
@@ -64,6 +68,7 @@ import com.vaditim.gallery.components.rememberOwnAccent
 import com.vaditim.gallery.components.Section
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.LocalAccent
+import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.Motion
 import kotlinx.coroutines.delay
 import com.vaditim.gallery.vas.Palette
@@ -151,8 +156,23 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
             tween(Motion.STATE_MS, delayMillis = if (controller.shownBar(screen) == BottomBar.NAVIGATION) Motion.STATE_MS else 0),
             label = "nav-wash",
         )
-        // One glass pill for every kind of bar: the old buttons pop away and the new ones pop in, each on its own, while the pill's width follows from one to the other.
-        Box(Modifier.glass(Shapes.capsule)) {
+        // The open photo's buttons, kept while they pop away after it has closed.
+        val viewerBar = controller.viewer.bar
+        val viewerActions = viewerBar.actions
+        // A tap on the open photo sends the bar off the bottom edge and back, a swipe on it shrinks the bar with the finger.
+        AnimatedVisibility(
+            !(controller.viewer.isOpen && !viewerBar.isShown),
+            modifier = Modifier.followingPull(viewerBar),
+            enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, Motion.CHROME_STAGGER_MS, Motion.powerTwoOut)) +
+                slideInVertically(tween(Motion.OVERLAY_ENTER_MS, Motion.CHROME_STAGGER_MS, Motion.backOut)) { it },
+            exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, Motion.CHROME_STAGGER_MS, Motion.powerTwoIn)) +
+                slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, Motion.CHROME_STAGGER_MS, Motion.powerTwoIn)) { it },
+        ) {
+        // One glass pill for every kind of bar, the open photo's too: the old buttons pop away and the new ones pop in, each on its own, while the pill's width follows from one to the other.
+        val isOverPhoto = controller.viewer.shown != null && viewerBar.hazeState != null
+        val glassHaze = if (isOverPhoto) viewerBar.hazeState else LocalHazeState.current
+        CompositionLocalProvider(LocalHazeState provides glassHaze) {
+        Box(Modifier.glass(Shapes.capsule, if (isOverPhoto) Palette.viewerGround else Palette.ground)) {
             AnimatedContent(
                 targetState = controller.shownBar(screen),
                 transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
@@ -168,7 +188,7 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                         BottomBar.COVERS -> CoverActions(controller, screen)
                         BottomBar.PHOTOS -> PhotoActions(controller, content, screen)
                         // The empty pill keeps the nav's size, so the viewer's bar grows out of it and the nav's buttons pop back into it.
-                        BottomBar.HIDDEN -> with(LocalDensity.current) { Box(Modifier.size(metrics.navigationWidth.toDp(), metrics.navigationHeight.toDp())) }
+                        BottomBar.VIEWER -> viewerActions?.invoke()
                         BottomBar.NAVIGATION -> SectionBar(
                             hasGlass = false,
                             itemModifier = pop,
@@ -187,6 +207,8 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                     }
                 }
             }
+        }
+        }
         }
     }
 }
@@ -344,5 +366,5 @@ private fun PhotoCount(monthCount: Int, total: Int, modifier: Modifier = Modifie
 // Every digit as wide as every other, so a number's width depends only on how many digits it has.
 private val COUNT_STYLE = Type.microLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp, fontFeatureSettings = "tnum")
 
-// With a photo open the bar is gone, its buttons popping away as they do when a selection begins, and back in when the photo closes.
-internal fun LibraryController.shownBar(screen: LibraryScreen): BottomBar = if (viewer.isOpen) BottomBar.HIDDEN else screen.bottomBar
+// With a photo open the bar holds the photo's buttons, changing into them as it does when a selection begins, and back when the photo closes.
+internal fun LibraryController.shownBar(screen: LibraryScreen): BottomBar = if (viewer.isOpen) BottomBar.VIEWER else screen.bottomBar

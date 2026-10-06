@@ -201,7 +201,8 @@ private fun Library(viewModel: GalleryViewModel) {
                 )
             }
             FavoritesCorner(controller, screen, visibleMonth, metrics)
-            BottomControls(controller, content, screen, metrics, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp))
+            // Over the open photo, since the nav is its bar too.
+            BottomControls(controller, content, screen, metrics, Modifier.align(Alignment.BottomCenter).zIndex(if (isViewerUp) 0.5f else 0f).navigationBarsPadding().padding(bottom = 14.dp))
 
             LibrarySheetHost(controller, content, screen)
             SettingsSheet(

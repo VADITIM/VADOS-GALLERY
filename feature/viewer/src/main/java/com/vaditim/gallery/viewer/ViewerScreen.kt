@@ -72,6 +72,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.media3.exoplayer.SeekParameters
 import com.vaditim.gallery.components.AlbumPickerSheet
 import com.vaditim.gallery.components.CloseIcon
@@ -128,11 +132,9 @@ private const val MAX_ZOOM = 5f
 // A pull of this share of the screen height has shrunk the viewer all the way down to its tile.
 private const val PULL_RANGE = 0.4f
 // The share of the full pull by which the buttons have left completely.
-private const val CHROME_PULL_SHARE = 0.35f
+internal const val CHROME_PULL_SHARE = 0.35f
 // A swipe up of this share of the screen height has raised the details all the way.
 private const val LIFT_RANGE = 0.3f
-// How many of its own heights a button travels on its way out.
-private const val CHROME_TRAVEL = 1.6f
 private const val HOLD_SPEED = 1.5f
 private const val REVERSE_STEP_MS = 120L
 private const val MIN_HOLD_SPEED = 0.25f
@@ -162,6 +164,8 @@ fun BoxScope.ViewerScreen(
     isChromeAllowed: Boolean = true,
     // The size of the nav the action bar takes the place of, so it grows out of it.
     barStartSize: IntSize = IntSize.Zero,
+    // The library's nav, which takes the viewer's buttons in place of a bar of the viewer's own.
+    bar: ViewerBar? = null,
     photoModifier: Modifier = Modifier,
     // While it grows out of or shrinks back into its tile, the photo passes behind the navigation; open, it covers it.
     isBehindNavigation: Boolean = false,
@@ -210,14 +214,21 @@ fun BoxScope.ViewerScreen(
                 ViewerPage(
                     items[page],
                     video = if (page == pagerState.currentPage) video else null,
-                    onTap = { isChromeVisible = !isChromeVisible },
+                    onTap = {
+                        isChromeVisible = !isChromeVisible
+                        bar?.isShown = isChromeVisible
+                    },
                     onSwipeDown = onClose,
                     onSwipeUp = { overlay = Overlay.DETAILS },
                     onPull = { fraction ->
                         pull = fraction
+                        bar?.pull = maxOf(pull, lift)
                         onPull(fraction)
                     },
-                    onLift = { lift = it },
+                    onLift = {
+                        lift = it
+                        bar?.pull = maxOf(pull, lift)
+                    },
                     onRatio = { onPhotoRatio(items[page].id, it) },
                 )
             }
@@ -249,14 +260,8 @@ fun BoxScope.ViewerScreen(
                 ) {
                 ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 2, pull = { maxOf(pull, lift) }) { ConfirmPill(pendingDelete, onDone = { pendingDelete = null }) }
                 if (video != null) ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
-                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }, isPoppedWhole = false) {
-                // The pill grows out of the nav it takes the place of, while its buttons pop in one by one, as the bar does when a selection begins.
-                val morph = transition.animateFloat(
-                    transitionSpec = { tween(if (targetState == EnterExitState.Visible) Motion.STATE_MS * 2 else Motion.STATE_MS, easing = Motion.powerThreeInOut) },
-                    label = "bar-morph",
-                ) { if (it == EnterExitState.Visible) 1f else 0f }
-                MorphingPill(barStartSize, { morph.value }) {
-                CompositionLocalProvider(LocalButtonPop provides Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT)) {
+                // With a library to sit in, the buttons go into its one nav, which changes into them; alone, the viewer keeps a bar of its own.
+                val actionRow: @Composable () -> Unit = {
                 Row(Modifier.padding(5.dp)) {
                     IconButton(onClick = { actions.share(listOf(current)) }) { ShareIcon(Palette.textBody) }
                     if (isTrash) {
@@ -286,10 +291,31 @@ fun BoxScope.ViewerScreen(
                     }
                 }
                 }
+                SideEffect {
+                    bar?.actions = actionRow
+                    bar?.hazeState = hazeState
+                }
+                if (bar != null) {
+                    // Holds the nav's room, so what stands above the buttons stands above the nav.
+                    Spacer(Modifier.height(with(LocalDensity.current) { barStartSize.height.toDp() }))
+                } else {
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }, isPoppedWhole = false) {
+                // The pill grows out of the nav it takes the place of, while its buttons pop in one by one, as the bar does when a selection begins.
+                val morph = transition.animateFloat(
+                    transitionSpec = { tween(if (targetState == EnterExitState.Visible) Motion.STATE_MS * 2 else Motion.STATE_MS, easing = Motion.powerThreeInOut) },
+                    label = "bar-morph",
+                ) { if (it == EnterExitState.Visible) 1f else 0f }
+                MorphingPill(barStartSize, { morph.value }) {
+                CompositionLocalProvider(LocalButtonPop provides Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT)) {
+                actionRow()
+                }
+                }
                 }
                 }
                 }
 
+            // Above the library's nav, which stands over the photo.
+            Box(Modifier.matchParentSize().zIndex(1f)) {
             OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
                 if (isPrivate) {
                     SplitSheetRow("Move to group", icon = { MoveIcon(it) }, onClick = { overlay = Overlay.HIDE }, sideIcon = { LockIcon(it, isOpen = true) }, onSide = { overlay = Overlay.MOVE })
@@ -403,6 +429,7 @@ fun BoxScope.ViewerScreen(
             }
 
             cropping?.let { CropScreen(it, actions, onClose = { cropping = null }) }
+            }
         }
     }
 }
@@ -655,11 +682,11 @@ private fun ChromePiece(isAllowed: Boolean, isShown: Boolean, isFromTop: Boolean
     AnimatedVisibility(opened, enter = EnterTransition.None, exit = ExitTransition.None) {
         val opening = this
         AnimatedVisibility(
-            // Follows the pull frame by frame, so the buttons move exactly as far as the finger has.
+            // Follows the pull frame by frame, so the buttons shrink exactly as far as the finger has gone.
             modifier = Modifier.graphicsLayer {
                 val out = (pull() / CHROME_PULL_SHARE).coerceIn(0f, 1f)
-                translationY = (if (isFromTop) -1f else 1f) * size.height * CHROME_TRAVEL * out
-                alpha = 1f - out
+                scaleX = 1f - out
+                scaleY = 1f - out
             },
             visible = isShown,
             enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.powerTwoOut)) +

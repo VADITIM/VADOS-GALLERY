@@ -1,3 +1,5 @@
-# 1.1.42
+# 1.1.43
 
-- Opening a photo now really swaps the bars like a selection does: the nav's buttons pop out, then the photo's bar grows out of the nav and its buttons pop in one by one, with the date and a video's timeline popping in too. Before, the photo's buttons appeared all at once.
+- There is one nav: opening a photo changes it into the photo's buttons, its width and icons changing the way they do when a selection begins, and back when the photo closes.
+- Only a tap on the open photo slides its buttons away and back.
+- Swiping down on a photo shrinks its buttons with the finger instead of moving them down.

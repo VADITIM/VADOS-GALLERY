@@ -109,6 +109,7 @@ internal fun BoxScope.ViewerOverlay(controller: LibraryController, content: Libr
         // Allowed from the moment it opens; the buttons pop in once the library's have popped away.
         isChromeAllowed = transition.isOpen,
         barStartSize = IntSize(metrics.navigationWidth, metrics.navigationHeight),
+        bar = transition.bar,
         isBehindNavigation = transition.isShrunk,
         items = content.itemsFor(request.source),
         startIndex = request.startIndex,

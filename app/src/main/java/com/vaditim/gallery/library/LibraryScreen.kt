@@ -180,4 +180,4 @@ class LibraryScreen(
 }
 
 // What the bottom bar is showing: the sections, a selection's actions, the end of rearranging, or nothing while a photo is open.
-enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING, HIDDEN }
+enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING, VIEWER }
