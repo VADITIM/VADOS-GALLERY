@@ -54,6 +54,7 @@ import com.vaditim.gallery.components.ReviewIcon
 import com.vaditim.gallery.components.SheetHeader
 import com.vaditim.gallery.components.SheetRow
 import com.vaditim.gallery.components.rowDivider
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.DateGroup
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.settings.SettingsView
@@ -145,8 +146,8 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                     SettingsHeader("Albums")
                     // Grouped albums lie as rows, so the column count only counts with grouping off.
                     val canGroup = Settings.view.canGroup
-                    if (canGroup) SettingsToggle("Grouped albums", Settings.groupedAlbums) { Settings.updateGroupedAlbums(it) }
-                    SettingsSteps("Album columns", Settings.MIN_COLUMNS..Settings.MAX_ALBUM_COLUMNS, Settings.albumColumns, isEnabled = !(canGroup && Settings.groupedAlbums)) {
+                    if (canGroup) SettingsToggle("Grouped albums", Settings.groupedAlbumsInView) { Settings.updateGroupedAlbums(it) }
+                    SettingsSteps("Album columns", Settings.MIN_COLUMNS..Settings.MAX_ALBUM_COLUMNS, Settings.albumColumnsInView, isEnabled = !(canGroup && Settings.groupedAlbumsInView)) {
                         Settings.updateAlbumColumns(it)
                     }
                 } else {
@@ -155,7 +156,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                         Settings.updateDefaultColumns(it)
                         onColumnsChanged(it)
                     }
-                    HeadersLayout(Settings.headers, Settings.dateGroups)
+                    HeadersLayout(Settings.headersInView, Settings.dateGroupsInView)
                 }
                 if (Settings.view == SettingsView.PRIVATE) {
                     SettingsHeader("Private")
@@ -166,7 +167,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 SettingsHeader("Videos")
                 SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
                 SettingsHeader("Photos")
-                SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
+                SettingsToggle("Stack similar shots", Settings.stackSimilarInView) { Settings.updateStackSimilar(it) }
                 SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
                 SettingsChoice("Folder label", listOf("Top", "Bottom"), if (Settings.folderLabel) 1 else 0) { Settings.updateFolderLabel(it == 1) }
                 SettingsHeader("Backup")

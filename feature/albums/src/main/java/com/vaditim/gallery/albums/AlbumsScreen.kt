@@ -63,6 +63,7 @@ import com.vaditim.gallery.components.stackShade
 import com.vaditim.gallery.components.stackShift
 import com.vaditim.gallery.components.stackTilt
 import com.vaditim.gallery.media.Album
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.AlbumStack
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.Haptics
@@ -109,7 +110,7 @@ private fun entriesOf(albums: List<Album>, stacks: List<AlbumStack>): List<Album
 fun AlbumsScreen(
     albums: List<Album>,
     title: String = "Albums",
-    stacks: List<AlbumStack> = if (Settings.groupedAlbumsIn(currentSettingsView())) Settings.albumStacks else emptyList(),
+    stacks: List<AlbumStack> = if (Settings.groupedAlbumsIn(currentSettingsView())) AlbumArrangement.albumStacks.all else emptyList(),
     state: LazyGridState,
     onOpen: (Album) -> Unit,
     onLongPress: (Album) -> Unit,

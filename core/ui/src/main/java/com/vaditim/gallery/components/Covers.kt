@@ -55,6 +55,7 @@ import coil3.request.ImageRequest
 import coil3.video.VideoFrameDecoder
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.Thumbnail
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.settings.SettingsView
 import com.vaditim.gallery.vas.LocalAccent
@@ -266,17 +267,17 @@ private fun Modifier.pinchAlbumColumns(haptic: HapticFeedback): Modifier = point
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             // Grouped albums lie as rows, so there is no column count to pinch.
-            if (event.changes.count { it.pressed } >= 2 && !(Settings.groupedAlbums && Settings.view.canGroup)) {
+            if (event.changes.count { it.pressed } >= 2 && !(Settings.groupedAlbumsInView && Settings.view.canGroup)) {
                 zoom *= event.calculateZoom()
-                val before = Settings.albumColumns
+                val before = Settings.albumColumnsInView
                 if (zoom > PINCH_STEP) {
-                    Settings.updateAlbumColumns(Settings.albumColumns - 1)
+                    Settings.updateAlbumColumns(Settings.albumColumnsInView - 1)
                     zoom = 1f
                 } else if (zoom < 1f / PINCH_STEP) {
-                    Settings.updateAlbumColumns(Settings.albumColumns + 1)
+                    Settings.updateAlbumColumns(Settings.albumColumnsInView + 1)
                     zoom = 1f
                 }
-                if (Settings.albumColumns != before) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                if (Settings.albumColumnsInView != before) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 event.changes.forEach { it.consume() }
             }
         } while (event.changes.any { it.pressed })

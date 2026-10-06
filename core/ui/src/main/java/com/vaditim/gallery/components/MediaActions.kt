@@ -28,6 +28,7 @@ import com.vaditim.gallery.media.MediaEditor
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
 import com.vaditim.gallery.media.SamsungTrash
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.Haptics
 import com.vaditim.gallery.vas.Motion
@@ -206,7 +207,7 @@ class MediaActions(
 
     // Renaming an album changes only the name shown: the folder stays as it is, so the camera and other apps keep saving where they always did.
     fun renameAlbum(album: Album, newName: String) {
-        Settings.updateAlbumName(album.relativePath, album.folderName, newName)
+        AlbumArrangement.albumNames.rename(album.relativePath, album.folderName, newName)
     }
 
     fun renameGroup(group: PrivateGroup, newName: String) =

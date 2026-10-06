@@ -170,6 +170,7 @@ import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.newAlbumPath
 import com.vaditim.gallery.picker.PickerScreen
 import com.vaditim.gallery.review.ReviewScreen
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.AlbumStack
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.settings.SettingsView
@@ -304,8 +305,8 @@ private fun Library(viewModel: GalleryViewModel) {
     val library by viewModel.library.collectAsStateWithLifecycle()
     val folderAlbums by viewModel.albums.collectAsStateWithLifecycle()
     // Renamed albums show the name given to them; the folder underneath keeps its own.
-    val albums = remember(folderAlbums, Settings.albumNames) {
-        val names = Settings.albumNames
+    val albums = remember(folderAlbums, AlbumArrangement.albumNames.byPath) {
+        val names = AlbumArrangement.albumNames.byPath
         if (names.isEmpty()) folderAlbums else folderAlbums.map { album -> names[album.relativePath]?.let { album.copy(name = it) } ?: album }
     }
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
@@ -369,9 +370,9 @@ private fun Library(viewModel: GalleryViewModel) {
     // Makes the group from New group with the albums ticked for it, taking each out of any group it was in.
     fun createNewGroup() {
         if (isNewGroupInFavorites) {
-            Settings.updateFavoriteStacks(newGroupKeys.fold(Settings.favoriteStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
+            AlbumArrangement.favoriteStacks.update(newGroupKeys.fold(AlbumArrangement.favoriteStacks.all) { stacks, key -> stacks.withAlbum(key, newGroupName) })
         } else {
-            Settings.updateAlbumStacks(newGroupKeys.fold(Settings.albumStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
+            AlbumArrangement.albumStacks.update(newGroupKeys.fold(AlbumArrangement.albumStacks.all) { stacks, key -> stacks.withAlbum(key, newGroupName) })
         }
         sheet = AppSheet.NONE
     }
@@ -420,12 +421,12 @@ private fun Library(viewModel: GalleryViewModel) {
     var lastCrash by remember { mutableStateOf(CrashLog.read(context)) }
     val haptic = LocalHapticFeedback.current
     // Albums in the order the user dragged them into; ones never arranged keep the default order after them.
-    val arrangedAlbums = remember(albums, Settings.albumOrder) {
-        val order = Settings.albumOrder
+    val arrangedAlbums = remember(albums, AlbumArrangement.albumOrder.names) {
+        val order = AlbumArrangement.albumOrder.names
         albums.sortedBy { album -> order.indexOf(album.relativePath).let { if (it < 0) Int.MAX_VALUE else it } }
     }
-    val arrangedGroups = remember(privateContents.groups, Settings.groupOrder) {
-        val order = Settings.groupOrder
+    val arrangedGroups = remember(privateContents.groups, AlbumArrangement.groupOrder.names) {
+        val order = AlbumArrangement.groupOrder.names
         privateContents.groups.sortedBy { group -> order.indexOf(group.name).let { if (it < 0) Int.MAX_VALUE else it } }
     }
     // Album groups left open stay open while an album from one of them is looked at.
@@ -440,9 +441,9 @@ private fun Library(viewModel: GalleryViewModel) {
     val hazeState = rememberHazeState()
 
     // Favorites albums hold favourites only: a photo unfavourited leaves them, and an album left empty is not shown. The name is the album's path, so groups and order hold names.
-    val favoriteAlbumViews = remember(favorites, Settings.favoriteAlbums, Settings.favoriteAlbumOrder, covers) {
-        val order = Settings.favoriteAlbumOrder
-        Settings.favoriteAlbums.mapNotNull { album ->
+    val favoriteAlbumViews = remember(favorites, AlbumArrangement.favoriteAlbums.all, AlbumArrangement.favoriteAlbumOrder.names, covers) {
+        val order = AlbumArrangement.favoriteAlbumOrder.names
+        AlbumArrangement.favoriteAlbums.all.mapNotNull { album ->
             val ids = album.ids.toSet()
             val items = favorites.filter { it.id in ids }
             val id = album.name.hashCode().toLong()
@@ -807,7 +808,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             },
                             albums = arrangedAlbums,
                             isRearranging = isRearranging,
-                            onArrange = { Settings.updateAlbumOrder(it) },
+                            onArrange = { AlbumArrangement.albumOrder.update(it) },
                             selectedPaths = selectedCovers,
                             onToggle = { picked -> toggleCovers(picked.map { it.relativePath }) },
                             state = albumsListState,
@@ -881,7 +882,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             onMove = { from, to ->
                                 val names = arrangedGroups.map { it.name }.toMutableList()
                                 names.add(to, names.removeAt(from))
-                                Settings.updateGroupOrder(names)
+                                AlbumArrangement.groupOrder.update(names)
                             },
                             favorites = privateContents.favorites,
                             onOpen = { albumsPlace = AlbumsPlace.PrivateFolder(it.name) },
@@ -929,7 +930,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             albums = favoriteAlbumViews,
                             title = "Favorites",
                             isAccented = true,
-                            stacks = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) Settings.favoriteStacks else emptyList(),
+                            stacks = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) AlbumArrangement.favoriteStacks.all else emptyList(),
                             openStacks = openFavoriteStacks,
                             onOpenStacksChange = { opened ->
                                 // A group closing lets go of the selection, so no album stays picked out of sight.
@@ -937,7 +938,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 openFavoriteStacks = opened
                             },
                             isRearranging = isRearranging,
-                            onArrange = { Settings.updateFavoriteAlbumOrder(it) },
+                            onArrange = { AlbumArrangement.favoriteAlbumOrder.update(it) },
                             selectedPaths = selectedCovers,
                             onToggle = { picked -> toggleCovers(picked.map { it.relativePath }) },
                             state = favoriteAlbumsListState,
@@ -1167,14 +1168,14 @@ private fun Library(viewModel: GalleryViewModel) {
                             }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
                         } else {
                             val isFavorites = section == Section.FAVORITES
-                            if (Settings.groupedAlbums) IconButton(onClick = { sheet = if (isFavorites) AppSheet.FAVORITE_ALBUM_STACK else AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
+                            if (Settings.groupedAlbumsInView) IconButton(onClick = { sheet = if (isFavorites) AppSheet.FAVORITE_ALBUM_STACK else AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
                             // Only the selected albums that sit in a group can leave one; a Favorites album is held by its name, which is its path.
-                            val stacks = if (isFavorites) Settings.favoriteStacks else Settings.albumStacks
+                            val stacks = if (isFavorites) AlbumArrangement.favoriteStacks.all else AlbumArrangement.albumStacks.all
                             val groupedPaths = selectedAlbums.map { it.relativePath }.filter { path -> stacks.any { path in it.paths } }
-                            if (Settings.groupedAlbums && groupedPaths.isNotEmpty()) {
+                            if (Settings.groupedAlbumsInView && groupedPaths.isNotEmpty()) {
                                 IconButton(onClick = {
                                     val ungrouped = groupedPaths.fold(stacks) { remaining, path -> remaining.withoutAlbum(path) }
-                                    if (isFavorites) Settings.updateFavoriteStacks(ungrouped) else Settings.updateAlbumStacks(ungrouped)
+                                    if (isFavorites) AlbumArrangement.favoriteStacks.update(ungrouped) else AlbumArrangement.albumStacks.update(ungrouped)
                                     clearSelection()
                                 }) { CloseIcon(Palette.textBody) }
                             }
@@ -1184,7 +1185,7 @@ private fun Library(viewModel: GalleryViewModel) {
                                 pendingDelete = {
                                     if (isFavorites) {
                                         val names = selectedAlbums.map { it.name }.toSet()
-                                        Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name !in names })
+                                        AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.filter { it.name !in names })
                                     } else {
                                         actions.trash(selectedAlbums.flatMap { it.items })
                                     }
@@ -1367,11 +1368,11 @@ private fun Library(viewModel: GalleryViewModel) {
                         isRearranging = true
                         sheet = AppSheet.NONE
                     },
-                    group = if (Settings.groupedAlbums) GroupRow(
-                        name = Settings.albumStacks.firstOrNull { it.paths.contains(albumPath) }?.name,
+                    group = if (Settings.groupedAlbumsInView) GroupRow(
+                        name = AlbumArrangement.albumStacks.all.firstOrNull { it.paths.contains(albumPath) }?.name,
                         onMove = { sheet = AppSheet.ALBUM_STACK },
                         onRemove = {
-                            Settings.updateAlbumStacks(Settings.albumStacks.withoutAlbum(albumPath))
+                            AlbumArrangement.albumStacks.update(AlbumArrangement.albumStacks.all.withoutAlbum(albumPath))
                             sheet = AppSheet.NONE
                         },
                     ) else null,
@@ -1391,7 +1392,7 @@ private fun Library(viewModel: GalleryViewModel) {
 
             // A long-pressed album group. Ungrouping only lays its albums back into the grid; no photo is touched.
             OverlaySheet(visible = sheet == AppSheet.STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
-                val stackPaths = Settings.albumStacks.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
+                val stackPaths = AlbumArrangement.albumStacks.all.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
                 GroupMenuRows(
                     // Deleting a group of albums sends their photos to the trash.
                     onDelete = {
@@ -1400,7 +1401,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         sheet = AppSheet.NONE
                         askDeleteGroup(name, photos.size) {
                             if (photos.isNotEmpty()) actions.trash(photos)
-                            Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != name })
+                            AlbumArrangement.albumStacks.update(AlbumArrangement.albumStacks.all.filter { it.name != name })
                         }
                     },
                     onRename = { sheet = AppSheet.STACK_RENAME },
@@ -1414,7 +1415,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
                     groups = {
                         SheetRow("Ungroup all", trailing = stackPaths.size.toString(), icon = { CloseIcon(it) }) {
-                            Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != sheetStack })
+                            AlbumArrangement.albumStacks.update(AlbumArrangement.albumStacks.all.filter { it.name != sheetStack })
                             sheet = AppSheet.NONE
                         }
                     },
@@ -1423,9 +1424,9 @@ private fun Library(viewModel: GalleryViewModel) {
             StackPickerSheet(
                 visible = sheet == AppSheet.ALBUM_STACK,
                 label = "MOVE $targetAlbumsLabel TO",
-                stacks = Settings.albumStacks.filter { stack -> !targetAlbums.all { stack.paths.contains(it.relativePath) } },
+                stacks = AlbumArrangement.albumStacks.all.filter { stack -> !targetAlbums.all { stack.paths.contains(it.relativePath) } },
                 onPick = { name ->
-                    Settings.updateAlbumStacks(targetAlbums.fold(Settings.albumStacks) { stacks, album -> stacks.withAlbum(album.relativePath, name) })
+                    AlbumArrangement.albumStacks.update(targetAlbums.fold(AlbumArrangement.albumStacks.all) { stacks, album -> stacks.withAlbum(album.relativePath, name) })
                     if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                 },
                 onNewStack = { sheet = AppSheet.ALBUM_NEW_STACK },
@@ -1439,7 +1440,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 choices = favoriteAlbumViews.filter { it.name != openFavorite?.name }.map { it.name to it.items.size },
                 newLabel = "+ New album",
                 onPick = { name ->
-                    Settings.updateFavoriteAlbums(Settings.favoriteAlbums.withPhotos(name, selectedItems.map { it.id }))
+                    AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.withPhotos(name, selectedItems.map { it.id }))
                     clearSelection()
                 },
                 onNew = { sheet = AppSheet.FAVORITE_SELECTION_NEW_ALBUM },
@@ -1459,10 +1460,10 @@ private fun Library(viewModel: GalleryViewModel) {
                         sheet = AppSheet.NONE
                     },
                     group = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) GroupRow(
-                        name = Settings.favoriteStacks.firstOrNull { it.paths.contains(albumName) }?.name,
+                        name = AlbumArrangement.favoriteStacks.all.firstOrNull { it.paths.contains(albumName) }?.name,
                         onMove = { sheet = AppSheet.FAVORITE_ALBUM_STACK },
                         onRemove = {
-                            Settings.updateFavoriteStacks(Settings.favoriteStacks.withoutAlbum(albumName))
+                            AlbumArrangement.favoriteStacks.update(AlbumArrangement.favoriteStacks.all.withoutAlbum(albumName))
                             sheet = AppSheet.NONE
                         },
                     ) else null,
@@ -1473,12 +1474,12 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
                     onDelete = {
                         sheet = AppSheet.NONE
-                        pendingDelete = { Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name != albumName }) }
+                        pendingDelete = { AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.filter { it.name != albumName }) }
                     },
                 )
             }
             OverlaySheet(visible = sheet == AppSheet.FAVORITE_STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
-                val stackNames = Settings.favoriteStacks.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
+                val stackNames = AlbumArrangement.favoriteStacks.all.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
                 GroupMenuRows(
                     // Deleting a group of Favorites albums lets the albums go; their photos stay favourites.
                     onDelete = {
@@ -1486,8 +1487,8 @@ private fun Library(viewModel: GalleryViewModel) {
                         val photoCount = favoriteAlbumViews.filter { it.name in stackNames }.sumOf { it.items.size }
                         sheet = AppSheet.NONE
                         askDeleteGroup(name, photoCount) {
-                            Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name !in stackNames })
-                            Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != name })
+                            AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.filter { it.name !in stackNames })
+                            AlbumArrangement.favoriteStacks.update(AlbumArrangement.favoriteStacks.all.filter { it.name != name })
                         }
                     },
                     onRename = { sheet = AppSheet.FAVORITE_STACK_RENAME },
@@ -1501,7 +1502,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
                     groups = {
                         SheetRow("Ungroup all", trailing = stackNames.size.toString(), icon = { CloseIcon(it) }) {
-                            Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != sheetStack })
+                            AlbumArrangement.favoriteStacks.update(AlbumArrangement.favoriteStacks.all.filter { it.name != sheetStack })
                             sheet = AppSheet.NONE
                         }
                     },
@@ -1510,9 +1511,9 @@ private fun Library(viewModel: GalleryViewModel) {
             StackPickerSheet(
                 visible = sheet == AppSheet.FAVORITE_ALBUM_STACK,
                 label = "MOVE $targetAlbumsLabel TO",
-                stacks = Settings.favoriteStacks.filter { stack -> !targetAlbums.all { stack.paths.contains(it.name) } },
+                stacks = AlbumArrangement.favoriteStacks.all.filter { stack -> !targetAlbums.all { stack.paths.contains(it.name) } },
                 onPick = { name ->
-                    Settings.updateFavoriteStacks(targetAlbums.fold(Settings.favoriteStacks) { stacks, album -> stacks.withAlbum(album.name, name) })
+                    AlbumArrangement.favoriteStacks.update(targetAlbums.fold(AlbumArrangement.favoriteStacks.all) { stacks, album -> stacks.withAlbum(album.name, name) })
                     if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                 },
                 onNewStack = { sheet = AppSheet.FAVORITE_ALBUM_NEW_STACK },
@@ -1531,13 +1532,13 @@ private fun Library(viewModel: GalleryViewModel) {
                 onCreate = { keys ->
                     newGroupKeys = keys
                     // An album already in another group would leave it, so that is asked first.
-                    val stacks = if (isNewGroupInFavorites) Settings.favoriteStacks else Settings.albumStacks
+                    val stacks = if (isNewGroupInFavorites) AlbumArrangement.favoriteStacks.all else AlbumArrangement.albumStacks.all
                     if (stacks.any { stack -> stack.name != newGroupName && stack.paths.any { it in keys } }) sheet = AppSheet.NEW_GROUP_MOVE_CHECK else createNewGroup()
                 },
                 onDismiss = { sheet = AppSheet.NONE },
             )
             run {
-                val stacks = if (isNewGroupInFavorites) Settings.favoriteStacks else Settings.albumStacks
+                val stacks = if (isNewGroupInFavorites) AlbumArrangement.favoriteStacks.all else AlbumArrangement.albumStacks.all
                 val elsewhere = stacks.filter { stack -> stack.name != newGroupName && stack.paths.any { it in newGroupKeys } }
                 val movedCount = elsewhere.sumOf { stack -> stack.paths.count { it in newGroupKeys } }
                 OverlaySheet(
@@ -1705,7 +1706,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     action = "RENAME",
                     initialName = sheetStack.orEmpty(),
                     onConfirm = { name ->
-                        sheetStack?.let { Settings.updateAlbumStacks(Settings.albumStacks.renamed(it, name)) }
+                        sheetStack?.let { AlbumArrangement.albumStacks.update(AlbumArrangement.albumStacks.all.renamed(it, name)) }
                         sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
@@ -1714,7 +1715,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     label = "NEW GROUP",
                     action = "CREATE",
                     onConfirm = { name ->
-                        Settings.updateAlbumStacks(targetAlbums.fold(Settings.albumStacks) { stacks, album -> stacks.withAlbum(album.relativePath, name) })
+                        AlbumArrangement.albumStacks.update(targetAlbums.fold(AlbumArrangement.albumStacks.all) { stacks, album -> stacks.withAlbum(album.relativePath, name) })
                         if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
@@ -1732,7 +1733,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     label = "NEW ALBUM",
                     action = "ADD HERE",
                     onConfirm = { name ->
-                        Settings.updateFavoriteAlbums(Settings.favoriteAlbums.withPhotos(name, selectedItems.map { it.id }))
+                        AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.withPhotos(name, selectedItems.map { it.id }))
                         clearSelection()
                     },
                     onDismiss = { sheet = AppSheet.NONE },
@@ -1745,10 +1746,10 @@ private fun Library(viewModel: GalleryViewModel) {
                         sheetFavoriteAlbum?.let { old ->
                             val new = AlbumStack.cleanName(name)
                             if (new.isNotEmpty() && new != old) {
-                                Settings.updateFavoriteAlbums(Settings.favoriteAlbums.renamedAlbum(old, new))
+                                AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.renamedAlbum(old, new))
                                 // The album's place in its group and in the order follow the new name.
-                                Settings.updateFavoriteStacks(Settings.favoriteStacks.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }.distinct()) })
-                                Settings.updateFavoriteAlbumOrder(Settings.favoriteAlbumOrder.map { if (it == old) new else it }.distinct())
+                                AlbumArrangement.favoriteStacks.update(AlbumArrangement.favoriteStacks.all.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }.distinct()) })
+                                AlbumArrangement.favoriteAlbumOrder.update(AlbumArrangement.favoriteAlbumOrder.names.map { if (it == old) new else it }.distinct())
                                 viewModel.moveAlbumCover(old.hashCode().toLong(), new.hashCode().toLong())
                                 if (openFavoriteAlbum == old) openFavoriteAlbum = new
                             }
@@ -1762,7 +1763,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     action = "RENAME",
                     initialName = sheetStack.orEmpty(),
                     onConfirm = { name ->
-                        sheetStack?.let { Settings.updateFavoriteStacks(Settings.favoriteStacks.renamed(it, name)) }
+                        sheetStack?.let { AlbumArrangement.favoriteStacks.update(AlbumArrangement.favoriteStacks.all.renamed(it, name)) }
                         sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
@@ -1781,7 +1782,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     label = "NEW GROUP",
                     action = "CREATE",
                     onConfirm = { name ->
-                        Settings.updateFavoriteStacks(targetAlbums.fold(Settings.favoriteStacks) { stacks, album -> stacks.withAlbum(album.name, name) })
+                        AlbumArrangement.favoriteStacks.update(targetAlbums.fold(AlbumArrangement.favoriteStacks.all) { stacks, album -> stacks.withAlbum(album.name, name) })
                         if (isSelectingCovers) clearSelection() else sheet = AppSheet.NONE
                     },
                     onDismiss = { sheet = AppSheet.NONE },
@@ -1859,13 +1860,13 @@ private fun Library(viewModel: GalleryViewModel) {
 
             picker?.let { target ->
                 // Photos already in this album, or in any album sorted into a group (any Favorites album for a Favorites album), by the album's name; they are still offered, marked, and adding them asks first.
-                val addedTo: Map<Long, String> = remember(target, albums, Settings.albumStacks, Settings.favoriteAlbums) {
+                val addedTo: Map<Long, String> = remember(target, albums, AlbumArrangement.albumStacks.all, AlbumArrangement.favoriteAlbums.all) {
                     when (target) {
                         is PickerTarget.IntoAlbum -> {
-                            val groupedPaths = if (Settings.groupedAlbumsIn(SettingsView.ALBUMS)) Settings.albumStacks.flatMap { it.paths }.toSet() else emptySet()
+                            val groupedPaths = if (Settings.groupedAlbumsIn(SettingsView.ALBUMS)) AlbumArrangement.albumStacks.all.flatMap { it.paths }.toSet() else emptySet()
                             albums.filter { it.relativePath == target.relativePath || it.relativePath in groupedPaths }.flatMap { album -> album.items.map { it.id to album.name } }.toMap()
                         }
-                        is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.flatMap { album -> album.ids.map { it to album.name } }.toMap()
+                        is PickerTarget.IntoFavoriteAlbum -> AlbumArrangement.favoriteAlbums.all.flatMap { album -> album.ids.map { it to album.name } }.toMap()
                         is PickerTarget.IntoGroup -> emptyMap()
                     }
                 }
@@ -1879,7 +1880,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         when (target) {
                             is PickerTarget.IntoAlbum -> actions.move(picked, target.relativePath, target.name)
                             is PickerTarget.IntoGroup -> actions.hide(picked, target.name)
-                            is PickerTarget.IntoFavoriteAlbum -> Settings.updateFavoriteAlbums(Settings.favoriteAlbums.withPhotos(target.name, picked.map { it.id }))
+                            is PickerTarget.IntoFavoriteAlbum -> AlbumArrangement.favoriteAlbums.update(AlbumArrangement.favoriteAlbums.all.withPhotos(target.name, picked.map { it.id }))
                         }
                         picker = null
                     },
