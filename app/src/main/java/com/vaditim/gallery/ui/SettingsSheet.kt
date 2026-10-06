@@ -71,7 +71,7 @@ private const val DISABLED_ALPHA = 0.38f
 @Composable
 fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onPull: (Float) -> Unit = {}) {
     var tab by remember { mutableStateOf(SettingsTab.PLACE) }
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, onPull = onPull) {
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isCentered = true, onPull = onPull) {
         // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height; a shorter tab sits in the middle of it.
         SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
             val loose = constraints.copy(minHeight = 0)

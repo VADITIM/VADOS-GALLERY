@@ -38,10 +38,12 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 
 // Choosing photos to put somewhere: the whole library as the usual grid, newest at the bottom, where every tap picks. Used to fill a new album, add to an existing one, or add to a private group.
+// `addedTo` names the album a photo is already in; such photos show darker and marked, and adding any of them asks first.
 @Composable
-fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: (List<MediaItem>) -> Unit, onCancel: () -> Unit) {
+fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: (List<MediaItem>) -> Unit, onCancel: () -> Unit, addedTo: (MediaItem) -> String? = { null }) {
     BackHandler(onBack = onCancel)
     var pickedIds by remember { mutableStateOf(emptySet<Long>()) }
+    var isAsking by remember { mutableStateOf(false) }
     val memory = remember { GridMemory() }
     val hazeState = rememberHazeState()
     val selection = Selection(pickedIds, isAlwaysActive = true) { item ->
@@ -61,6 +63,7 @@ fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: 
                 ),
                 selection = selection,
                 modifier = Modifier.hazeSource(hazeState),
+                isMarked = { addedTo(it) != null },
             )
             Box(Modifier.fillMaxWidth().height((statusBarHeight + 88.dp) * 0.5f).fadingGlass())
             Row(
@@ -76,7 +79,10 @@ fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: 
                 val picked = items.filter { it.id in pickedIds }
                 Box(
                     Modifier
-                        .pressable(onClick = { if (picked.isNotEmpty()) onDone(picked) })
+                        .pressable(onClick = {
+                            if (picked.isEmpty()) return@pressable
+                            if (picked.any { addedTo(it) != null }) isAsking = true else onDone(picked)
+                        })
                         .glass(Shapes.capsule)
                         .padding(horizontal = 16.dp, vertical = 11.dp),
                 ) {
@@ -85,6 +91,15 @@ fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: 
                         style = Type.cardTitle.copy(color = if (picked.isEmpty()) Palette.textFaint else LocalAccent.current),
                     )
                 }
+            }
+            val picked = items.filter { it.id in pickedIds }
+            val albumNames = picked.mapNotNull(addedTo).distinct()
+            OverlaySheet(visible = isAsking, label = "ALREADY ADDED TO ${albumNames.joinToString(", ").uppercase()}", onDismiss = { isAsking = false }) {
+                SheetRow("Add anyway", trailing = picked.size.toString()) {
+                    isAsking = false
+                    onDone(picked)
+                }
+                SheetRow("Cancel", color = Palette.textMuted) { isAsking = false }
             }
         }
     }

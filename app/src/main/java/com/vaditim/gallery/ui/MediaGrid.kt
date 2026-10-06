@@ -191,6 +191,8 @@ fun MediaGrid(
     scrollToNewestRequest: Int = 0,
     emptyCaption: String = "Nothing here yet.",
     badge: ((MediaItem) -> String?)? = null,
+    // A photo that is already where it is being added: darker, with a check over it.
+    isMarked: (MediaItem) -> Boolean = { false },
 ) {
     val state = memory.state
     // Narrowed to favourites by the corner toggle; a tap still opens the photo by its place among all of them.
@@ -293,6 +295,7 @@ fun MediaGrid(
                         isSettled = isSettled,
                         isSelected = selection != null && item.id in selection.selectedIds,
                         badge = badge?.invoke(item),
+                        isMarked = isMarked(item),
                         stackSize = if (entry.isFoldedStack) entry.stack.size else 0,
                         // From four columns a tile is too small to carry a date over the picture.
                         stampDay = entry.stampDay.takeIf { Settings.headersIn(memory.view) && columns <= MAX_STAMP_COLUMNS },
@@ -494,6 +497,7 @@ private fun Tile(
     onClick: () -> Unit,
     badge: String? = null,
     stampDay: LocalDate? = null,
+    isMarked: Boolean = false,
     stackSize: Int = 0,
     stackPlace: String? = null,
     onCloseStack: () -> Unit = {},
@@ -619,6 +623,11 @@ private fun Tile(
                     .padding(horizontal = 6.dp, vertical = 1.dp),
             )
         }
+        if (isMarked) {
+            Box(Modifier.fillMaxSize().background(MARKED_SHADE), contentAlignment = Alignment.Center) {
+                Box(Modifier.clip(Shapes.capsule).background(Palette.panel).padding(5.dp)) { CheckIcon(Palette.textBright, size = 16.dp) }
+            }
+        }
         if (isSelected) Box(Modifier.fillMaxSize().border(3.dp, LocalAccent.current, Shapes.tile))
     }
 }
@@ -628,6 +637,7 @@ private const val SYSTEM_THUMBNAIL_PIXELS = 320
 private val TILE_HEART = 11.dp
 private const val SHARP_DELAY_MS = 120L
 private const val MAX_STAMP_COLUMNS = 3
+private val MARKED_SHADE = androidx.compose.ui.graphics.Color(0x99000000)
 private val HEADER_GAP = 14.dp
 
 @Composable

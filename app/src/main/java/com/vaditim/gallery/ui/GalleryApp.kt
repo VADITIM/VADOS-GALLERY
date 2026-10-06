@@ -272,9 +272,8 @@ private fun Library(viewModel: GalleryViewModel) {
     // A delete that waits for the Confirm above the bar; anything else the user does lets it go.
     // The nav bar's own height, so what sits above it (the count in the corner) clears it.
     var navigationHeight by remember { mutableIntStateOf(0) }
-    // The nav's width, the settings button's and the screen's, so the favourites-only heart can stand midway between the nav and settings.
+    // The nav's width and the screen's, so the corner pill can stand centred in the room right of the nav.
     var navigationWidth by remember { mutableIntStateOf(0) }
-    var settingsButtonWidth by remember { mutableIntStateOf(0) }
     var screenWidth by remember { mutableIntStateOf(0) }
     var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
@@ -874,6 +873,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 },
                 isAlbumsView = if (isPrivateMode) Settings.privateFavoritesAsGroups else Settings.favoritesAsAlbums,
                 onCancelSelection = clearSelection,
+                onSettings = { sheet = AppSheet.SETTINGS },
             )
 
             val bottomBar = when {
@@ -882,44 +882,20 @@ private fun Library(viewModel: GalleryViewModel) {
                 isSelecting -> BottomBar.PHOTOS
                 else -> BottomBar.NAVIGATION
             }
-            val cornerPadding = 14.dp + with(LocalDensity.current) { navigationHeight.toDp() } + 8.dp
-            // The month's photos out of the whole view's, in the left corner just above the nav.
+            // The month's photos out of the whole view's; kept while it hides, so it leaves showing what it had.
             var lastMonthCount by remember { mutableIntStateOf(0) }
             var lastTotal by remember { mutableIntStateOf(0) }
-            if (visibleMonth.label.isNotEmpty()) {
+            val isCountShown = visibleMonth.label.isNotEmpty()
+            if (isCountShown) {
                 lastMonthCount = visibleMonth.count
                 lastTotal = gridItems.size
             }
-            // Settings sit small at the right end of the nav's row, leaving the top row to the date and the place's own buttons.
-            AnimatedVisibility(
-                bottomBar == BottomBar.NAVIGATION,
-                enter = TOP_ENTER,
-                exit = TOP_EXIT,
-                modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 14.dp),
-            ) {
-                Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
-                    Box(Modifier.onSizeChanged { settingsButtonWidth = it.width }.pressable(onClick = { sheet = AppSheet.SETTINGS }).glass(Shapes.capsule).padding(9.dp), contentAlignment = Alignment.Center) {
-                        SettingsIcon(Palette.textBright, size = 18.dp)
-                    }
-                }
-            }
-            // The count stands at the left end of the nav's row, as settings do at the right.
-            AnimatedVisibility(
-                visibleMonth.label.isNotEmpty() && bottomBar == BottomBar.NAVIGATION,
-                enter = TOP_ENTER,
-                exit = TOP_EXIT,
-                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = 14.dp),
-            ) {
-                Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
-                    PhotoCount(lastMonthCount, lastTotal)
-                }
-            }
-            // Only favourites in the grid on screen, in the nav's row midway between the nav and settings; Favorites and the trash have nothing to narrow.
-            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash && bottomBar == BottomBar.NAVIGATION && navigationWidth > 0
+            // Only favourites in the grid on screen; Favorites and the trash have nothing to narrow.
+            val canNarrowToFavorites = folderMemory != null && !(section == Section.FAVORITES) && place !is AlbumsPlace.Trash
+            // One pill in the nav's row, centred in the room right of the nav: the favourites-only heart, and the count small under it.
             val navigationRight = (screenWidth + navigationWidth) / 2f
-            val settingsLeft = screenWidth - with(LocalDensity.current) { 16.dp.toPx() } - settingsButtonWidth
             AnimatedVisibility(
-                canNarrowToFavorites,
+                (canNarrowToFavorites || isCountShown) && bottomBar == BottomBar.NAVIGATION && navigationWidth > 0,
                 enter = TOP_ENTER,
                 exit = TOP_EXIT,
                 modifier = Modifier
@@ -928,15 +904,20 @@ private fun Library(viewModel: GalleryViewModel) {
                     .padding(bottom = 14.dp)
                     .layout { measurable, constraints ->
                         val placeable = measurable.measure(constraints)
-                        layout(placeable.width, placeable.height) { placeable.place(((navigationRight + settingsLeft) / 2f - placeable.width / 2f).roundToInt(), 0) }
+                        layout(placeable.width, placeable.height) { placeable.place(((navigationRight + screenWidth) / 2f - placeable.width / 2f).roundToInt(), 0) }
                     },
             ) {
                 Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).glass(Shapes.capsule).padding(7.dp),
-                        contentAlignment = Alignment.Center,
+                    Column(
+                        Modifier.width(cornerPillWidth(lastTotal)).glass(Shapes.capsule).padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBody, size = 14.dp)
+                        if (canNarrowToFavorites) {
+                            Box(Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).padding(4.dp), contentAlignment = Alignment.Center) {
+                                HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBody, size = 15.dp)
+                            }
+                        }
+                        if (isCountShown) PhotoCount(lastMonthCount, lastTotal, Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
                     }
                 }
             }
@@ -1609,20 +1590,22 @@ private fun Library(viewModel: GalleryViewModel) {
             }
 
             picker?.let { target ->
-                val alreadyThere = when (target) {
-                    // Photos already in this album, or in any album sorted into a group, are not offered again.
-                    is PickerTarget.IntoAlbum -> {
-                        val groupedPaths = if (Settings.groupedAlbumsIn(SettingsView.ALBUMS)) Settings.albumStacks.flatMap { it.paths }.toSet() else emptySet()
-                        albums.filter { it.relativePath == target.relativePath || it.relativePath in groupedPaths }.flatMap { album -> album.items.map { it.id } }.toSet()
+                // Photos already in this album, or in any album sorted into a group (any Favorites album for a Favorites album), by the album's name; they are still offered, marked, and adding them asks first.
+                val addedTo: Map<Long, String> = remember(target, albums, Settings.albumStacks, Settings.favoriteAlbums) {
+                    when (target) {
+                        is PickerTarget.IntoAlbum -> {
+                            val groupedPaths = if (Settings.groupedAlbumsIn(SettingsView.ALBUMS)) Settings.albumStacks.flatMap { it.paths }.toSet() else emptySet()
+                            albums.filter { it.relativePath == target.relativePath || it.relativePath in groupedPaths }.flatMap { album -> album.items.map { it.id to album.name } }.toMap()
+                        }
+                        is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.flatMap { album -> album.ids.map { it to album.name } }.toMap()
+                        is PickerTarget.IntoGroup -> emptyMap()
                     }
-                    // A favourite already in any Favorites album is not offered again.
-                    is PickerTarget.IntoFavoriteAlbum -> Settings.favoriteAlbums.flatMap { it.ids }.toSet()
-                    is PickerTarget.IntoGroup -> emptySet()
                 }
                 PickerScreen(
                     title = target.title,
                     // A Favorites album gathers favourites, so only they are offered.
-                    items = (if (target is PickerTarget.IntoFavoriteAlbum) favorites else library).filter { it.id !in alreadyThere },
+                    items = if (target is PickerTarget.IntoFavoriteAlbum) favorites else library,
+                    addedTo = { addedTo[it.id] },
                     action = "Add",
                     onDone = { picked ->
                         when (target) {
@@ -1772,7 +1755,7 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
@@ -1804,6 +1787,7 @@ private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)
                         if (isAlbums) GridIcon(LocalAccent.current) else AlbumsIcon(LocalAccent.current)
                     }
                 }
+                Box(Modifier.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
             }
         }
     }
@@ -1885,41 +1869,32 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count as one line tilted up along the slash's slope, month first at the bottom left and the total at the top right, so it takes little width. Each number has a slot as wide as the total's digits so neither moves the other; the slash tilts with the line and crosses it. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
+// The count small, every symbol its own piece spread evenly across the pill, so the pill keeps one width while scrolling. A symbol that changes slides its new self in; only the month's digits change while scrolling.
 @Composable
-private fun PhotoCount(monthCount: Int, total: Int) {
-    val totalText = total.toString()
-    // Tight tracking: the count has only the room between the screen's edge and the nav.
-    val style = Type.microLabel.copy(fontSize = 9.sp, letterSpacing = 0.sp)
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    val digits = remember(totalText.length) { measurer.measure("0".repeat(totalText.length), style).size }
-    val slotWidth = with(density) { digits.width.toDp() }
-    Box(Modifier.tilted(COUNT_TILT)) {
-        Row(Modifier.glass(Shapes.capsule).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.width(slotWidth), contentAlignment = Alignment.CenterEnd) {
-                TypewriterText(monthCount.toString(), style = style, isTypedIn = true, isCaretShown = false)
-            }
-            BasicText("/", style = style.copy(color = Palette.textFaint), modifier = Modifier.padding(horizontal = 1.dp))
-            Box(Modifier.width(slotWidth), contentAlignment = Alignment.CenterStart) {
-                TypewriterText(totalText, style = style, isTypedIn = true, isCaretShown = false)
+private fun PhotoCount(monthCount: Int, total: Int, modifier: Modifier = Modifier) {
+    val symbols = "$monthCount/$total"
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        symbols.forEachIndexed { index, symbol ->
+            AnimatedContent(
+                symbol,
+                transitionSpec = { (fadeIn(tween(Motion.STATE_MS)) + slideInVertically(tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { it / 2 }).togetherWith(fadeOut(tween(Motion.PRESS_MS))) },
+                label = "count-$index",
+            ) { shown ->
+                BasicText(shown.toString(), style = COUNT_STYLE.copy(color = if (shown == '/') Palette.textFaint else Palette.textLabel))
             }
         }
     }
 }
 
-// The slope of the count, counter-clockwise from level, close to the slash's own.
-private const val COUNT_TILT = 60f
+private val COUNT_STYLE = Type.microLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp)
 
-// Turns the content counter-clockwise and takes the room of its turned bounds, so whatever sits beside it makes room for the tilt.
-private fun Modifier.tilted(degrees: Float): Modifier = layout { measurable, constraints ->
-    val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = Constraints.Infinity, maxHeight = Constraints.Infinity))
-    val radians = Math.toRadians(degrees.toDouble())
-    val cos = kotlin.math.abs(kotlin.math.cos(radians)).toFloat()
-    val sin = kotlin.math.abs(kotlin.math.sin(radians)).toFloat()
-    val width = (placeable.width * cos + placeable.height * sin).roundToInt()
-    val height = (placeable.width * sin + placeable.height * cos).roundToInt()
-    layout(width, height) { placeable.placeWithLayer((width - placeable.width) / 2, (height - placeable.height) / 2) { rotationZ = -degrees } }
+// Wide enough for the count's symbols at a little more than their own width, and never narrower than the heart's button; it only changes when the total gains a digit.
+@Composable
+private fun cornerPillWidth(total: Int): androidx.compose.ui.unit.Dp {
+    val measurer = rememberTextMeasurer()
+    val digits = total.toString().length
+    val width = remember(digits) { measurer.measure("0".repeat(digits * 2 + 1), COUNT_STYLE).size.width }
+    return maxOf(with(LocalDensity.current) { width.toDp() } * 1.3f + 14.dp, 40.dp)
 }
 
 private fun List<MediaItem>.favoritesOnlyIf(isFavoritesOnly: Boolean): List<MediaItem> = if (isFavoritesOnly) filter { it.isFavorite } else this

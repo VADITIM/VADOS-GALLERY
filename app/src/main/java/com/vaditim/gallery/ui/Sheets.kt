@@ -68,7 +68,7 @@ import com.vaditim.gallery.vault.PrivateGroup
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, isCentered: Boolean = false, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
@@ -109,7 +109,8 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                 )
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             // A floating sheet hangs from a fixed edge near the top, centred, so a change in its height only ever moves its bottom.
-            contentAlignment = if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
+            // A centred sheet sits in the middle of the screen, between the status and navigation bars.
+            contentAlignment = if (isCentered) Alignment.Center else if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
             Column(
                 Modifier
@@ -125,9 +126,9 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                     )
                     .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull.value }
                     .onSizeChanged { sheetHeight = it.height.toFloat().coerceAtLeast(1f) }
-                    .then(if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
+                    .then(if (isCentered) Modifier.statusBarsPadding().navigationBarsPadding() else if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
                     .padding(12.dp)
-                    .then(if (isFloating) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
+                    .then(if (isFloating || isCentered) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
                     .fillMaxWidth()
                     .glass(Shapes.sheet, ground)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
