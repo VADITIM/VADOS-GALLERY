@@ -191,19 +191,19 @@ fun BoxScope.ViewerScreen(
 
     BackHandler { if (overlay != Overlay.NONE) overlay = Overlay.NONE else onClose() }
 
-    // The library's blur, which the photo joins over the grid, so the nav standing over the photo frosts it and stays the same glass throughout.
+    // The library's blur, which the photo joins over the grid as it is drawn, flight included (outside the flight's layer, so the nav's glass frosts the shrunk photo and not a full-size one that is not on screen), so the nav standing over the photo frosts it and stays the same glass throughout.
     val libraryHaze = LocalHazeState.current
     val hazeState = rememberHazeState()
     CompositionLocalProvider(LocalHazeState provides hazeState) {
         run {
             // Only the photos follow the finger and shrink into the grid; the buttons below are outside this layer and leave on their own.
-            Box(photoModifier.zIndex(if (isBehindNavigation) -1f else 0f).fillMaxSize().background(Palette.viewerGround)) {
+            Box((if (libraryHaze != null) Modifier.hazeSource(libraryHaze, zIndex = 1f) else Modifier).then(photoModifier).zIndex(if (isBehindNavigation) -1f else 0f).fillMaxSize().background(Palette.viewerGround)) {
             HorizontalPager(
                 state = pagerState,
                 key = { items[it].id },
                 beyondViewportPageCount = 1,
                 pageSpacing = PAGE_GAP,
-                modifier = Modifier.fillMaxSize().hazeSource(hazeState).then(if (libraryHaze != null) Modifier.hazeSource(libraryHaze, zIndex = 1f) else Modifier),
+                modifier = Modifier.fillMaxSize().hazeSource(hazeState),
             ) { page ->
                 ViewerPage(
                     items[page],
