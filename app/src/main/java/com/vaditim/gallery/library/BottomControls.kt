@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,6 +64,7 @@ import com.vaditim.gallery.components.Section
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
+import kotlinx.coroutines.delay
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
@@ -137,6 +139,12 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
         AnimatedVisibility(screen.bottomBar == BottomBar.NAVIGATION, enter = TOP_ENTER, exit = TOP_EXIT) {
             PlacePills(controller, content, screen)
         }
+        // Private's red reaches the nav on the cut, once the outgoing view has left, like every other accent.
+        var isPrivateInk by remember { mutableStateOf(screen.isPrivateMode) }
+        LaunchedEffect(screen.isPrivateMode) {
+            delay(Motion.SECTION_LEAVE_MS.toLong())
+            isPrivateInk = screen.isPrivateMode
+        }
         // The nav's wash fades with its buttons, coming back only once they pop in.
         val washAlpha by animateFloatAsState(
             if (screen.bottomBar == BottomBar.NAVIGATION) 1f else 0f,
@@ -170,7 +178,7 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                                 metrics.navigationWidth = it.width
                             },
                             active = screen.section,
-                            accentOf = screen::accentOf,
+                            accentOf = { shown -> screen.accentOf(shown, isPrivateInk) },
                             albumsGlyph = screen.albumsGlyph,
                             onSelect = controller.navigation::select,
                         )

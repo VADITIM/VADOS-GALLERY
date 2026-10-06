@@ -40,8 +40,8 @@ class LibraryScreen(
     // Private has a colour of its own across every section.
     val accentTarget: Color = if (isPrivateMode) Palette.privateRed else (if (section == Section.ALBUMS) navigation.albumsPlace.accent else null) ?: section.accent
 
-    fun accentOf(shown: Section): Color = when {
-        isPrivateMode -> Palette.privateRed
+    fun accentOf(shown: Section, isPrivate: Boolean = isPrivateMode): Color = when {
+        isPrivate -> Palette.privateRed
         shown == Section.ALBUMS -> navigation.albumsPlace.accent ?: shown.accent
         else -> shown.accent
     }
