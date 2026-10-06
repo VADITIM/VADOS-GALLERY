@@ -568,6 +568,8 @@ private fun Library(viewModel: GalleryViewModel) {
     }
 
     // The screen softens behind the settings, so the sheet reads as the one thing in front.
+    // Pulling the sheet down clears the blur with the finger.
+    var settingsPull by remember { mutableFloatStateOf(0f) }
     val settingsBlur by animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
         Box(Modifier.fillMaxSize()) {
@@ -581,7 +583,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                 },
                 label = "section",
-                modifier = Modifier.fillMaxSize().blur(settingsBlur).hazeSource(hazeState),
+                modifier = Modifier.fillMaxSize().blur(settingsBlur * (1f - settingsPull)).hazeSource(hazeState),
             ) { (shown, isPrivateShown) ->
                 // While this section is the one shown it follows the current view; leaving, it keeps the last one it had.
                 var ownView by remember { mutableStateOf(settingsView) }
@@ -1321,6 +1323,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 isCovers = folderMemory == null,
                 onReview = reviewAction,
                 onDismiss = { sheet = AppSheet.NONE },
+                onPull = { settingsPull = it },
                 // Only the grids of the view whose setting changed take the new count.
                 onColumnsChanged = { columns ->
                     (listOf(recentMemory, favoritesMemory, privateFavoritesMemory, privateRecentMemory, trashMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values + privateFavoriteGroupMemories.values + locationMemories.values)

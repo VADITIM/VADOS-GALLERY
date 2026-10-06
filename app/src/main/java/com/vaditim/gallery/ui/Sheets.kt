@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -67,7 +68,7 @@ import com.vaditim.gallery.vault.PrivateGroup
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
@@ -77,6 +78,8 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     val scope = rememberCoroutineScope()
     val pastEdge = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.toPx() }
     LaunchedEffect(visible) { if (visible) pull.snapTo(0f) }
+    // How far down the sheet is pulled, 0 to 1 of its height, for what behind it should follow the finger.
+    LaunchedEffect(Unit) { snapshotFlow { (pull.value / sheetHeight).coerceIn(0f, 1f) }.collect { onPull(it) } }
     val pullDrag = rememberDraggableState { delta -> scope.launch { pull.snapTo((pull.value + delta).coerceAtLeast(0f)) } }
     AnimatedVisibility(
         visible = visible || isRevealing,

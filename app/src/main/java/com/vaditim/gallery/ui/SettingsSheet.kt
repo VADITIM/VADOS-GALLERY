@@ -69,9 +69,9 @@ private const val DISABLED_ALPHA = 0.38f
 
 // `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any.
 @Composable
-fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit) {
+fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onPull: (Float) -> Unit = {}) {
     var tab by remember { mutableStateOf(SettingsTab.PLACE) }
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss) {
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, onPull = onPull) {
         // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height; a shorter tab sits in the middle of it.
         SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
             val loose = constraints.copy(minHeight = 0)

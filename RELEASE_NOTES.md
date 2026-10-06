@@ -1,3 +1,3 @@
-# v0.120
+# v0.121
 
-- The month pill in the top row stays at the same height when the back and add buttons come and go.
+- Pulling the settings sheet down clears the blur behind it with the finger; letting it spring back brings the blur back.
