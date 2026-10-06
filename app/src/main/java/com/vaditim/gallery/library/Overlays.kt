@@ -140,7 +140,9 @@ private fun Modifier.viewerFlight(transition: ViewerTransition): Modifier = this
             val frame = lerp(tile, photo, progress)
             val full = Rect(0f, 0f, size.width, size.height)
             val expand = ((progress - 0.7f) / 0.3f).coerceIn(0f, 1f)
-            val radius = (lerp(8.dp.toPx(), 24.dp.toPx(), progress)) * (1f - expand)
+            // A pull rounds the corners within its first few pixels, so the black behind the photo is never a sharp rectangle that slowly rounds.
+            val rounded = (transition.pull / ROUND_PULL).coerceIn(0f, 1f)
+            val radius = lerp(8.dp.toPx(), 24.dp.toPx(), progress) * (1f - expand * (1f - rounded))
             val clip = Path().apply { addRoundRect(RoundRect(lerp(frame, full, expand), CornerRadius(radius))) }
             clipPath(clip) { this@drawWithContent.drawContent() }
         }
@@ -165,3 +167,6 @@ private fun Modifier.viewerFlight(transition: ViewerTransition): Modifier = this
             translationY = frame.center.y - centre.y - (photo.center.y - centre.y) * scale
         }
     }
+
+// The share of a pull by which the viewer's corners have reached their full rounding.
+private const val ROUND_PULL = 0.03f

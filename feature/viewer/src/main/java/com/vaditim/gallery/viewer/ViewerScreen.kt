@@ -529,6 +529,8 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     var total = Offset.Zero
                     var isVerticalSwipe = false
                     var isDirectionDecided = false
+                    // Details only rise for a swipe that began upward; down and back up is just the pull coming back.
+                    var isLift = false
                     // Zoomed in, a finger only pans once it has really moved; the small wobble of a double tap is left to the tap detector, so it can zoom back out.
                     var panTotal = Offset.Zero
                     var isPanning = false
@@ -542,12 +544,13 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                             if (!isDirectionDecided && total.getDistance() > viewConfiguration.touchSlop) {
                                 isDirectionDecided = true
                                 isVerticalSwipe = kotlin.math.abs(total.y) > kotlin.math.abs(total.x) * 1.5f
+                                isLift = isVerticalSwipe && total.y < 0f
                             }
                             if (isVerticalSwipe) {
                                 swipeOffset += change.position.y - change.previousPosition.y
                                 // Both directions are reported as the finger goes: down shrinks the viewer towards its tile, up raises the details.
                                 onPull((swipeOffset.coerceAtLeast(0f) / (size.height * PULL_RANGE)).coerceIn(0f, 1f))
-                                onLift((-swipeOffset / (size.height * LIFT_RANGE)).coerceIn(0f, 1f))
+                                onLift(if (isLift) (-swipeOffset / (size.height * LIFT_RANGE)).coerceIn(0f, 1f) else 0f)
                                 change.consume()
                             }
                         } else if (isPinching || scale > 1.01f) {
@@ -574,7 +577,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                         val released = swipeOffset
                         if (released > distance) {
                             onSwipeDown()
-                        } else if (released < -distance) {
+                        } else if (isLift && released < -distance) {
                             // The details finish rising from where the finger left them, and only then count as open.
                             scope.launch {
                                 val lifted = (-released / (size.height * LIFT_RANGE)).coerceIn(0f, 1f)
@@ -588,7 +591,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                                 animate(released, 0f, animationSpec = tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { value, _ ->
                                     swipeOffset = value
                                     onPull((value.coerceAtLeast(0f) / (size.height * PULL_RANGE)).coerceIn(0f, 1f))
-                                    onLift((-value / (size.height * LIFT_RANGE)).coerceIn(0f, 1f))
+                                    onLift(if (isLift) (-value / (size.height * LIFT_RANGE)).coerceIn(0f, 1f) else 0f)
                                 }
                             }
                         }
