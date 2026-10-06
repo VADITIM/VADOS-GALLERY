@@ -18,7 +18,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -74,14 +74,14 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
     // A pull down anywhere drags the sheet with the finger; let go far enough or fast enough and it carries on down from there and closes, otherwise it goes back up.
-    val pull = remember { Animatable(0f) }
+    // Plain state the drag writes straight to: a coroutine per move could land after the release animation had started and cancel it half way, leaving the sheet stranded.
+    var pull by remember { mutableFloatStateOf(0f) }
     var sheetHeight by remember { mutableFloatStateOf(1f) }
-    val scope = rememberCoroutineScope()
     val pastEdge = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.toPx() }
-    LaunchedEffect(visible) { if (visible) pull.snapTo(0f) }
+    LaunchedEffect(visible) { if (visible) pull = 0f }
     // How far down the sheet is pulled, 0 to 1 of its height, for what behind it should follow the finger.
-    LaunchedEffect(Unit) { snapshotFlow { (pull.value / sheetHeight).coerceIn(0f, 1f) }.collect { onPull(it) } }
-    val pullDrag = rememberDraggableState { delta -> scope.launch { pull.snapTo((pull.value + delta).coerceAtLeast(0f)) } }
+    LaunchedEffect(Unit) { snapshotFlow { (pull / sheetHeight).coerceIn(0f, 1f) }.collect { onPull(it) } }
+    val pullDrag = rememberDraggableState { delta -> pull = (pull + delta).coerceAtLeast(0f) }
     AnimatedVisibility(
         visible = visible || isRevealing,
         // Already on screen under the finger, so it does not play its own arrival on top.
@@ -93,18 +93,18 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
         Box(
             Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f) * (1f - pull.value / sheetHeight).coerceIn(0f, 1f))) }
+                .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f) * (1f - pull / sheetHeight).coerceIn(0f, 1f))) }
                 // The pull works anywhere on screen, not only on the sheet; a tap outside still closes it at once.
                 .draggable(
                     pullDrag,
                     Orientation.Vertical,
                     enabled = visible,
                     onDragStopped = { velocity ->
-                        if (pull.value > sheetHeight * PULL_CLOSE || velocity > PULL_FLING) {
-                            pull.animateTo(sheetHeight + pastEdge, tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoOut), velocity)
+                        if (pull > sheetHeight * PULL_CLOSE || velocity > PULL_FLING) {
+                            animate(pull, sheetHeight + pastEdge, velocity, tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoOut)) { value, _ -> pull = value }
                             onDismiss()
                         } else {
-                            pull.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut), velocity)
+                            animate(pull, 0f, velocity, tween(Motion.STATE_MS, easing = Motion.backOut)) { value, _ -> pull = value }
                         }
                     },
                 )
@@ -125,7 +125,7 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                         exit = slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) { it / 8 } +
                             scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.98f),
                     )
-                    .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull.value }
+                    .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull }
                     .onSizeChanged { sheetHeight = it.height.toFloat().coerceAtLeast(1f) }
                     .then(if (isCentered) Modifier.statusBarsPadding().navigationBarsPadding() else if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
                     .padding(12.dp)

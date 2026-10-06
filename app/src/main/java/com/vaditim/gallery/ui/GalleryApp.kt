@@ -49,6 +49,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -275,6 +276,8 @@ private fun Library(viewModel: GalleryViewModel) {
     val viewerProgress = remember { Animatable(0f) }
     // The viewer's buttons come in once the photo has nearly grown into place, and leave as soon as it starts closing.
     val isViewerSettled by remember { derivedStateOf { viewer != null && viewerProgress.value > VIEWER_CHROME_AT } }
+    // Anything short of full size is on its way to or from its tile, where the navigation lies in front of it.
+    val isViewerShrunk by remember { derivedStateOf { viewerProgress.value * (1f - viewerPull) < 1f } }
     var scrollToNewestRequest by remember { mutableIntStateOf(0) }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
     // Albums (by folder path) or private groups (by name) picked in a cover grid; only one of the two grids is ever on screen.
@@ -620,7 +623,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
                 },
                 label = "section",
-                modifier = Modifier.fillMaxSize().blur(settingsBlur * (1f - settingsPull)).hazeSource(hazeState),
+                modifier = Modifier.zIndex(-2f).fillMaxSize().blur(settingsBlur * (1f - settingsPull)).hazeSource(hazeState),
             ) { (shown, isPrivateShown) ->
                 // While this section is the one shown it follows the current view; leaving, it keeps the last one it had.
                 var ownView by remember { mutableStateOf(settingsView) }
@@ -870,7 +873,9 @@ private fun Library(viewModel: GalleryViewModel) {
             }
 
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
-            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.4f).fadingGlass())
+            // The navigation gives way to the viewer as the photo grows over it, and comes back as it shrinks, so the photo passes behind it.
+            val viewerFade = if (shownViewer == null) Modifier else Modifier.graphicsLayer { alpha = 1f - viewerProgress.value * (1f - viewerPull) }
+            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.4f).then(viewerFade).fadingGlass())
 
             // Sorting through the photos on screen, from the settings sheet; a place of covers has none to go through.
             val reviewAction: (() -> Unit)? = when {
@@ -896,7 +901,7 @@ private fun Library(viewModel: GalleryViewModel) {
             } else {
                 (section == Section.ALBUMS && place != AlbumsPlace.Folders) || (section == Section.FAVORITES && openFavoriteAlbum != null)
             }
-            TopRow(
+            Box(viewerFade) { TopRow(
                 month = visibleMonth,
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
@@ -918,7 +923,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 isAlbumsView = if (isPrivateMode) Settings.privateFavoritesAsGroups else Settings.favoritesAsAlbums,
                 onCancelSelection = clearSelection,
                 onSettings = { sheet = AppSheet.SETTINGS },
-            )
+            ) }
 
             val bottomBar = when {
                 isRearranging -> BottomBar.REARRANGING
@@ -944,6 +949,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 exit = TOP_EXIT,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
+                    .then(viewerFade)
                     .navigationBarsPadding()
                     .padding(bottom = 14.dp)
                     .layout { measurable, constraints ->
@@ -957,7 +963,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         if (canNarrowToFavorites) {
                             // No pill: the heart stands on the photos with a black shadow under it.
                             Box(Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).padding(6.dp), contentAlignment = Alignment.Center) {
-                                Box(Modifier.offset(y = 1.dp).blur(3.dp, BlurredEdgeTreatment.Unbounded)) { HeartIcon(isFilled = true, color = Color.Black, size = 18.dp) }
+                                Box(Modifier.offset(y = 1.dp).blur(3.dp, BlurredEdgeTreatment.Unbounded)) { HeartIcon(isFilled = isFavoritesOnly, color = Color.Black, size = 18.dp) }
                                 HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBright, size = 18.dp)
                             }
                         }
@@ -966,7 +972,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 }
             }
             Column(
-                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
+                Modifier.align(Alignment.BottomCenter).then(viewerFade).navigationBarsPadding().padding(bottom = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
             ConfirmPill(pendingDelete, onDone = { pendingDelete = null })
@@ -1086,16 +1092,12 @@ private fun Library(viewModel: GalleryViewModel) {
                         var lastPill by remember { mutableStateOf(placePill ?: "") }
                         if (placePill != null) lastPill = placePill
                         val pillAccent = rememberOwnAccent(placePill != null)
+                        // Out of Private; out of Locations entirely, from a location as from the list. The label is the way out as much as the arrow beside it.
+                        val leavePlace: () -> Unit = { if (isPrivateMode) { leavePrivate() } else { albumsPlace = AlbumsPlace.Folders } }
                         AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
                             Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.pressable(onClick = {
-                                    when {
-                                        isPrivateMode -> leavePrivate()
-                                        // Out of Locations entirely, from a location as from the list.
-                                        else -> albumsPlace = AlbumsPlace.Folders
-                                    }
-                                }).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(pillAccent, size = 16.dp) }
-                                Box(Modifier.background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                Box(Modifier.pressable(onClick = leavePlace).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(pillAccent, size = 16.dp) }
+                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
                                     BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
                                 }
                             }
@@ -1119,10 +1121,26 @@ private fun Library(viewModel: GalleryViewModel) {
                             },
                             active = section,
                             accentOf = { if (isPrivateMode) Palette.privateRed else if (it == Section.ALBUMS) placeAccentOf(albumsPlace) ?: it.accent else it.accent },
+                            albumsGlyph = when {
+                                isPrivateMode -> PlaceGlyph.PRIVATE
+                                albumsPlace == AlbumsPlace.Locations || albumsPlace is AlbumsPlace.Location -> PlaceGlyph.LOCATIONS
+                                albumsPlace == AlbumsPlace.Trash -> PlaceGlyph.TRASH
+                                else -> PlaceGlyph.ALBUMS
+                            },
                             onSelect = { selected ->
                                 if (selected == section) {
                                     when {
-                                        selected == Section.ALBUMS -> albumsPlace = if (isPrivateMode) AlbumsPlace.PrivateGroups else AlbumsPlace.Folders
+                                        // Back to the start of the place it is in, not out to the albums.
+                                        selected == Section.ALBUMS -> {
+                                            val start = when {
+                                                isPrivateMode -> AlbumsPlace.PrivateGroups
+                                                albumsPlace == AlbumsPlace.Locations || albumsPlace is AlbumsPlace.Location -> AlbumsPlace.Locations
+                                                albumsPlace == AlbumsPlace.Trash -> AlbumsPlace.Trash
+                                                else -> AlbumsPlace.Folders
+                                            }
+                                            if (albumsPlace == start) scrollToNewestRequest++
+                                            albumsPlace = start
+                                        }
                                         selected == Section.FAVORITES && isPrivateMode && openPrivateFavoriteGroup != null -> openPrivateFavoriteGroup = null
                                         selected == Section.FAVORITES && !isPrivateMode && openFavoriteAlbum != null -> openFavoriteAlbum = null
                                         else -> scrollToNewestRequest++
@@ -1783,6 +1801,7 @@ private fun Library(viewModel: GalleryViewModel) {
                             }
                         },
                     isChromeAllowed = isViewerSettled,
+                    isBehindNavigation = isViewerShrunk,
                     items = itemsFor(request.source),
                     startIndex = request.startIndex,
                     albums = albums,

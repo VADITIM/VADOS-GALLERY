@@ -38,12 +38,15 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// What the Albums button shows: the place the user is in, since Locations, the trash and Private are reached from Albums.
+enum class PlaceGlyph { ALBUMS, LOCATIONS, TRASH, PRIVATE }
+
 // The chosen section's label grows by this much, landing on the overshoot.
 private const val ACTIVE_LABEL_SCALE = 1.06f
 
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
-fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }) {
+fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }, albumsGlyph: PlaceGlyph = PlaceGlyph.ALBUMS) {
     // Where each section's pill sits in the bar, left edge and right edge, so the highlight knows where to slide.
     val spans = remember { mutableStateMapOf<Section, Pair<Float, Float>>() }
     val left = remember { Animatable(Float.NaN) }
@@ -100,7 +103,12 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
                 ) {
                     when (section) {
                         Section.RECENT -> ClockIcon(ink, SECTION_ICON)
-                        Section.ALBUMS -> AlbumsIcon(ink, SECTION_ICON)
+                        Section.ALBUMS -> when (albumsGlyph) {
+                            PlaceGlyph.ALBUMS -> AlbumsIcon(ink, SECTION_ICON)
+                            PlaceGlyph.LOCATIONS -> PinIcon(ink, SECTION_ICON)
+                            PlaceGlyph.TRASH -> TrashIcon(ink, SECTION_ICON)
+                            PlaceGlyph.PRIVATE -> LockIcon(ink, size = SECTION_ICON)
+                        }
                         Section.FAVORITES -> HeartIcon(isFilled = true, color = ink, size = SECTION_ICON)
                     }
                 }

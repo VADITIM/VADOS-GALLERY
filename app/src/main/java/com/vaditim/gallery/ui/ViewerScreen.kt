@@ -38,6 +38,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -105,8 +107,9 @@ private val STAMP_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Lo
 
 private enum class Overlay { NONE, MORE, MOVE, NEW_ALBUM, HIDE, NEW_GROUP, CONFIRM_HIDE, DETAILS }
 
+// Emitted straight into the screen's own box, so its photo can be drawn behind the navigation while the buttons and menus stay in front of it.
 @Composable
-fun ViewerScreen(
+fun BoxScope.ViewerScreen(
     items: List<MediaItem>,
     startIndex: Int,
     albums: List<Album>,
@@ -121,6 +124,8 @@ fun ViewerScreen(
     places: Map<Long, Place> = emptyMap(),
     isChromeAllowed: Boolean = true,
     photoModifier: Modifier = Modifier,
+    // While it grows out of or shrinks back into its tile, the photo passes behind the navigation; open, it covers it.
+    isBehindNavigation: Boolean = false,
     onSetCover: ((MediaItem) -> Unit)? = null,
 ) {
     if (items.isEmpty()) {
@@ -155,9 +160,9 @@ fun ViewerScreen(
 
     val hazeState = rememberHazeState()
     CompositionLocalProvider(LocalHazeState provides hazeState) {
-        Box(Modifier.fillMaxSize()) {
+        run {
             // Only the photos follow the finger and shrink into the grid; the buttons below are outside this layer and leave on their own.
-            Box(photoModifier.fillMaxSize().background(Palette.viewerGround)) {
+            Box(photoModifier.zIndex(if (isBehindNavigation) -1f else 0f).fillMaxSize().background(Palette.viewerGround)) {
             HorizontalPager(
                 state = pagerState,
                 key = { items[it].id },

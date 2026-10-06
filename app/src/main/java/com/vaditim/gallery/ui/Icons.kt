@@ -8,6 +8,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +36,8 @@ import com.vaditim.gallery.vas.pressable
 // Glyphs taken from SVG Repo as path data and filled in the given colour; the viewBox is 24 units unless noted.
 private const val HEART_OUTLINE = "M8.96173 18.9109L9.42605 18.3219L8.96173 18.9109ZM12 5.50063L11.4596 6.02073C11.601 6.16763 11.7961 6.25063 12 6.25063C12.2039 6.25063 12.399 6.16763 12.5404 6.02073L12 5.50063ZM15.0383 18.9109L15.5026 19.4999L15.0383 18.9109ZM9.42605 18.3219C7.91039 17.1271 6.25307 15.9603 4.93829 14.4798C3.64922 13.0282 2.75 11.3345 2.75 9.1371H1.25C1.25 11.8026 2.3605 13.8361 3.81672 15.4758C5.24723 17.0866 7.07077 18.3752 8.49742 19.4999L9.42605 18.3219ZM2.75 9.1371C2.75 6.98623 3.96537 5.18252 5.62436 4.42419C7.23607 3.68748 9.40166 3.88258 11.4596 6.02073L12.5404 4.98053C10.0985 2.44352 7.26409 2.02539 5.00076 3.05996C2.78471 4.07292 1.25 6.42503 1.25 9.1371H2.75ZM8.49742 19.4999C9.00965 19.9037 9.55954 20.3343 10.1168 20.6599C10.6739 20.9854 11.3096 21.25 12 21.25V19.75C11.6904 19.75 11.3261 19.6293 10.8736 19.3648C10.4213 19.1005 9.95208 18.7366 9.42605 18.3219L8.49742 19.4999ZM15.5026 19.4999C16.9292 18.3752 18.7528 17.0866 20.1833 15.4758C21.6395 13.8361 22.75 11.8026 22.75 9.1371H21.25C21.25 11.3345 20.3508 13.0282 19.0617 14.4798C17.7469 15.9603 16.0896 17.1271 14.574 18.3219L15.5026 19.4999ZM22.75 9.1371C22.75 6.42503 21.2153 4.07292 18.9992 3.05996C16.7359 2.02539 13.9015 2.44352 11.4596 4.98053L12.5404 6.02073C14.5983 3.88258 16.7639 3.68748 18.3756 4.42419C20.0346 5.18252 21.25 6.98623 21.25 9.1371H22.75ZM14.574 18.3219C14.0479 18.7366 13.5787 19.1005 13.1264 19.3648C12.6739 19.6293 12.3096 19.75 12 19.75V21.25C12.6904 21.25 13.3261 20.9854 13.8832 20.6599C14.4405 20.3343 14.9903 19.9037 15.5026 19.4999L14.574 18.3219Z"
 private const val HEART_SOLID = "M2 9.1371C2 14 6.01943 16.5914 8.96173 18.9109C10 19.7294 11 20.5 12 20.5C13 20.5 14 19.7294 15.0383 18.9109C17.9806 16.5914 22 14 22 9.1371C22 4.27416 16.4998 0.825464 12 5.50063C7.50016 0.825464 2 4.27416 2 9.1371Z"
+private const val LOCATION_PIN = "M68.51,106.28c-5.59,6.13-12.1,11.62-19.41,16.06c-0.9,0.66-2.12,0.74-3.12,0.1 c-10.8-6.87-19.87-15.12-27-24.09C9.14,86.01,2.95,72.33,0.83,59.15c-2.16-13.36-0.14-26.22,6.51-36.67 c2.62-4.13,5.97-7.89,10.05-11.14C26.77,3.87,37.48-0.08,48.16,0c10.28,0.08,20.43,3.91,29.2,11.92c3.08,2.8,5.67,6.01,7.79,9.49 c7.15,11.78,8.69,26.8,5.55,42.02c-3.1,15.04-10.8,30.32-22.19,42.82V106.28L68.51,106.28z M46.12,23.76 c12.68,0,22.95,10.28,22.95,22.95c0,12.68-10.28,22.95-22.95,22.95c-12.68,0-22.95-10.27-22.95-22.95 C23.16,34.03,33.44,23.76,46.12,23.76L46.12,23.76z"
+private const val CROP = "M10 6H14.8C15.9201 6 16.4802 6 16.908 6.21799C17.2843 6.40973 17.5903 6.71569 17.782 7.09202C18 7.51984 18 8.07989 18 9.2V14M2 6H6M18 18V22M22 18L9.2 18C8.07989 18 7.51984 18 7.09202 17.782C6.71569 17.5903 6.40973 17.2843 6.21799 16.908C6 16.4802 6 15.9201 6 14.8V2"
 private const val CLOCK = "M22 12c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2s10 4.477 10 10zm-4.581 3.324a1 1 0 0 0-.525-1.313L13 12.341V6.5a1 1 0 0 0-2 0v6.17c0 .6.357 1.143.909 1.379l4.197 1.8a1 1 0 0 0 1.313-.525z"
 private const val GEAR = "M13.7654 2.15224C13.3978 2 12.9319 2 12 2C11.0681 2 10.6022 2 10.2346 2.15224C9.74457 2.35523 9.35522 2.74458 9.15223 3.23463C9.05957 3.45834 9.0233 3.7185 9.00911 4.09799C8.98826 4.65568 8.70226 5.17189 8.21894 5.45093C7.73564 5.72996 7.14559 5.71954 6.65219 5.45876C6.31645 5.2813 6.07301 5.18262 5.83294 5.15102C5.30704 5.08178 4.77518 5.22429 4.35436 5.5472C4.03874 5.78938 3.80577 6.1929 3.33983 6.99993C2.87389 7.80697 2.64092 8.21048 2.58899 8.60491C2.51976 9.1308 2.66227 9.66266 2.98518 10.0835C3.13256 10.2756 3.3397 10.437 3.66119 10.639C4.1338 10.936 4.43789 11.4419 4.43786 12C4.43783 12.5581 4.13375 13.0639 3.66118 13.3608C3.33965 13.5629 3.13248 13.7244 2.98508 13.9165C2.66217 14.3373 2.51966 14.8691 2.5889 15.395C2.64082 15.7894 2.87379 16.193 3.33973 17C3.80568 17.807 4.03865 18.2106 4.35426 18.4527C4.77508 18.7756 5.30694 18.9181 5.83284 18.8489C6.07289 18.8173 6.31632 18.7186 6.65204 18.5412C7.14547 18.2804 7.73556 18.27 8.2189 18.549C8.70224 18.8281 8.98826 19.3443 9.00911 19.9021C9.02331 20.2815 9.05957 20.5417 9.15223 20.7654C9.35522 21.2554 9.74457 21.6448 10.2346 21.8478C10.6022 22 11.0681 22 12 22C12.9319 22 13.3978 22 13.7654 21.8478C14.2554 21.6448 14.6448 21.2554 14.8477 20.7654C14.9404 20.5417 14.9767 20.2815 14.9909 19.902C15.0117 19.3443 15.2977 18.8281 15.781 18.549C16.2643 18.2699 16.8544 18.2804 17.3479 18.5412C17.6836 18.7186 17.927 18.8172 18.167 18.8488C18.6929 18.9181 19.2248 18.7756 19.6456 18.4527C19.9612 18.2105 20.1942 17.807 20.6601 16.9999C21.1261 16.1929 21.3591 15.7894 21.411 15.395C21.4802 14.8691 21.3377 14.3372 21.0148 13.9164C20.8674 13.7243 20.6602 13.5628 20.3387 13.3608C19.8662 13.0639 19.5621 12.558 19.5621 11.9999C19.5621 11.4418 19.8662 10.9361 20.3387 10.6392C20.6603 10.4371 20.8675 10.2757 21.0149 10.0835C21.3378 9.66273 21.4803 9.13087 21.4111 8.60497C21.3592 8.21055 21.1262 7.80703 20.6602 7C20.1943 6.19297 19.9613 5.78945 19.6457 5.54727C19.2249 5.22436 18.693 5.08185 18.1671 5.15109C17.9271 5.18269 17.6837 5.28136 17.3479 5.4588C16.8545 5.71959 16.2644 5.73002 15.7811 5.45096C15.2977 5.17191 15.0117 4.65566 14.9909 4.09794C14.9767 3.71848 14.9404 3.45833 14.8477 3.23463C14.6448 2.74458 14.2554 2.35523 13.7654 2.15224Z"
 private const val GEAR_RING = "M15 12A3 3 0 1 1 9 12A3 3 0 1 1 15 12Z"
@@ -51,13 +55,15 @@ private const val ALBUM_3 = "M6.87943 4.5C5.62786 4.5 4.60163 5.33974 4.25915 6.
 private val parsedPaths = HashMap<String, Path>()
 
 @Composable
-// `strokeWidth`, in viewBox units, draws the outlines instead of filling them.
-private fun SvgGlyph(color: Color, size: Dp, viewBox: Float = 24f, strokeWidth: Float? = null, vararg paths: String) {
+// `strokeWidth`, in viewBox units, draws the outlines instead of filling them. `viewBox` is the height and `viewBoxWidth` the width, which differ for a glyph that is not square; it sits centred in its box.
+private fun SvgGlyph(color: Color, size: Dp, viewBox: Float = 24f, strokeWidth: Float? = null, viewBoxWidth: Float = viewBox, vararg paths: String) {
     val parsed = paths.map { parsedPaths.getOrPut(it) { PathParser().parsePathString(it).toPath().apply { fillType = PathFillType.EvenOdd } } }
     Canvas(Modifier.size(size)) {
-        val scale = this.size.minDimension / viewBox
-        scale(scale, pivot = Offset.Zero) {
-            parsed.forEach { if (strokeWidth == null) drawPath(it, color) else drawPath(it, color, style = Stroke(strokeWidth, join = StrokeJoin.Round)) }
+        val scale = this.size.minDimension / maxOf(viewBox, viewBoxWidth)
+        translate((this.size.width - viewBoxWidth * scale) / 2f, (this.size.height - viewBox * scale) / 2f) {
+            scale(scale, pivot = Offset.Zero) {
+                parsed.forEach { if (strokeWidth == null) drawPath(it, color) else drawPath(it, color, style = Stroke(strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)) }
+            }
         }
     }
 }
@@ -198,13 +204,17 @@ fun TrashIcon(color: Color, size: Dp = 22.dp) = SvgGlyph(color, size, paths = ar
 
 @Composable
 fun LockIcon(color: Color, isOpen: Boolean = false, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
-    drawRoundRect(color, Offset(5f * unit, 10.5f * unit), Size(14f * unit, 10f * unit), CornerRadius(2.5f * unit), style = stroke)
     drawPath(path(unit) { u ->
         moveTo(8f * u, 10.5f * u); lineTo(8f * u, 7.5f * u)
         arcTo(Rect(8f * u, 3.5f * u, 16f * u, 11.5f * u), 180f, if (isOpen) 150f else 180f, false)
         if (!isOpen) lineTo(16f * u, 10.5f * u)
     }, color, style = stroke)
-    drawCircle(color, 1.3f * unit, Offset(12f * unit, 15.5f * unit))
+    // The keyhole is cut out of the body, so what is behind shows through it.
+    drawPath(Path().apply {
+        fillType = PathFillType.EvenOdd
+        addRoundRect(RoundRect(5f * unit, 10.5f * unit, 19f * unit, 20.5f * unit, CornerRadius(2.5f * unit)))
+        addOval(Rect(Offset(12f * unit, 15.5f * unit), 1.5f * unit))
+    }, color)
 }
 
 @Composable
@@ -247,12 +257,7 @@ fun RestoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit,
 }
 
 @Composable
-fun CropIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
-    drawPath(Path().apply {
-        moveTo(7f * unit, 3.5f * unit); lineTo(7f * unit, 17f * unit); lineTo(20.5f * unit, 17f * unit)
-        moveTo(3.5f * unit, 7f * unit); lineTo(17f * unit, 7f * unit); lineTo(17f * unit, 20.5f * unit)
-    }, color, style = stroke)
-}
+fun CropIcon(color: Color, size: Dp = 22.dp) = SvgGlyph(color, size, strokeWidth = 2f, paths = arrayOf(CROP))
 
 @Composable
 fun BackIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
@@ -290,17 +295,7 @@ fun SlidersIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit,
 }
 
 @Composable
-fun PinIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
-    drawPath(path(unit) { u ->
-        moveTo(12f * u, 21f * u)
-        cubicTo(7f * u, 15.5f * u, 5f * u, 12.5f * u, 5f * u, 9.5f * u)
-        cubicTo(5f * u, 5.6f * u, 8.1f * u, 3f * u, 12f * u, 3f * u)
-        cubicTo(15.9f * u, 3f * u, 19f * u, 5.6f * u, 19f * u, 9.5f * u)
-        cubicTo(19f * u, 12.5f * u, 17f * u, 15.5f * u, 12f * u, 21f * u)
-        close()
-    }, color, style = stroke)
-    drawCircle(color, 2.4f * unit, Offset(12f * unit, 9.5f * unit), style = stroke)
-}
+fun PinIcon(color: Color, size: Dp = 22.dp) = SvgGlyph(color, size, viewBox = 122.88f, viewBoxWidth = 92.25f, paths = arrayOf(LOCATION_PIN))
 
 @Composable
 fun CheckIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->

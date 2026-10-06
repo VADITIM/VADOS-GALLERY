@@ -178,7 +178,7 @@ fun AlbumsScreen(
             }
         }
         if (onNewGroup != null) item(key = "new-group", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New group", onClick = onNewGroup) } }
-        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum) } }
+        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum, hasDivider = onNewGroup == null) } }
         item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { footer() } }
     }
 }
@@ -474,6 +474,8 @@ private fun GroupRow(
                 stack.name,
                 isShown = isHeadingShown && !(isPulled && arrow.value <= 0f),
                 style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current),
+                // Closing, or pulled shut, the name is sliced away from its right end in step with the cards; opening, its own sweep brings it in.
+                presence = { if (isOpen && !isPulled) 1f else time.value },
                 isRevealedAtStart = true,
             )
             // Folding the group back sits at the right end of its heading; shut, it is not there at all, so it never takes a tap meant for opening the group.
