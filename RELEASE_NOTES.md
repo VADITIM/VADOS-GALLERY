@@ -1,3 +1,3 @@
-# v0.119
+# v0.120
 
-- The photo count is a compact diagonal fraction on one row: the month count raised before the slash, the total lowered after it.
+- The month pill in the top row stays at the same height when the back and add buttons come and go.

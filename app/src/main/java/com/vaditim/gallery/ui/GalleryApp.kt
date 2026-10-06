@@ -1768,7 +1768,8 @@ private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)
         transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // As tall as a button, whether or not one is shown, so the month pill never moves up or down as back and add come and go.
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).height(TOP_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
             if (isSelecting) {
                 TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
                 Box(Modifier.weight(1f))
@@ -1835,6 +1836,8 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit)
 private enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }
 
 private val SETTINGS_BLUR = 6.dp
+// A top button's height: its 22dp icon and 10dp above and below.
+private val TOP_ROW_HEIGHT = 42.dp
 
 // The bottom bar swaps with a smaller pop than a single button, being wide.
 private val BAR_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0.8f)
