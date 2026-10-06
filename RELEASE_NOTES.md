@@ -1,3 +1,3 @@
-# v0.121
+# v0.122
 
-- Pulling the settings sheet down clears the blur behind it with the finger; letting it spring back brings the blur back.
+- A sheet can be pulled down from anywhere on the screen while it is open, not only on the sheet; a tap outside still closes it at once.

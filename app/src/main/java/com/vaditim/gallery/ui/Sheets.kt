@@ -72,7 +72,7 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
-    // A pull down drags the sheet with the finger; let go far enough or fast enough and it carries on down from there and closes, otherwise it goes back up.
+    // A pull down anywhere drags the sheet with the finger; let go far enough or fast enough and it carries on down from there and closes, otherwise it goes back up.
     val pull = remember { Animatable(0f) }
     var sheetHeight by remember { mutableFloatStateOf(1f) }
     val scope = rememberCoroutineScope()
@@ -93,6 +93,20 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
             Modifier
                 .fillMaxSize()
                 .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f) * (1f - pull.value / sheetHeight).coerceIn(0f, 1f))) }
+                // The pull works anywhere on screen, not only on the sheet; a tap outside still closes it at once.
+                .draggable(
+                    pullDrag,
+                    Orientation.Vertical,
+                    enabled = visible,
+                    onDragStopped = { velocity ->
+                        if (pull.value > sheetHeight * PULL_CLOSE || velocity > PULL_FLING) {
+                            pull.animateTo(sheetHeight + pastEdge, tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoOut), velocity)
+                            onDismiss()
+                        } else {
+                            pull.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut), velocity)
+                        }
+                    },
+                )
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             // A floating sheet hangs from a fixed edge near the top, centred, so a change in its height only ever moves its bottom.
             contentAlignment = if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
@@ -111,19 +125,6 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                     )
                     .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull.value }
                     .onSizeChanged { sheetHeight = it.height.toFloat().coerceAtLeast(1f) }
-                    .draggable(
-                        pullDrag,
-                        Orientation.Vertical,
-                        enabled = visible,
-                        onDragStopped = { velocity ->
-                            if (pull.value > sheetHeight * PULL_CLOSE || velocity > PULL_FLING) {
-                                pull.animateTo(sheetHeight + pastEdge, tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoOut), velocity)
-                                onDismiss()
-                            } else {
-                                pull.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut), velocity)
-                            }
-                        },
-                    )
                     .then(if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
                     .padding(12.dp)
                     .then(if (isFloating) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
