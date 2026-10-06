@@ -5,9 +5,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import dev.chrisbanes.haze.HazeState
 
 // Ties the library's nav to the open viewer, so the one nav changes into the viewer's buttons instead of a second bar standing in.
 @Stable
@@ -22,8 +19,6 @@ class ViewerBar {
     var isShown by mutableStateOf(true)
     // How far a swipe on the photo has gone, read only where the bar draws.
     var pull by mutableFloatStateOf(0f)
-    // The photo's own blur, so the nav over it frosts the photo rather than the grid hidden under it.
-    var hazeState by mutableStateOf<HazeState?>(null)
 
     fun reset() {
         isShown = true
@@ -31,9 +26,5 @@ class ViewerBar {
     }
 }
 
-// Shrinks the bar with a swipe on the photo frame by frame, as the viewer's other buttons do.
-fun Modifier.followingPull(bar: ViewerBar): Modifier = graphicsLayer {
-    val out = (bar.pull / CHROME_PULL_SHARE).coerceIn(0f, 1f)
-    scaleX = 1f - out
-    scaleY = 1f - out
-}
+// The share of the full pull by which the buttons have left completely, and by which the nav has changed back.
+const val CHROME_PULL_SHARE = 0.35f

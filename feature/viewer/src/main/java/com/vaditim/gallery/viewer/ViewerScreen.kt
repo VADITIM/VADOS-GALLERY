@@ -125,8 +125,6 @@ private val PAGE_GAP = 18.dp
 private const val MAX_ZOOM = 5f
 // A pull of this share of the screen height has shrunk the viewer all the way down to its tile.
 private const val PULL_RANGE = 0.4f
-// The share of the full pull by which the buttons have left completely.
-internal const val CHROME_PULL_SHARE = 0.35f
 // A swipe up of this share of the screen height has raised the details all the way.
 private const val LIFT_RANGE = 0.3f
 private const val HOLD_SPEED = 1.5f
@@ -193,6 +191,8 @@ fun BoxScope.ViewerScreen(
 
     BackHandler { if (overlay != Overlay.NONE) overlay = Overlay.NONE else onClose() }
 
+    // The library's blur, which the photo joins over the grid, so the nav standing over the photo frosts it and stays the same glass throughout.
+    val libraryHaze = LocalHazeState.current
     val hazeState = rememberHazeState()
     CompositionLocalProvider(LocalHazeState provides hazeState) {
         run {
@@ -203,7 +203,7 @@ fun BoxScope.ViewerScreen(
                 key = { items[it].id },
                 beyondViewportPageCount = 1,
                 pageSpacing = PAGE_GAP,
-                modifier = Modifier.fillMaxSize().hazeSource(hazeState),
+                modifier = Modifier.fillMaxSize().hazeSource(hazeState).then(if (libraryHaze != null) Modifier.hazeSource(libraryHaze, zIndex = 1f) else Modifier),
             ) { page ->
                 ViewerPage(
                     items[page],
@@ -256,7 +256,6 @@ fun BoxScope.ViewerScreen(
                 if (video != null) ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
                 // The buttons are the library's nav, which changes into them as it does for a selection; the viewer only answers what they ask of it.
                 SideEffect {
-                    bar?.hazeState = hazeState
                     bar?.isPendingDelete = pendingDelete != null
                     bar?.onCrop = {
                         video?.player?.pause()

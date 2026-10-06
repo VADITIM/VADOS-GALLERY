@@ -9,7 +9,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import com.vaditim.gallery.viewer.followingPull
+import com.vaditim.gallery.viewer.CHROME_PULL_SHARE
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
@@ -71,7 +75,6 @@ import com.vaditim.gallery.components.rememberOwnAccent
 import com.vaditim.gallery.components.Section
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.LocalAccent
-import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.Motion
 import kotlinx.coroutines.delay
 import com.vaditim.gallery.vas.Palette
@@ -164,22 +167,32 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
         // A tap on the open photo sends the bar off the bottom edge and back, a swipe on it shrinks the bar with the finger.
         AnimatedVisibility(
             !(controller.viewer.isOpen && !viewerBar.isShown),
-            modifier = Modifier.followingPull(viewerBar),
             enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, Motion.CHROME_STAGGER_MS, Motion.powerTwoOut)) +
                 slideInVertically(tween(Motion.OVERLAY_ENTER_MS, Motion.CHROME_STAGGER_MS, Motion.backOut)) { it },
             exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, Motion.CHROME_STAGGER_MS, Motion.powerTwoIn)) +
                 slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, Motion.CHROME_STAGGER_MS, Motion.powerTwoIn)) { it },
         ) {
         // One glass pill for every kind of bar, the open photo's too: the old buttons pop away and the new ones pop in, each on its own, while the pill's width follows from one to the other.
-        val isOverPhoto = controller.viewer.shown != null && viewerBar.hazeState != null
-        val glassHaze = if (isOverPhoto) viewerBar.hazeState else LocalHazeState.current
-        CompositionLocalProvider(LocalHazeState provides glassHaze) {
-        Box(Modifier.glass(Shapes.capsule, if (isOverPhoto) Palette.viewerGround else Palette.ground)) {
-            AnimatedContent(
-                targetState = controller.shownBar(screen),
+        // The one bar's change of kind, played through when the kind changes, and with a photo open driven by a swipe down: its buttons shrink away, the width follows and the buttons of the bar under the photo grow in, all with the finger.
+        val wantedBar = controller.shownBar(screen)
+        val barState = remember { SeekableTransitionState(wantedBar) }
+        LaunchedEffect(wantedBar) { barState.animateTo(wantedBar) }
+        val barUnderPhoto by rememberUpdatedState(screen.bottomBar)
+        LaunchedEffect(barState) {
+            snapshotFlow { viewerBar.pull }.collect { pull ->
+                if (!controller.viewer.isOpen || barState.currentState != BottomBar.VIEWER) return@collect
+                if (pull > 0f) {
+                    barState.seekTo((pull / CHROME_PULL_SHARE).coerceIn(0f, 1f), barUnderPhoto)
+                } else if (barState.targetState != BottomBar.VIEWER) {
+                    barState.snapTo(BottomBar.VIEWER)
+                }
+            }
+        }
+        val barTransition = rememberTransition(barState, label = "bottomBar")
+        Box(Modifier.glass(Shapes.capsule)) {
+            barTransition.AnimatedContent(
                 transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
                 contentAlignment = Alignment.Center,
-                label = "bottomBar",
             ) { shownBar ->
                 val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT)
                 CompositionLocalProvider(LocalButtonPop provides pop) {
@@ -209,7 +222,6 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                     }
                 }
             }
-        }
         }
         }
     }

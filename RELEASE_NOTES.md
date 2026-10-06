@@ -1,4 +1,4 @@
-# 1.1.45
+# 1.1.46
 
-- Opening a photo now changes the nav exactly as selecting photos does: the nav's buttons pop out, the nav changes width, the photo's buttons pop in. The photo view's own bar is gone; the nav is the only one.
-- Holding the timeline also makes it taller, so the bigger labels no longer squeeze out the months around them.
+- Swiping down on a photo now changes the nav back with your finger: the photo's buttons shrink away, the nav's width follows and its own buttons grow in. Letting go finishes it or takes it back.
+- The nav keeps the same glass over a photo as over the grid, so it stays one bar instead of seeming to swap for another.
