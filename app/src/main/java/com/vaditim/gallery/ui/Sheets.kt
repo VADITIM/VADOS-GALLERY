@@ -17,6 +17,16 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +71,13 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
+    // A pull down drags the sheet with the finger; let go far enough or fast enough and it carries on down from there and closes, otherwise it goes back up.
+    val pull = remember { Animatable(0f) }
+    var sheetHeight by remember { mutableFloatStateOf(1f) }
+    val scope = rememberCoroutineScope()
+    val pastEdge = with(androidx.compose.ui.platform.LocalDensity.current) { 24.dp.toPx() }
+    LaunchedEffect(visible) { if (visible) pull.snapTo(0f) }
+    val pullDrag = rememberDraggableState { delta -> scope.launch { pull.snapTo((pull.value + delta).coerceAtLeast(0f)) } }
     AnimatedVisibility(
         visible = visible || isRevealing,
         // Already on screen under the finger, so it does not play its own arrival on top.
@@ -72,7 +89,7 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
         Box(
             Modifier
                 .fillMaxSize()
-                .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f))) }
+                .drawBehind { drawRect(SCRIM.copy(alpha = SCRIM.alpha * (if (isFollowing()) reveal() else 1f) * (1f - pull.value / sheetHeight).coerceIn(0f, 1f))) }
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             // A floating sheet hangs from a fixed edge near the top, centred, so a change in its height only ever moves its bottom.
             contentAlignment = if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
@@ -89,7 +106,21 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                         exit = slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) { it / 8 } +
                             scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.98f),
                     )
-                    .graphicsLayer { if (isFollowing()) translationY = (1f - reveal()) * (size.height + 12.dp.toPx()) }
+                    .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull.value }
+                    .onSizeChanged { sheetHeight = it.height.toFloat().coerceAtLeast(1f) }
+                    .draggable(
+                        pullDrag,
+                        Orientation.Vertical,
+                        enabled = visible,
+                        onDragStopped = { velocity ->
+                            if (pull.value > sheetHeight * PULL_CLOSE || velocity > PULL_FLING) {
+                                pull.animateTo(sheetHeight + pastEdge, tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoOut), velocity)
+                                onDismiss()
+                            } else {
+                                pull.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut), velocity)
+                            }
+                        },
+                    )
                     .then(if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
                     .padding(12.dp)
                     .then(if (isFloating) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
@@ -110,6 +141,9 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
 }
 
 private val SCRIM = Color(0x4D000000)
+// A pull past this share of the sheet's height, or a flick faster than this in pixels per second, closes it.
+private const val PULL_CLOSE = 0.25f
+private const val PULL_FLING = 1200f
 // Where a floating sheet hangs: this far under the status bar, no wider than this.
 private val FLOATING_TOP = 72.dp
 private val FLOATING_WIDTH = 420.dp

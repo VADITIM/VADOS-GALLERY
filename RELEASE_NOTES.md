@@ -1,3 +1,4 @@
-# v0.117
+# v0.118
 
-- The photo count sits at the left end of the nav row, level with the nav, as a small three-by-three grid: the month count top left, the slash in the middle, the total bottom right.
+- The photo count in the nav row is narrower and no longer runs under the nav.
+- Every sheet (settings, menus, pickers) can be pulled down with the finger; let go far enough or flick it and it closes, otherwise it springs back.

@@ -1870,18 +1870,21 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count as a three-by-three grid of equal cells, each as wide as the total's digits: the month's number top left, the slash in the middle, the total bottom right, so neither number ever moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
+// The count as a three-by-three grid, the outer columns as wide as the total's digits: the month's number top left, the slash in the middle, the total bottom right, so neither number ever moves the other. Only the month's number types itself over while scrolling; the total types in once and again only when it changes.
 @Composable
 private fun PhotoCount(monthCount: Int, total: Int) {
     val totalText = total.toString()
-    val style = Type.microLabel.copy(fontSize = 9.sp)
+    // Tight tracking: the count has only the room between the screen's edge and the nav.
+    val style = Type.microLabel.copy(fontSize = 10.sp, letterSpacing = 0.5.sp)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val digits = remember(totalText.length) { measurer.measure("0".repeat(totalText.length), style).size }
     val cellWidth = with(density) { digits.width.toDp() }
     val cellHeight = with(density) { digits.height.toDp() }
-    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Box(Modifier.size(width = cellWidth * 3, height = cellHeight * 3)) {
+    // The middle column holds only the slash, so it is as narrow as the slash.
+    val slashWidth = with(density) { remember { measurer.measure("/", style).size.width }.toDp() }
+    Box(Modifier.glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 4.dp)) {
+        Box(Modifier.size(width = cellWidth * 2 + slashWidth, height = cellHeight * 3)) {
             Box(Modifier.align(Alignment.TopStart).size(cellWidth, cellHeight), contentAlignment = Alignment.CenterEnd) {
                 TypewriterText(monthCount.toString(), style = style, isTypedIn = true, isCaretShown = false)
             }
