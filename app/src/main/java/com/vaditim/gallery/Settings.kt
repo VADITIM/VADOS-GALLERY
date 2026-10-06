@@ -59,6 +59,9 @@ object Settings {
     // The open folder's name above the nav; off, it takes the month's place in the top pill.
     var folderLabel by mutableStateOf(true)
         private set
+    // The random private favourite at the top of Private's groups.
+    var todaysSelection by mutableStateOf(true)
+        private set
     val albumColumns: Int get() = albumColumnsIn(view)
     // Albums in the order the user arranged them, by folder path; albums not in it keep the default order after these.
     var albumOrder by mutableStateOf<List<String>>(emptyList())
@@ -118,6 +121,7 @@ object Settings {
         autoplayVideos = preferences.getBoolean("autoplay", true)
         dayStamps = preferences.getBoolean("dayStamps", true)
         folderLabel = preferences.getBoolean("folderLabel", true)
+        todaysSelection = preferences.getBoolean("todaysSelection", true)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         albumNames = preferences.getString("albumNames", null)?.split('\n')?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.orEmpty().toMap()
@@ -249,6 +253,11 @@ object Settings {
     fun updateFolderLabel(value: Boolean) {
         folderLabel = value
         preferences.edit().putBoolean("folderLabel", value).apply()
+    }
+
+    fun updateTodaysSelection(value: Boolean) {
+        todaysSelection = value
+        preferences.edit().putBoolean("todaysSelection", value).apply()
     }
 
     fun updateAutoplayVideos(value: Boolean) {

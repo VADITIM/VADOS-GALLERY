@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import com.vaditim.gallery.Settings
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Palette
@@ -80,7 +81,7 @@ fun PrivateGroupsScreen(
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Private", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
-        if (favorites.isNotEmpty()) {
+        if (Settings.todaysSelection && favorites.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }, contentType = "selection") {
                 val todaysIndex = selectionSeed % favorites.size
                 Box(Modifier.entrance()) { TodaysSelection(favorites[todaysIndex], isCovered = isViewerOpen, onClick = { onOpenSelection(todaysIndex) }) }
@@ -139,7 +140,6 @@ private fun TodaysSelection(item: MediaItem, isCovered: Boolean, onClick: () -> 
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             MicroLabel("Today's selection")
-            BasicText("for you 😏", style = Type.cardTitle, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }

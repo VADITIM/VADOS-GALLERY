@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.DateGroup
 import com.vaditim.gallery.Settings
+import com.vaditim.gallery.SettingsView
 import com.vaditim.gallery.backup.Backup
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
@@ -149,6 +150,10 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                         onColumnsChanged(it)
                     }
                     HeadersLayout(Settings.headers, Settings.dateGroups)
+                }
+                if (Settings.view == SettingsView.PRIVATE) {
+                    SettingsHeader("Private")
+                    SettingsToggle("Today's selection", Settings.todaysSelection) { Settings.updateTodaysSelection(it) }
                 }
             }
             SettingsTab.GENERAL -> {
