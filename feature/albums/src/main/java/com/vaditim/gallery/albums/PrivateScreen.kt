@@ -108,7 +108,7 @@ fun PrivateGroupsScreen(
                 isSelected = group.name in selectedNames,
             )
         }
-        item(span = { GridItemSpan(maxLineSpan) }, contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New group", onClick = onNewGroup) } }
+        item(span = { GridItemSpan(maxLineSpan) }, contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New album", onClick = onNewGroup) } }
     }
 }
 

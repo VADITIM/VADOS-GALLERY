@@ -116,6 +116,7 @@ internal fun BoxScope.ViewerOverlay(controller: LibraryController, content: Libr
         albums = content.albums,
         privateGroups = content.privateContents.groups,
         isPrivate = request.source.isPrivate,
+        canMoveWithinPrivate = request.source != ViewerSource.PrivateRecent,
         isTrash = request.source == ViewerSource.Trash,
         actions = controller.actions,
         onClose = transition::close,

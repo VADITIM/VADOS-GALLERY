@@ -80,7 +80,7 @@ private fun SelectionSheets(controller: LibraryController, content: LibraryConte
     )
     GroupPickerSheet(
         visible = sheets.isOpen(AppSheet.SELECTION_GROUP),
-        label = if (screen.isPrivateMode) "MOVE TO GROUP" else "MOVE TO PRIVATE",
+        label = if (screen.isPrivateMode) "MOVE TO ALBUM" else "MOVE TO PRIVATE",
         groups = content.privateContents.groups,
         excludedGroupName = screen.openPrivateGroup?.name,
         onPick = { name ->
@@ -255,9 +255,10 @@ private fun PrivateGroupSheets(controller: LibraryController, content: LibraryCo
     val sheets = controller.sheets
     val selection = controller.selection
     val targetGroups = screen.selectedGroups.ifEmpty { listOfNotNull(sheets.group) }
-    val targetGroupsLabel = targetGroups.singleOrNull()?.name?.uppercase() ?: "${targetGroups.size} GROUPS"
+    val targetGroupsLabel = targetGroups.singleOrNull()?.name?.uppercase() ?: "${targetGroups.size} ALBUMS"
     OverlaySheet(visible = sheets.isOpen(AppSheet.GROUP_MENU), label = sheets.group?.name?.uppercase().orEmpty(), onDismiss = sheets::dismiss) {
         GroupMenuRows(
+            deleteLabel = "Delete album",
             onDelete = {
                 val group = sheets.group
                 sheets.dismiss()
@@ -273,7 +274,7 @@ private fun PrivateGroupSheets(controller: LibraryController, content: LibraryCo
                 sheets.dismiss()
             },
             edit = {
-                SheetRow("Move group out to album", trailing = sheets.group?.items?.size?.toString(), icon = { MoveIcon(it) }) { sheets.show(AppSheet.GROUP_MOVE_OUT) }
+                SheetRow("Unlock", trailing = sheets.group?.items?.size?.toString(), icon = { LockIcon(it, isOpen = true) }) { sheets.show(AppSheet.GROUP_MOVE_OUT) }
                 SheetRow("Add photos", icon = { PlusIcon(it) }) {
                     sheets.group?.let { controller.navigation.picker = PickerTarget.IntoGroup(it.name) }
                     sheets.dismiss()
@@ -344,7 +345,7 @@ private fun NameSheets(controller: LibraryController, screen: LibraryScreen) {
             onDismiss = sheets::dismiss,
         )
         AppSheet.GROUP_RENAME -> NameSheet(
-            label = "RENAME GROUP",
+            label = "RENAME ALBUM",
             action = "RENAME",
             initialName = sheets.group?.name.orEmpty(),
             onConfirm = { name ->
@@ -433,7 +434,7 @@ private fun NameSheets(controller: LibraryController, screen: LibraryScreen) {
             onDismiss = sheets::dismiss,
         )
         AppSheet.SELECTION_NEW_GROUP -> NameSheet(
-            label = "NEW PRIVATE GROUP",
+            label = "NEW PRIVATE ALBUM",
             action = "MOVE HERE",
             onConfirm = { name ->
                 if (screen.isPrivateMode) {
@@ -446,14 +447,14 @@ private fun NameSheets(controller: LibraryController, screen: LibraryScreen) {
             onDismiss = sheets::dismiss,
         )
         AppSheet.ALBUM_NEW_GROUP -> NameSheet(
-            label = "NEW PRIVATE GROUP",
+            label = "NEW PRIVATE ALBUM",
             action = "MOVE HERE",
             initialName = targetAlbums.singleOrNull()?.name.orEmpty(),
             onConfirm = { name -> sheets.askPrivate(PendingPrivate(targetAlbums.flatMap { it.items }, name, isSelection = screen.isSelectingCovers)) },
             onDismiss = sheets::dismiss,
         )
         AppSheet.PRIVATE_NEW_GROUP -> NameSheet(
-            label = "NEW PRIVATE GROUP",
+            label = "NEW PRIVATE ALBUM",
             action = "CREATE",
             onConfirm = { name ->
                 sheets.dismiss()

@@ -257,7 +257,7 @@ fun GroupPickerSheet(
             items(groups.filter { it.name != excludedGroupName }, key = { it.directory.absolutePath }) { group ->
                 SheetRow(group.name, trailing = group.items.size.toString()) { onPick(group.name) }
             }
-            item { SheetRow("+ New group", color = Palette.textMuted, onClick = onNewGroup) }
+            item { SheetRow("+ New album", color = Palette.textMuted, onClick = onNewGroup) }
         }
     }
 }

@@ -44,8 +44,8 @@ fun AlbumMenuRows(
 
 // The long-press menu of a group, of albums or of private photos, laid out as an album's: deleting it at the very top, then what it does to the groups, changing this one, and selecting last.
 @Composable
-fun GroupMenuRows(onRename: () -> Unit, onSelect: () -> Unit, onRearrange: () -> Unit, onDelete: () -> Unit, groups: (@Composable () -> Unit)? = null, edit: @Composable () -> Unit = {}) {
-    SheetRow("Delete group", color = Palette.danger, icon = { TrashIcon(it) }, onClick = onDelete)
+fun GroupMenuRows(onRename: () -> Unit, onSelect: () -> Unit, onRearrange: () -> Unit, onDelete: () -> Unit, groups: (@Composable () -> Unit)? = null, edit: @Composable () -> Unit = {}, deleteLabel: String = "Delete group") {
+    SheetRow(deleteLabel, color = Palette.danger, icon = { TrashIcon(it) }, onClick = onDelete)
     if (groups != null) {
         SheetHeader("Groups")
         groups()

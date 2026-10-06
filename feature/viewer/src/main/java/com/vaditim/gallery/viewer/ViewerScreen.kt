@@ -146,6 +146,8 @@ fun BoxScope.ViewerScreen(
     albums: List<Album>,
     privateGroups: List<PrivateGroup>,
     isPrivate: Boolean,
+    // Private's Recent mixes every private album, so its photos only leave Private from there.
+    canMoveWithinPrivate: Boolean = true,
     isTrash: Boolean = false,
     actions: MediaActions,
     onClose: () -> Unit,
@@ -279,8 +281,10 @@ fun BoxScope.ViewerScreen(
             // Above the library's nav, which stands over the photo.
             Box(Modifier.matchParentSize().zIndex(1f)) {
             OverlaySheet(visible = overlay == Overlay.MORE, label = "MORE", ground = Palette.viewerGround, onDismiss = { overlay = Overlay.NONE }) {
-                if (isPrivate) {
-                    SplitSheetRow("Move to group", icon = { MoveIcon(it) }, onClick = { overlay = Overlay.HIDE }, sideIcon = { LockIcon(it, isOpen = true) }, onSide = { overlay = Overlay.MOVE })
+                if (isPrivate && !canMoveWithinPrivate) {
+                    SheetRow("Unlock", icon = { LockIcon(it, isOpen = true) }) { overlay = Overlay.MOVE }
+                } else if (isPrivate) {
+                    SplitSheetRow("Move to album", icon = { MoveIcon(it) }, onClick = { overlay = Overlay.HIDE }, sideIcon = { LockIcon(it, isOpen = true) }, onSide = { overlay = Overlay.MOVE })
                 } else {
                     SplitSheetRow("Move to album", icon = { MoveIcon(it) }, onClick = { overlay = Overlay.MOVE }, sideIcon = { LockIcon(it) }, onSide = { overlay = Overlay.HIDE })
                 }
@@ -329,7 +333,7 @@ fun BoxScope.ViewerScreen(
 
             GroupPickerSheet(
                 visible = overlay == Overlay.HIDE,
-                label = if (isPrivate) "MOVE TO GROUP" else "MOVE TO PRIVATE",
+                label = if (isPrivate) "MOVE TO ALBUM" else "MOVE TO PRIVATE",
                 groups = privateGroups,
                 excludedGroupName = if (isPrivate) current.bucketName else null,
                 ground = Palette.viewerGround,
@@ -348,7 +352,7 @@ fun BoxScope.ViewerScreen(
 
             if (overlay == Overlay.NEW_GROUP) {
                 NameSheet(
-                    label = "NEW PRIVATE GROUP",
+                    label = "NEW PRIVATE ALBUM",
                     action = "MOVE HERE",
                     ground = Palette.viewerGround,
                     onConfirm = { name ->

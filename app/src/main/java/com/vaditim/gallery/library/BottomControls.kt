@@ -386,7 +386,8 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             }) { ImageIcon(Palette.textBody) }
         }
         if (screen.isPrivateMode) {
-            IconButton(onClick = { sheets.show(AppSheet.SELECTION_GROUP) }) { MoveIcon(Palette.textBody) }
+            // Private's Recent mixes every private album, so its photos only leave Private from there.
+            if (screen.gridSource != ViewerSource.PrivateRecent) IconButton(onClick = { sheets.show(AppSheet.SELECTION_GROUP) }) { MoveIcon(Palette.textBody) }
             IconButton(onClick = { sheets.show(AppSheet.SELECTION_MOVE) }) { LockIcon(Palette.textBody, isOpen = true) }
             IconButton(onClick = { confirmDelete { actions.deletePrivate(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
         } else {
