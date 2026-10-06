@@ -1939,7 +1939,7 @@ private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, 
                 if (isMonthShown) lastLabel = title ?: month.label.uppercase()
                 MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                    // A section-coloured pill while it names the folder; with the folder named above the nav, only the month's text in the section colour.
+                    // A section-coloured pill while it names the folder; with the folder named above the nav, the glass pill with the month in the section colour.
                     TypedLabel(
                         lastLabel,
                         LocalAccentTarget.current ?: LocalAccent.current,

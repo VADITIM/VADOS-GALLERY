@@ -19,7 +19,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -29,6 +28,7 @@ import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
+import com.vaditim.gallery.vas.glass
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -81,16 +81,16 @@ fun TypedLabel(
     Box(
         modifier
             .width(fixedWidth ?: with(density) { freeWidth.value.toDp() })
+            // Unfilled it is the glass pill, its text in the accent.
+            .then(if (isFilled) Modifier else Modifier.glass(Shapes.capsule))
             .background(fill, Shapes.capsule)
             .padding(padding),
         contentAlignment = contentAlignment,
     ) {
         // A caret would widen text whose pill is sized to it, so only a fixed-width label shows one.
-        FadingOverflow { TypewriterText(stage, style = Type.microLabel.copy(color = ink, shadow = if (isFilled) null else LABEL_SHADOW), isCaretShown = fixedWidth != null) }
+        FadingOverflow { TypewriterText(stage, style = Type.microLabel.copy(color = ink), isCaretShown = fixedWidth != null) }
     }
 }
 
 // How far into the resize the new text starts typing.
 private const val TYPE_IN_AT = 0.3f
-// Bare text over photos keeps a dark shadow under it, as the corner heart does.
-private val LABEL_SHADOW = Shadow(Color.Black, blurRadius = 8f)

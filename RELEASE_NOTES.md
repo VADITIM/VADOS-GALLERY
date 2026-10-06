@@ -1,4 +1,3 @@
-# v1.1.8
+# v1.1.9
 
-- Crop has undo and redo instead of Reset; hold undo to revert everything.
-- Save in crop is a tick.
+- With the folder label at the bottom, the month at the top keeps its glass pill, its text in the section colour.
