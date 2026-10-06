@@ -54,8 +54,7 @@ bar-sweep is kept for later on sparse text (album titles, the details panel) onc
   button, the viewer's controls and its menus all blur and darken whatever is behind them
   (`Modifier.glass`, built on Haze). Over photographs a hairline reads as a frame around a hole; a
   blur reads as a pane. This replaces VAS law 1 ("the border is the design") for anything that floats.
-- **The status-bar edge is a fading blur** (`Modifier.fadingGlass`): full at the top of the screen,
-  none where it meets the content, so the grid dissolves under the clock instead of being cut off.
+- **The status-bar edge is not blurred**: the grid runs plainly under the clock.
 - **Things that do not float are flat raised fills, also without a border** (`Panel`, `#202020`).
 - **Corners are generous.** Sheets 30dp, panels 22dp and album covers 20dp as squircles; the bar,
   chips and buttons are full capsules; grid thumbnails 8dp rounded rects with 3dp gaps. Thumbnails

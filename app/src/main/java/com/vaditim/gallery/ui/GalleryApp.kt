@@ -124,7 +124,6 @@ import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
-import com.vaditim.gallery.vas.fadingGlass
 import com.vaditim.gallery.vas.glass
 import com.vaditim.gallery.vas.pressable
 import com.vaditim.gallery.vault.PrivateLock
@@ -906,8 +905,6 @@ private fun Library(viewModel: GalleryViewModel) {
             // As the photo grows the top row leaves off the top and the navigation off the bottom, with the photo, and both come back as it shrinks, so the photo passes behind them.
             val viewerRise = if (shownViewer == null) Modifier else Modifier.graphicsLayer { translationY = -viewerProgress.value * (1f - viewerPull) * (size.height + 12.dp.toPx()) }
             val viewerSink = if (shownViewer == null) Modifier else Modifier.graphicsLayer { translationY = viewerProgress.value * (1f - viewerPull) * (size.height + 12.dp.toPx()) }
-            Box(Modifier.fillMaxWidth().height((statusBarHeight + HEADER_ROOM + 24.dp) * 0.4f).then(viewerRise).fadingGlass())
-
             // Sorting through the photos on screen, from the settings sheet; a place of covers has none to go through.
             val reviewAction: (() -> Unit)? = when {
                 isPrivateMode && section == Section.RECENT -> { { review = ViewerSource.PrivateRecent } }

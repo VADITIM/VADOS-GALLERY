@@ -1,5 +1,3 @@
-# v1.1.3
+# v1.1.4
 
-- Folder label is now a Top or Bottom choice in Settings → General.
-- The top pill's month or folder name is in the section colour.
-- The bottom folder label types itself over when it changes, and its pill resizes smoothly.
+- The blur at the top edge of the screen is gone.

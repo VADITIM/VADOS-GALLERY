@@ -31,7 +31,6 @@ import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
-import com.vaditim.gallery.vas.fadingGlass
 import com.vaditim.gallery.vas.glass
 import com.vaditim.gallery.vas.pressable
 import dev.chrisbanes.haze.hazeSource
@@ -65,7 +64,6 @@ fun PickerScreen(title: String, items: List<MediaItem>, action: String, onDone: 
                 modifier = Modifier.hazeSource(hazeState),
                 isMarked = { addedTo(it) != null },
             )
-            Box(Modifier.fillMaxWidth().height((statusBarHeight + 88.dp) * 0.5f).fadingGlass())
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
