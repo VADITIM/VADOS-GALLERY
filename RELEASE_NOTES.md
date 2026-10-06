@@ -1,3 +1,3 @@
-# v0.128
+# v0.129
 
-- Making a new group with an album that already belongs to another group asks first ("Album already in {group}") with Add anyway or Cancel; Cancel goes back to the list with the ticks kept.
+- Signed with a dedicated release key instead of the debug key. Uninstall the old app once before installing this one; settings, order, covers and review progress reset.
