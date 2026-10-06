@@ -1,4 +1,6 @@
-# v1.1.15
+# v1.1.16
 
-- Selecting albums that sit in a group now shows a remove from group button in the bar.
-- Closing a group while albums are selected now clears the selection.
+- Starting or ending a selection now pops the top buttons away and the new ones in, instead of fading.
+- The bottom bar stays one pill when a selection starts or ends: its buttons pop out and the new ones pop in while the pill changes width.
+- The delete Confirm button is a little smaller.
+- Swiping a closed group open now cuts its name away from the left.

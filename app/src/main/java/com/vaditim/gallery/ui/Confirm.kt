@@ -31,10 +31,10 @@ fun ConfirmPill(pending: (() -> Unit)?, onDone: () -> Unit) {
                     delete?.invoke()
                 })
                 .background(Palette.danger, Shapes.capsule)
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 19.dp, vertical = 10.dp),
         ) {
-            // Half again the size of the other labels, so the one irreversible tap is the easiest to find.
-            BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep, fontSize = Type.microLabel.fontSize * 1.5f, letterSpacing = Type.microLabel.letterSpacing * 1.5f))
+            // A fifth larger than the other labels, so the one irreversible tap is the easiest to find.
+            BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep, fontSize = Type.microLabel.fontSize * 1.2f, letterSpacing = Type.microLabel.letterSpacing * 1.2f))
         }
     }
 }

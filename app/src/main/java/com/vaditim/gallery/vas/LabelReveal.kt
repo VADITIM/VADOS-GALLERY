@@ -20,7 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 
 // The VAS bar-sweep (components/08-text-reveal.md): an accent bar grows across the text, the text opens under it, and the bar retracts off the far edge. Leaving is a cut, never the sweep reversed. `presence` lets a gesture take the text away with the finger.
 @Composable
-fun LabelReveal(text: String, isShown: Boolean, style: TextStyle, modifier: Modifier = Modifier, presence: () -> Float = { 1f }, isRevealedAtStart: Boolean = false) {
+fun LabelReveal(text: String, isShown: Boolean, style: TextStyle, modifier: Modifier = Modifier, presence: () -> Float = { 1f }, isRevealedAtStart: Boolean = false, isCutFromStart: Boolean = false) {
     val accent = LocalAccent.current
     val bar = remember { Animatable(0f) }
     // Text already standing when it first appears (scrolled back into view) shows at once; only a change sweeps.
@@ -44,8 +44,12 @@ fun LabelReveal(text: String, isShown: Boolean, style: TextStyle, modifier: Modi
     }
     Box(
         modifier.drawWithContent {
-            val shown = (opened.value * presence()).coerceIn(0f, 1f)
-            clipRect(right = size.width * shown) { this@drawWithContent.drawContent() }
+            val open = opened.value.coerceIn(0f, 1f)
+            val present = presence().coerceIn(0f, 1f)
+            // The sweep always opens from the left; presence cuts from the right end, or from the left one when isCutFromStart.
+            val start = if (isCutFromStart) size.width * (1f - present) else 0f
+            val end = size.width * if (isCutFromStart) open else open * present
+            clipRect(left = start, right = end) { this@drawWithContent.drawContent() }
             val width = size.width * bar.value
             // The bar overhangs the line a little, so no ascender or descender shows past it.
             val overhang = size.height * 0.06f

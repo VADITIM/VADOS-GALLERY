@@ -54,14 +54,14 @@ private const val ACTIVE_LABEL_SCALE = 1.06f
 
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
-fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }, albumsGlyph: PlaceGlyph = PlaceGlyph.ALBUMS) {
+fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }, albumsGlyph: PlaceGlyph = PlaceGlyph.ALBUMS, hasGlass: Boolean = true, itemModifier: Modifier = Modifier, washAlpha: () -> Float = { 1f }) {
     // The new section's label takes its colour on the cut, once the outgoing section has left, as every other accent does.
     var inkActive by remember { mutableStateOf(active) }
     LaunchedEffect(active) {
         delay(Motion.SECTION_LEAVE_MS.toLong())
         inkActive = active
     }
-    NavBar(Section.entries, active, onSelect, modifier) { section ->
+    NavBar(Section.entries, active, onSelect, modifier, hasGlass = hasGlass, itemModifier = itemModifier, washAlpha = washAlpha) { section ->
         val ink by animateColorAsState(if (section == inkActive) accentOf(section) else Palette.textMuted, tween(Motion.STATE_MS), label = "section-ink")
         when (section) {
             Section.RECENT -> ClockIcon(ink, SECTION_ICON)
@@ -90,7 +90,8 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
 
 // The nav's pill, for any row of choices: glass, a wash that slides to the chosen one, its label grown a little. `scroll` lets a row wider than the screen slide inside the pill.
 @Composable
-fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier, scroll: ScrollState? = null, label: @Composable (T) -> Unit) {
+// Inside a glass shared with other bars it leaves the glass out; each option takes itemModifier, and the wash fades with washAlpha, so a bar swap can pop them.
+fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier, scroll: ScrollState? = null, hasGlass: Boolean = true, itemModifier: Modifier = Modifier, washAlpha: () -> Float = { 1f }, label: @Composable (T) -> Unit) {
     // Where each option's pill sits in the bar, left edge and right edge, so the highlight knows where to slide.
     val spans = remember { mutableStateMapOf<T, Pair<Float, Float>>() }
     val left = remember { Animatable(Float.NaN) }
@@ -115,12 +116,12 @@ fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Mod
     val wash = Palette.pressedWash
     Row(
         modifier
-            .glass(Shapes.capsule)
+            .then(if (hasGlass) Modifier.glass(Shapes.capsule) else Modifier)
             .then(if (scroll != null) Modifier.horizontalScroll(scroll) else Modifier)
             .padding(5.dp)
             .drawBehind {
                 if (left.value.isNaN()) return@drawBehind
-                drawRoundRect(wash, Offset(left.value, 0f), Size(right.value - left.value, size.height), CornerRadius(size.height / 2f))
+                drawRoundRect(wash, Offset(left.value, 0f), Size(right.value - left.value, size.height), CornerRadius(size.height / 2f), alpha = washAlpha())
             },
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -128,7 +129,7 @@ fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Mod
             val isActive = option == active
             val labelScale by animateFloatAsState(if (isActive) ACTIVE_LABEL_SCALE else 1f, tween(Motion.NAV_SLIDE_MS, easing = Motion.backOut), label = "section-scale")
             Box(
-                Modifier
+                itemModifier
                     .onPlaced { placed -> spans[option] = placed.positionInParent().x.let { it to it + placed.size.width } }
                     .pressable(onClick = { onSelect(option) })
                     .padding(horizontal = 18.dp, vertical = 13.dp),

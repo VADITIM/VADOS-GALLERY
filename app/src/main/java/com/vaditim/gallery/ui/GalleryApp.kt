@@ -54,6 +54,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.geometry.CornerRadius
@@ -61,6 +62,8 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -214,6 +217,7 @@ private sealed interface PickerTarget {
     data class IntoFavoriteAlbum(val name: String) : PickerTarget { override val title get() = "Add to Favorites · $name" }
 }
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun GalleryApp(viewModel: GalleryViewModel = viewModel()) {
     val access by viewModel.access.collectAsStateWithLifecycle()
@@ -1016,19 +1020,77 @@ private fun Library(viewModel: GalleryViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
             ConfirmPill(pendingDelete, onDone = { pendingDelete = null })
-            // The bar pops from one kind to the next instead of cutting, as the top buttons do.
+            // The pills above the nav go with it, popping away as a selection's bar comes.
+            AnimatedVisibility(bottomBar == BottomBar.NAVIGATION, enter = TOP_ENTER, exit = TOP_EXIT) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Inside Private, Locations or the trash the bar belongs to that place, so it says so, with the way out beside it.
+                        val isInLocations = place == AlbumsPlace.Locations || place is AlbumsPlace.Location
+                        val placePill = when {
+                            isPrivateMode -> "PRIVATE"
+                            isInLocations -> "LOCATIONS"
+                            place is AlbumsPlace.Trash -> "TRASH"
+                            else -> null
+                        }
+                        var lastPill by remember { mutableStateOf(placePill ?: "") }
+                        if (placePill != null) lastPill = placePill
+                        val pillAccent = rememberOwnAccent(placePill != null)
+                        // Out of Private; out of Locations entirely, from a location as from the list; out of the trash. The label is the way out as much as the arrow beside it.
+                        val leavePlace: () -> Unit = { if (isPrivateMode) { leavePrivate() } else { albumsPlace = AlbumsPlace.Folders } }
+                        // Where you are, in the section's colour; not a control, so no arrow and no press.
+                        var lastFolderName by remember { mutableStateOf(folderName.orEmpty()) }
+                        var lastFolderAccent by remember { mutableStateOf(accentTarget) }
+                        if (isFolderLabelShown) {
+                            lastFolderName = folderName.orEmpty()
+                            lastFolderAccent = accentTarget
+                        }
+                        AnimatedVisibility(isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
+                            TypedLabel(lastFolderName, lastFolderAccent, Modifier.padding(bottom = 8.dp), maxWidth = FOLDER_LABEL_MAX_WIDTH)
+                        }
+                        // Empties the whole trash for good, so it waits for Confirm.
+                        AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
+                            Box(
+                                Modifier.padding(bottom = 8.dp)
+                                    .pressable(onClick = { pendingDelete = { actions.deleteForever(trash) } })
+                                    .glass(Shapes.capsule)
+                                    .pendingMark(pendingDelete != null)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            ) {
+                                BasicText("DELETE NOW", style = Type.microLabel.copy(color = Palette.danger))
+                            }
+                        }
+                        AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
+                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                // The arrow in the label's own colours, ink on the place colour, so the two read as one way out.
+                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(Palette.sunkenDeep, size = 16.dp) }
+                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                    BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                                }
+                            }
+                        }
+                    }
+            }
+            // The nav's wash fades with its buttons, coming back only once they pop in.
+            val washAlpha by animateFloatAsState(
+                if (bottomBar == BottomBar.NAVIGATION) 1f else 0f,
+                tween(Motion.STATE_MS, delayMillis = if (bottomBar == BottomBar.NAVIGATION) Motion.STATE_MS else 0),
+                label = "nav-wash",
+            )
+            // One glass pill for every kind of bar: the old buttons pop away and the new ones pop in, each on its own, while the pill's width follows from one to the other.
+            Box(Modifier.glass(Shapes.capsule)) {
             AnimatedContent(
                 targetState = bottomBar,
-                transitionSpec = { BAR_ENTER.togetherWith(BAR_EXIT).using(SizeTransform(clip = false)) },
-                contentAlignment = Alignment.BottomCenter,
+                transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
+                contentAlignment = Alignment.Center,
                 label = "bottomBar",
             ) { shownBar ->
+                val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT)
+                CompositionLocalProvider(LocalButtonPop provides pop) {
                 if (shownBar == BottomBar.REARRANGING) {
-                    Box(Modifier.pressable(onClick = { isRearranging = false }).glass(Shapes.capsule).padding(horizontal = 22.dp, vertical = 13.dp)) {
+                    Box(pop.pressable(onClick = { isRearranging = false }).padding(horizontal = 22.dp, vertical = 13.dp)) {
                         CheckIcon(accent)
                     }
                 } else if (shownBar == BottomBar.COVERS) {
-                    Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
+                    Row(Modifier.padding(5.dp)) {
                         val deleteModifier = Modifier.pendingMark(pendingDelete != null)
                         if (selectedGroups.isNotEmpty()) {
                             IconButton(onClick = { sheet = AppSheet.GROUP_MOVE_OUT }) { LockIcon(Palette.textBody, isOpen = true) }
@@ -1068,7 +1130,7 @@ private fun Library(viewModel: GalleryViewModel) {
                         }
                     }
                 } else if (shownBar == BottomBar.PHOTOS) {
-                    Row(Modifier.glass(Shapes.capsule).padding(5.dp)) {
+                    Row(Modifier.padding(5.dp)) {
                       if (place is AlbumsPlace.Trash) {
                         IconButton(onClick = { sheet = AppSheet.TRASH_RESTORE }) { RestoreIcon(accent) }
                         // Out of the trash there is no coming back, so it waits for Confirm.
@@ -1132,52 +1194,10 @@ private fun Library(viewModel: GalleryViewModel) {
                       }
                     }
                 } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Inside Private, Locations or the trash the bar belongs to that place, so it says so, with the way out beside it.
-                        val isInLocations = place == AlbumsPlace.Locations || place is AlbumsPlace.Location
-                        val placePill = when {
-                            isPrivateMode -> "PRIVATE"
-                            isInLocations -> "LOCATIONS"
-                            place is AlbumsPlace.Trash -> "TRASH"
-                            else -> null
-                        }
-                        var lastPill by remember { mutableStateOf(placePill ?: "") }
-                        if (placePill != null) lastPill = placePill
-                        val pillAccent = rememberOwnAccent(placePill != null)
-                        // Out of Private; out of Locations entirely, from a location as from the list; out of the trash. The label is the way out as much as the arrow beside it.
-                        val leavePlace: () -> Unit = { if (isPrivateMode) { leavePrivate() } else { albumsPlace = AlbumsPlace.Folders } }
-                        // Where you are, in the section's colour; not a control, so no arrow and no press.
-                        var lastFolderName by remember { mutableStateOf(folderName.orEmpty()) }
-                        var lastFolderAccent by remember { mutableStateOf(accentTarget) }
-                        if (isFolderLabelShown) {
-                            lastFolderName = folderName.orEmpty()
-                            lastFolderAccent = accentTarget
-                        }
-                        AnimatedVisibility(isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            TypedLabel(lastFolderName, lastFolderAccent, Modifier.padding(bottom = 8.dp), maxWidth = FOLDER_LABEL_MAX_WIDTH)
-                        }
-                        // Empties the whole trash for good, so it waits for Confirm.
-                        AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
-                            Box(
-                                Modifier.padding(bottom = 8.dp)
-                                    .pressable(onClick = { pendingDelete = { actions.deleteForever(trash) } })
-                                    .glass(Shapes.capsule)
-                                    .pendingMark(pendingDelete != null)
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                            ) {
-                                BasicText("DELETE NOW", style = Type.microLabel.copy(color = Palette.danger))
-                            }
-                        }
-                        AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                // The arrow in the label's own colours, ink on the place colour, so the two read as one way out.
-                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(Palette.sunkenDeep, size = 16.dp) }
-                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                    BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
-                                }
-                            }
-                        }
                         SectionBar(
+                            hasGlass = false,
+                            itemModifier = pop,
+                            washAlpha = { washAlpha },
                             modifier = Modifier.onSizeChanged {
                                 navigationHeight = it.height
                                 navigationWidth = it.width
@@ -1212,8 +1232,9 @@ private fun Library(viewModel: GalleryViewModel) {
                                 section = selected
                             },
                         )
-                    }
                 }
+            }
+            }
             }
             }
 
@@ -1936,20 +1957,22 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
-    // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
+    // Selecting swaps the whole row: what stands there pops away, each on its own, then the new buttons pop in; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
-        transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))).using(SizeTransform(clip = false)) },
+        transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
+        val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT)
         // As tall as a button, whether or not one is shown, so the month pill never moves up or down as back and add come and go.
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).height(TOP_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
             if (isSelecting) {
-                TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) }
+                Box(pop) { TopButton(onCancelSelection) { CloseIcon(LocalAccent.current) } }
                 Box(Modifier.weight(1f))
-                Chip("$selectedCount selected")
+                Chip("$selectedCount selected", pop)
             } else {
                 // Back sits at the far left, then the month, or the folder's name in its place, which types itself over as it changes; the buttons gather at the right.
                 val isMonthShown = month.label.isNotEmpty()
@@ -1958,8 +1981,8 @@ private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, 
                 val monthVisibility = remember { MutableTransitionState(isMonthShown) }
                 monthVisibility.targetState = isMonthShown
                 // Back arriving pushes the pill aside only when it was already showing; arriving together, it pops in where it ends up.
-                MakeRoomButton(onBack, isNeighbourShown = monthVisibility.currentState && isMonthShown) { BackIcon(LocalAccent.current) }
-                AnimatedVisibility(monthVisibility, enter = TOP_ENTER, exit = TOP_EXIT) {
+                Box(pop) { MakeRoomButton(onBack, isNeighbourShown = monthVisibility.currentState && isMonthShown) { BackIcon(LocalAccent.current) } }
+                AnimatedVisibility(monthVisibility, modifier = pop, enter = TOP_ENTER, exit = TOP_EXIT) {
                     // A section-coloured pill while it names the folder; with the folder named above the nav, the glass pill with the month in the section colour.
                     TypedLabel(
                         lastLabel,
@@ -1978,8 +2001,8 @@ private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, 
                     onToggleView != null -> if (isAlbumsView) TopAction.SHOW_GRID else TopAction.SHOW_ALBUMS
                     else -> null
                 }
-                TopActionButton(action, onAdd ?: onToggleView)
-                Box(Modifier.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
+                Box(pop) { TopActionButton(action, onAdd ?: onToggleView) }
+                Box(pop.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
             }
         }
     }
@@ -2025,10 +2048,6 @@ private enum class BottomBar { NAVIGATION, PHOTOS, COVERS, REARRANGING }
 private val SETTINGS_BLUR = 6.dp
 // A top button's height: its 22dp icon and 10dp above and below.
 private val TOP_ROW_HEIGHT = 42.dp
-
-// The bottom bar swaps with a smaller pop than a single button, being wide.
-private val BAR_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0.8f)
-private val BAR_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.STATE_MS, easing = Motion.powerTwoIn), targetScale = 0.8f)
 
 // Top buttons pop: they grow in past full size and settle, and shrink away to nothing, in place rather than sliding.
 private val TOP_ENTER = fadeIn(tween(Motion.STATE_MS)) + scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)

@@ -408,13 +408,14 @@ private fun GroupRow(
                 if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(albums) else onStackLongPress() } }),
                 verticalArrangement = Arrangement.Center,
             ) {
-                // Closing, the name sweeps back in as the heading does on opening, over its own width; opening, or pushed open, it is sliced away from its right end in step with the cards.
+                // Closing, the name sweeps back in as the heading does on opening, over its own width; opening, or pushed open, it is sliced away from its left end in step with the cards.
                 LabelReveal(
                     stack.name,
                     isShown = !isHeadingShown,
                     style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current),
                     presence = { if (isOpen || isPushed) 1f - time.value else 1f },
                     isRevealedAtStart = true,
+                    isCutFromStart = true,
                 )
                 BasicText(
                     albums.sumOf { it.items.size }.toString(),

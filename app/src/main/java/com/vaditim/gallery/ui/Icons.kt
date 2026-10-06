@@ -68,10 +68,13 @@ private fun SvgGlyph(color: Color, size: Dp, viewBox: Float = 24f, strokeWidth: 
     }
 }
 
+// The pop of the bar an icon button sits in, so each button comes and goes on its own as the bar changes kind.
+val LocalButtonPop = androidx.compose.runtime.staticCompositionLocalOf<Modifier> { Modifier }
+
 @Composable
 fun IconButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     // Every icon button is an action (share, move, delete, favourite…), so each one answers with a short click.
-    Box(modifier.pressable(onClick = onClick).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
+    Box(LocalButtonPop.current.then(modifier).pressable(onClick = onClick).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
 }
 
 @Composable
