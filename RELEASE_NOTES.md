@@ -1,3 +1,3 @@
-# 1.1.24
+# 1.1.25
 
-- Roadmap added: drawing in crop and dragging albums into groups, planned for 1.2.0.
+- A shut group shows three stacked cards instead of four.

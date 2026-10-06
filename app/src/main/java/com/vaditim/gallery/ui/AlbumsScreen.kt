@@ -562,7 +562,7 @@ private fun GroupRow(
 private data class CardPlacement(val x: Float, val y: Float, val scale: Float, val progress: Float, val depth: Int, val isHeld: Boolean)
 
 // How many cards show under the top one while a group lies shut.
-private const val STACK_DEPTH = 3
+private const val STACK_DEPTH = 2
 
 // The header (back and the album's name) floats over the grid in the app's top layer, so it can blur what scrolls under it.
 @Composable

@@ -183,7 +183,7 @@ private const val STACK_TILT_DEGREES = 7f
 private val STACK_SHIFT = 9.dp
 private const val STACK_SHRINK = 0.05f
 private const val STACK_DARKEN = 0.2f
-private const val STACK_VISIBLE_LAYERS = 4
+private const val STACK_VISIBLE_LAYERS = 3
 
 // The arrow at the right end of an opened group's heading that lays the group back down.
 @Composable
