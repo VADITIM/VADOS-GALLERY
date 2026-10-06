@@ -1,3 +1,4 @@
-# v1.0.2
+# v1.0.3
 
-- Covers and photos in the grid no longer stay pixelated or turned the wrong way: once a tile has stood on screen a moment, the photo itself is shown instead of the system's small cached thumbnail.
+- The favourite heart no longer flashes red when you deselect the last photo.
+- New group and New album sit side by side, group on the left. With groups off, New album stands alone in the centre.

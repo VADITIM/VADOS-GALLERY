@@ -1034,7 +1034,8 @@ private fun Library(viewModel: GalleryViewModel) {
                       } else {
                         IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
                         // Favourites every selected photo, or takes them all out once all of them are favourites.
-                        val isAllFavorite = selectedItems.all { it.isFavorite }
+                        // An emptied selection counts as none, or the heart flashes red while the bar leaves.
+                        val isAllFavorite = selectedItems.isNotEmpty() && selectedItems.all { it.isFavorite }
                         IconButton(onClick = {
                             actions.setFavorite(selectedItems, !isAllFavorite)
                             clearSelection()

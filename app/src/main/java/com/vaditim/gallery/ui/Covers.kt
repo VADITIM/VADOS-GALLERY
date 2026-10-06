@@ -234,13 +234,25 @@ fun SpanCell(span: Int, modifier: Modifier = Modifier, content: @Composable () -
 
 // The "make a new one" card at the end of a grid of covers: albums and private groups both end with one.
 @Composable
-fun AddCard(label: String, onClick: () -> Unit, hasDivider: Boolean = true) {
+fun AddCard(label: String, onClick: () -> Unit, hasDivider: Boolean = true, modifier: Modifier = Modifier) {
     // The whole row is the button: a divider above (a card right under another leaves it out), the plus with its label under it, centred.
-    Column(Modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f), horizontalAlignment = Alignment.CenterHorizontally) {
         if (hasDivider) Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
         Column(Modifier.padding(vertical = 22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PlusIcon(LocalAccent.current, size = 28.dp)
             BasicText(label, style = Type.cardTitle.copy(color = Palette.textMuted), maxLines = 1)
+        }
+    }
+}
+
+// New group and New album side by side, group on the left; without groups, New album alone and centred.
+@Composable
+fun AddCardRow(onNewAlbum: () -> Unit, onNewGroup: (() -> Unit)?) {
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Palette.border))
+        Row(Modifier.fillMaxWidth()) {
+            if (onNewGroup != null) AddCard("New group", onClick = onNewGroup, hasDivider = false, modifier = Modifier.weight(1f))
+            AddCard("New album", onClick = onNewAlbum, hasDivider = false, modifier = Modifier.weight(1f))
         }
     }
 }

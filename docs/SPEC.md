@@ -284,7 +284,7 @@ review, which is not a goal.
 - **The viewer opens and closes behind the nav.** The photo grows out of and shrinks into its tile behind the nav, the label above it, the top row and the count, which give way as it grows and return as it shrinks; open, it covers them. Its own buttons stay in front.
 - **Name sheets rise and sink.** The pane for naming a new album or group rises from the bottom with the keyboard and sinks back to the bottom, whether confirmed or dismissed.
 - **Group names slice on close.** A group's name over its opened cards is sliced away from its right end as the group closes (in step with the cards, or with the finger when pulled shut); opening, it sweeps in.
-- **New group and New album** sit under one another without a divider between them.
+- **New group and New album** share one row, group on the left; with groups off, New album stands alone and centred.
 - **Icons.** The Locations pin and the crop glyph are the supplied SVGs; the lock is filled with an empty keyhole. The favourites-only heart's shadow follows the heart's drawn lines.
 - **Settings sheet position.** The settings sheet sits centred on screen and keeps one height on every tab; it can be pulled down from anywhere to close.
 - **Rotation.** The app stays upright; only the viewer (a photo or video open) turns with the phone.

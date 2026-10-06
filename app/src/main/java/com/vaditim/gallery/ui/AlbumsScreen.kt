@@ -177,8 +177,7 @@ fun AlbumsScreen(
                 }
             }
         }
-        if (onNewGroup != null) item(key = "new-group", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New group", onClick = onNewGroup) } }
-        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum, hasDivider = onNewGroup == null) } }
+        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCardRow(onNewAlbum, onNewGroup) } }
         item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { footer() } }
     }
 }
