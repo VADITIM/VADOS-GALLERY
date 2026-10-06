@@ -1,3 +1,3 @@
-# 1.1.25
+# 1.1.26
 
-- A shut group shows three stacked cards instead of four.
+- A shut group's arrow sits a little further right.

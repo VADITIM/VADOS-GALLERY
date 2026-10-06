@@ -534,7 +534,7 @@ private fun GroupRow(
             heading.place(0, (headingHeight - heading.height) / 2)
             // From left of the shut name to the right end of the heading, always at the heading's height, turning from right to left over the middle of its way.
             // Shut, its glyph stands in the gap between the stack and the name, nearer the stack, so the name keeps its place.
-            val shutX = labelStart - GROUP_LABEL_GAP.toPx() * 0.8f - back.width / 2f
+            val shutX = labelStart - GROUP_LABEL_GAP.toPx() * 0.65f - back.width / 2f
             val openX = (width - back.width).toFloat()
             val openY = (headingHeight - back.height) / 2f
             back.placeWithLayer(0, 0) {
