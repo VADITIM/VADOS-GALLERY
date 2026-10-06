@@ -90,6 +90,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicText
@@ -1133,15 +1134,18 @@ private fun Library(viewModel: GalleryViewModel) {
                         if (isFolderLabelShown) lastFolderName = folderName.orEmpty()
                         val folderAccent = rememberOwnAccent(isFolderLabelShown)
                         AnimatedVisibility(isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            // The pill grows and shrinks with the name as it types itself over.
-                            FadingOverflow(
+                            // The pill grows and shrinks from its middle as the name types itself over: the text sits centred, unbounded, inside a box whose size animates.
+                            Box(
                                 Modifier.padding(bottom = 8.dp)
                                     .animateContentSize(tween(Motion.STATE_MS, easing = Motion.powerTwoOut))
                                     .widthIn(max = FOLDER_LABEL_MAX_WIDTH)
-                                    .background(folderAccent, Shapes.capsule)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    .background(folderAccent, Shapes.capsule),
                             ) {
-                                TypewriterText(lastFolderName, style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                                Box(Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                    FadingOverflow(Modifier.widthIn(max = FOLDER_LABEL_MAX_WIDTH - 24.dp)) {
+                                        TypewriterText(lastFolderName, style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                                    }
+                                }
                             }
                         }
                         // Empties the whole trash for good, so it waits for Confirm.

@@ -1,3 +1,3 @@
-# v1.1.5
+# v1.1.6
 
-- The top pill is filled with the section colour.
+- The bottom folder label resizes from its middle.
