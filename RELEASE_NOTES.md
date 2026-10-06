@@ -1,3 +1,3 @@
-# 1.1.38
+# 1.1.39
 
-- A photo flying to or from its tile keeps the same rounding wherever the tile sits in the grid, including tiles cut off by the screen edge.
+- The nav's highlight no longer sits slightly to the right and slides back when a selection ends; it is in place from the start.

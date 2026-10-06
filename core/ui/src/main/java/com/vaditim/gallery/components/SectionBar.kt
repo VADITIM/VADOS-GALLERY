@@ -108,13 +108,17 @@ fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Mod
     val left = remember { Animatable(Float.NaN) }
     val right = remember { Animatable(Float.NaN) }
     val target = spans[active]
+    // The option the wash has already started towards; the bar settling into its place afterwards moves the wash at once, where it is still hidden, instead of sliding it.
+    val slidTo = remember { arrayOfNulls<Any>(1) }
     LaunchedEffect(active, target) {
         val (toLeft, toRight) = target ?: return@LaunchedEffect
-        if (left.value.isNaN()) {
+        if (left.value.isNaN() || slidTo[0] == active) {
+            slidTo[0] = active
             left.snapTo(toLeft)
             right.snapTo(toRight)
             return@LaunchedEffect
         }
+        slidTo[0] = active
         // The edge on the side it is heading leaves first and the other follows, so the highlight stretches across and then gathers itself.
         val isMovingRight = toRight > right.value
         val lead = tween<Float>(Motion.NAV_SLIDE_MS, easing = Motion.powerTwoOut)
