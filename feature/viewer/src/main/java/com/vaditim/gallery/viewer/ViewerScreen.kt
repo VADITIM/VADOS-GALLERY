@@ -1,15 +1,9 @@
 package com.vaditim.gallery.viewer
 
-import kotlin.math.roundToInt
-import com.vaditim.gallery.components.LocalButtonPop
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.layout.Layout
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -162,8 +156,8 @@ fun BoxScope.ViewerScreen(
     onPull: (Float) -> Unit = {},
     places: Map<Long, Place> = emptyMap(),
     isChromeAllowed: Boolean = true,
-    // The size of the nav the action bar takes the place of, so it grows out of it.
-    barStartSize: IntSize = IntSize.Zero,
+    // The height of the library's nav, which holds the viewer's buttons.
+    navigationHeight: Int = 0,
     // The library's nav, which takes the viewer's buttons in place of a bar of the viewer's own.
     bar: ViewerBar? = null,
     photoModifier: Modifier = Modifier,
@@ -260,58 +254,27 @@ fun BoxScope.ViewerScreen(
                 ) {
                 ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 2, pull = { maxOf(pull, lift) }) { ConfirmPill(pendingDelete, onDone = { pendingDelete = null }) }
                 if (video != null) ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
-                // With a library to sit in, the buttons go into its one nav, which changes into them; alone, the viewer keeps a bar of its own.
-                val actionRow: @Composable () -> Unit = {
-                Row(Modifier.padding(5.dp)) {
-                    IconButton(onClick = { actions.share(listOf(current)) }) { ShareIcon(Palette.textBody) }
-                    if (isTrash) {
-                        IconButton(onClick = { actions.restore(listOf(current)) }) { RestoreIcon(LocalAccent.current) }
-                        IconButton(
-                            onClick = { pendingDelete = { actions.deleteForever(listOf(current)) } },
-                            modifier = Modifier.pendingMark(pendingDelete != null),
-                        ) { TrashIcon(Palette.danger) }
-                    } else {
-                    IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) Palette.favorite else Palette.textBody) }
-                    IconButton(onClick = {
+                // The buttons are the library's nav, which changes into them as it does for a selection; the viewer only answers what they ask of it.
+                SideEffect {
+                    bar?.hazeState = hazeState
+                    bar?.isPendingDelete = pendingDelete != null
+                    bar?.onCrop = {
                         video?.player?.pause()
                         cropping = current
-                    }) { CropIcon(Palette.textBody) }
-                    if (isPrivate) {
-                        IconButton(
-                            onClick = { pendingDelete = { actions.deletePrivate(listOf(current)) } },
-                            modifier = Modifier.pendingMark(pendingDelete != null),
-                        ) { TrashIcon(Palette.danger) }
-                    } else {
-                        IconButton(
-                            onClick = { pendingDelete = { actions.trash(listOf(current)) } },
-                            modifier = Modifier.pendingMark(pendingDelete != null),
-                        ) { TrashIcon(Palette.danger) }
                     }
-                    IconButton(onClick = { overlay = Overlay.MORE }) { MoreIcon(Palette.textBody) }
+                    bar?.onDelete = {
+                        pendingDelete = {
+                            when {
+                                isTrash -> actions.deleteForever(listOf(current))
+                                isPrivate -> actions.deletePrivate(listOf(current))
+                                else -> actions.trash(listOf(current))
+                            }
+                        }
                     }
+                    bar?.onMore = { overlay = Overlay.MORE }
                 }
-                }
-                SideEffect {
-                    bar?.actions = actionRow
-                    bar?.hazeState = hazeState
-                }
-                if (bar != null) {
-                    // Holds the nav's room, so what stands above the buttons stands above the nav.
-                    Spacer(Modifier.height(with(LocalDensity.current) { barStartSize.height.toDp() }))
-                } else {
-                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }, isPoppedWhole = false) {
-                // The pill grows out of the nav it takes the place of, while its buttons pop in one by one, as the bar does when a selection begins.
-                val morph = transition.animateFloat(
-                    transitionSpec = { tween(if (targetState == EnterExitState.Visible) Motion.STATE_MS * 2 else Motion.STATE_MS, easing = Motion.powerThreeInOut) },
-                    label = "bar-morph",
-                ) { if (it == EnterExitState.Visible) 1f else 0f }
-                MorphingPill(barStartSize, { morph.value }) {
-                CompositionLocalProvider(LocalButtonPop provides Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT)) {
-                actionRow()
-                }
-                }
-                }
-                }
+                // Holds the nav's room, so what stands above the buttons stands above the nav.
+                Spacer(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }))
                 }
 
             // Above the library's nav, which stands over the photo.
@@ -695,25 +658,6 @@ private fun ChromePiece(isAllowed: Boolean, isShown: Boolean, isFromTop: Boolean
                 slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) { if (isFromTop) -it else it },
         ) {
             if (isPoppedWhole) Box(with(opening) { Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT) }) { opening.content() } else opening.content()
-        }
-    }
-}
-
-// A glass pill whose size goes from `from` (the nav it replaces) to its content's own as `fraction` goes from 0 to 1, the content centred in it and never squeezed.
-@Composable
-private fun MorphingPill(from: IntSize, fraction: () -> Float, content: @Composable () -> Unit) {
-    Layout(content = {
-        Box(Modifier.glass(Shapes.capsule, Palette.viewerGround))
-        content()
-    }) { measurables, constraints ->
-        val inside = measurables[1].measure(constraints.copy(minWidth = 0, minHeight = 0))
-        val progress = fraction()
-        val width = if (from.width == 0) inside.width else (from.width + (inside.width - from.width) * progress).roundToInt()
-        val height = if (from.height == 0) inside.height else (from.height + (inside.height - from.height) * progress).roundToInt()
-        val glass = measurables[0].measure(Constraints.fixed(width.coerceAtLeast(0), height.coerceAtLeast(0)))
-        layout(width, height) {
-            glass.place(0, 0)
-            inside.place((width - inside.width) / 2, (height - inside.height) / 2)
         }
     }
 }

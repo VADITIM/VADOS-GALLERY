@@ -244,15 +244,16 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
 
     BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { grab.timeline = it }) {
         val height = constraints.maxHeight.toFloat()
-        val track = height * TRACK_SHARE
+        // Held, the labels grow toward the photos and stand further apart to keep clear of each other.
+        fun grown(): Float = 1f + (HELD_GROWTH - 1f) * reveal
+        // Held, the window grows as much as its labels do, so the bigger labels do not crowd out the months around the marker.
+        val track = height * TRACK_SHARE * grown()
         val top = (height - track) / 2f
         val density = LocalDensity.current
         val labelHalf = with(density) { MONTH_HEIGHT.toPx() } / 2f
         val monthHeight = with(density) { MONTH_HEIGHT.toPx() }
         val yearHeight = with(density) { YEAR_HEIGHT.toPx() }
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
-        // Held, the labels grow toward the photos, so they stand further apart to keep clear of each other.
-        fun grown(): Float = 1f + (HELD_GROWTH - 1f) * reveal
         fun fullHeightOf(slot: Int): Float = (if (labels[slot].month == null) yearHeight else monthHeight) * grown()
         // The strip's length end to end with every label at its size; neighbours stand apart by the mean of their heights and a share of it.
         fun lengthOf(sizes: FloatArray): Float {

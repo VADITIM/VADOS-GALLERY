@@ -49,6 +49,9 @@ import androidx.compose.ui.unit.sp
 import com.vaditim.gallery.components.BackIcon
 import com.vaditim.gallery.components.CheckIcon
 import com.vaditim.gallery.components.CloseIcon
+import com.vaditim.gallery.components.CropIcon
+import com.vaditim.gallery.components.MoreIcon
+import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.components.ConfirmPill
 import com.vaditim.gallery.components.HeartIcon
 import com.vaditim.gallery.components.IconButton
@@ -156,9 +159,8 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
             tween(Motion.STATE_MS, delayMillis = if (controller.shownBar(screen) == BottomBar.NAVIGATION) Motion.STATE_MS else 0),
             label = "nav-wash",
         )
-        // The open photo's buttons, kept while they pop away after it has closed.
         val viewerBar = controller.viewer.bar
-        val viewerActions = viewerBar.actions
+        val viewerPhoto = rememberViewerPhoto(controller, content)
         // A tap on the open photo sends the bar off the bottom edge and back, a swipe on it shrinks the bar with the finger.
         AnimatedVisibility(
             !(controller.viewer.isOpen && !viewerBar.isShown),
@@ -188,7 +190,7 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                         BottomBar.COVERS -> CoverActions(controller, screen)
                         BottomBar.PHOTOS -> PhotoActions(controller, content, screen)
                         // The empty pill keeps the nav's size, so the viewer's bar grows out of it and the nav's buttons pop back into it.
-                        BottomBar.VIEWER -> viewerActions?.invoke()
+                        BottomBar.VIEWER -> viewerPhoto?.let { (item, source) -> ViewerActions(controller, item, source) }
                         BottomBar.NAVIGATION -> SectionBar(
                             hasGlass = false,
                             itemModifier = pop,
@@ -254,6 +256,41 @@ private fun PlacePills(controller: LibraryController, content: LibraryContent, s
                 }
             }
         }
+    }
+}
+
+// The open photo and where it came from, known from the moment it is asked for, so the bar changes into its buttons at once; kept after it closes, so they pop away showing what they had.
+@Composable
+private fun rememberViewerPhoto(controller: LibraryController, content: LibraryContent): Pair<MediaItem, ViewerSource>? {
+    val viewer = controller.viewer
+    val kept = remember { arrayOfNulls<Pair<MediaItem, ViewerSource>>(1) }
+    val request = viewer.request
+    if (request != null) {
+        val items = content.itemsFor(request.source)
+        // The photo swiped to once the viewer is up; until then, the one tapped.
+        val item = (if (viewer.shown == request) items.firstOrNull { it.id == viewer.currentId } else null) ?: items.getOrNull(request.startIndex)
+        if (item != null) kept[0] = item to request.source
+    }
+    return kept[0]
+}
+
+// The open photo's buttons: share, then restore and delete in the trash, elsewhere favourite, crop, delete and more.
+@Composable
+private fun ViewerActions(controller: LibraryController, item: MediaItem, source: ViewerSource) {
+    val bar = controller.viewer.bar
+    val actions = controller.actions
+    val deleteModifier = Modifier.pendingMark(bar.isPendingDelete)
+    Row(Modifier.padding(5.dp)) {
+        IconButton(onClick = { actions.share(listOf(item)) }) { ShareIcon(Palette.textBody) }
+        if (source == ViewerSource.Trash) {
+            IconButton(onClick = { actions.restore(listOf(item)) }) { RestoreIcon(LocalAccent.current) }
+            IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+            return@Row
+        }
+        IconButton(onClick = { actions.toggleFavorite(item) }) { HeartIcon(item.isFavorite, if (item.isFavorite) Palette.favorite else Palette.textBody) }
+        IconButton(onClick = { bar.onCrop() }) { CropIcon(Palette.textBody) }
+        IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
+        IconButton(onClick = { bar.onMore() }) { MoreIcon(Palette.textBody) }
     }
 }
 
