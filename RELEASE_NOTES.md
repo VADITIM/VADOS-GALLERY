@@ -1,3 +1,3 @@
-# 1.1.27
+# 1.1.28
 
-- Roadmap for 1.2.0 now includes rearranging by dragging, rearranging around open groups, and albums staying below groups.
+- A shut group's arrow sits a little further right again.
