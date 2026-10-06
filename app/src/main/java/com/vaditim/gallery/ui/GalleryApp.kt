@@ -1409,6 +1409,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 onReview = reviewAction,
                 onDismiss = { sheet = AppSheet.NONE },
                 onPull = { settingsPull = it },
+                onAnnounce = actions::announce,
                 // Only the grids of the view whose setting changed take the new count.
                 onColumnsChanged = { columns ->
                     (listOf(recentMemory, favoritesMemory, privateFavoritesMemory, privateRecentMemory, trashMemory) + albumMemories.values + privateMemories.values + favoriteAlbumMemories.values + privateFavoriteGroupMemories.values + locationMemories.values)

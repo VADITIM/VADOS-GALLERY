@@ -1,5 +1,7 @@
 package com.vaditim.gallery.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -42,17 +44,21 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.DateGroup
 import com.vaditim.gallery.Settings
+import com.vaditim.gallery.backup.Backup
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // The settings, as a sheet in three tabs: the place you are in, what the app does everywhere, and how it looks. The look tab keeps the glass settings, so their effect can be watched on the sheet itself while they are dragged.
@@ -69,14 +75,31 @@ private const val DISABLED_ALPHA = 0.38f
 
 // `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any.
 @Composable
-fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onPull: (Float) -> Unit = {}) {
+fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, onPull: (Float) -> Unit = {}) {
     var tab by remember { mutableStateOf(SettingsTab.PLACE) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // The launchers live here, not in the tab, which is also composed once more just to be measured.
+    val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val isSaved = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openOutputStream(uri)!!.use { Backup.write(context, it) } }.isSuccess }
+            onAnnounce(if (isSaved) "Backup saved" else "Backup failed")
+        }
+    }
+    val loadBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val isRestored = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri)!!.use { Backup.restore(context, it) } }.getOrDefault(false) }
+            if (isRestored) Backup.restart(context) else onAnnounce("Not a backup")
+        }
+    }
+    val onBackup = { saveBackup.launch("vados-gallery-backup.json") }
+    val onRestore = { loadBackup.launch(arrayOf("*/*")) }
     OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isCentered = true, onPull = onPull) {
         // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height; a shorter tab sits in the middle of it.
         SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
             val loose = constraints.copy(minHeight = 0)
             val height = SettingsTab.entries.maxOf { measured ->
-                subcompose("measure-$measured") { SettingsTabContent(measured, isCovers, onReview, onDismiss, onColumnsChanged, isFilling = false) }.maxOf { it.measure(loose).height }
+                subcompose("measure-$measured") { SettingsTabContent(measured, isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore, isFilling = false) }.maxOf { it.measure(loose).height }
             }
             val fixed = constraints.copy(minHeight = height, maxHeight = height)
             val shown = subcompose("shown") {
@@ -88,7 +111,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
                     },
                     contentAlignment = Alignment.Center,
                     label = "settings-tab",
-                ) { shown -> SettingsTabContent(shown, isCovers, onReview, onDismiss, onColumnsChanged) }
+                ) { shown -> SettingsTabContent(shown, isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore) }
             }.map { it.measure(fixed) }
             layout(constraints.maxWidth, height) { shown.forEach { it.place(0, 0) } }
         }
@@ -101,7 +124,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
 
 @Composable
 // `isFilling`: the shown tab fills the sheet's fixed height and centres in it; measured, it takes only its own.
-private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, isFilling: Boolean = true) {
+private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onBackup: () -> Unit, onRestore: () -> Unit, isFilling: Boolean = true) {
     Column(Modifier.fillMaxWidth().then(if (isFilling) Modifier.fillMaxHeight() else Modifier), verticalArrangement = Arrangement.Center) {
         when (shown) {
             SettingsTab.PLACE -> {
@@ -134,6 +157,9 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
                 SettingsHeader("Photos")
                 SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
+                SettingsHeader("Backup")
+                SheetRow("Back up", onClick = onBackup)
+                SheetRow("Restore", onClick = onRestore)
             }
             SettingsTab.INTERFACE -> {
                 SettingsHeader("Overlays")

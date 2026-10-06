@@ -1,3 +1,4 @@
-# v0.129
+# v0.130
 
-- Signed with a dedicated release key instead of the debug key. Uninstall the old app once before installing this one; settings, order, covers and review progress reset.
+- Settings → General has Back up and Restore. Back up saves your settings, covers, album order and groups, favourites albums, names and review progress to a file you choose; Restore reads it back and restarts the app.
+- Still signed with the old key, so it installs over your current app.

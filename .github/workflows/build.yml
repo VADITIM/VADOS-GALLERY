@@ -30,6 +30,11 @@ jobs:
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
+          # While this file exists the build keeps the debug key, so it installs over an app signed with it; delete the file to move to the release key.
+          if [ -f .github/sign-with-debug-key ]; then
+            echo "::warning::.github/sign-with-debug-key present; signing with the debug key"
+            exit 0
+          fi
           if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "::warning::No release key secrets; signing with the debug key"
             exit 0
