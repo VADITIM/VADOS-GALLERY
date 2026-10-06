@@ -1,5 +1,11 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.ui.Alignment
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -103,11 +109,23 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
                 ) {
                     when (section) {
                         Section.RECENT -> ClockIcon(ink, SECTION_ICON)
-                        Section.ALBUMS -> when (albumsGlyph) {
-                            PlaceGlyph.ALBUMS -> AlbumsIcon(ink, SECTION_ICON)
-                            PlaceGlyph.LOCATIONS -> PinIcon(ink, SECTION_ICON)
-                            PlaceGlyph.TRASH -> TrashIcon(ink, SECTION_ICON)
-                            PlaceGlyph.PRIVATE -> LockIcon(ink, size = SECTION_ICON)
+                        // A new place pops the old icon away to nothing, then pops its own in past full size, so the change is seen.
+                        Section.ALBUMS -> AnimatedContent(
+                            targetState = albumsGlyph,
+                            transitionSpec = {
+                                scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+                                    .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f))
+                                    .using(SizeTransform(clip = false))
+                            },
+                            contentAlignment = Alignment.Center,
+                            label = "albums-glyph",
+                        ) { glyph ->
+                            when (glyph) {
+                                PlaceGlyph.ALBUMS -> AlbumsIcon(ink, SECTION_ICON)
+                                PlaceGlyph.LOCATIONS -> PinIcon(ink, SECTION_ICON)
+                                PlaceGlyph.TRASH -> TrashIcon(ink, SECTION_ICON)
+                                PlaceGlyph.PRIVATE -> LockIcon(ink, size = SECTION_ICON)
+                            }
                         }
                         Section.FAVORITES -> HeartIcon(isFilled = true, color = ink, size = SECTION_ICON)
                     }

@@ -612,6 +612,9 @@ private fun Library(viewModel: GalleryViewModel) {
     // The screen softens behind the settings, so the sheet reads as the one thing in front.
     // Pulling the sheet down clears the blur with the finger.
     var settingsPull by remember { mutableFloatStateOf(0f) }
+    val timelineAbove = remember { TimelineAbove() }
+    val isViewerUp = shownViewer != null
+    SideEffect { timelineAbove.isViewerShown = isViewerUp }
     // Read only where the layer draws, so the blur moving each frame never recomposes the app.
     val settingsBlur = animateDpAsState(if (sheet == AppSheet.SETTINGS) SETTINGS_BLUR else 0.dp, tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), label = "settings-blur")
     CompositionLocalProvider(LocalAccent provides accent, LocalAccentTarget provides accentTarget, LocalHazeState provides hazeState) {
@@ -641,6 +644,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     LocalSettingsView provides ownView,
                     LocalFavoritesOnly provides isFavoritesOnly,
                     LocalScreenCovered provides (sheet == AppSheet.SETTINGS),
+                    LocalTimelineAbove provides timelineAbove,
                     LocalViewerGrowth provides { if (shownViewer == null) 0f else viewerProgress.value * (1f - viewerPull) },
                 ) {
                 if (isPrivateShown && shown == Section.RECENT) {
@@ -881,6 +885,9 @@ private fun Library(viewModel: GalleryViewModel) {
                 }
             }
 
+            // The grid's timeline over the viewer's photo, under everything below.
+            TimelineAboveHost(timelineAbove, Modifier.zIndex(-0.5f))
+
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
             // As the photo grows the top row leaves off the top and the navigation off the bottom, with the photo, and both come back as it shrinks, so the photo passes behind them.
             val viewerRise = if (shownViewer == null) Modifier else Modifier.graphicsLayer { translationY = -viewerProgress.value * (1f - viewerPull) * (size.height + 12.dp.toPx()) }
@@ -1093,26 +1100,19 @@ private fun Library(viewModel: GalleryViewModel) {
                     }
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        // Inside Private or Locations the bar belongs to that place, so it says so, with the way out beside it.
+                        // Inside Private, Locations or the trash the bar belongs to that place, so it says so, with the way out beside it.
                         val isInLocations = place == AlbumsPlace.Locations || place is AlbumsPlace.Location
                         val placePill = when {
                             isPrivateMode -> "PRIVATE"
                             isInLocations -> "LOCATIONS"
+                            place is AlbumsPlace.Trash -> "TRASH"
                             else -> null
                         }
                         var lastPill by remember { mutableStateOf(placePill ?: "") }
                         if (placePill != null) lastPill = placePill
                         val pillAccent = rememberOwnAccent(placePill != null)
-                        // Out of Private; out of Locations entirely, from a location as from the list. The label is the way out as much as the arrow beside it.
+                        // Out of Private; out of Locations entirely, from a location as from the list; out of the trash. The label is the way out as much as the arrow beside it.
                         val leavePlace: () -> Unit = { if (isPrivateMode) { leavePrivate() } else { albumsPlace = AlbumsPlace.Folders } }
-                        AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
-                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.pressable(onClick = leavePlace).glass(Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(pillAccent, size = 16.dp) }
-                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                    BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
-                                }
-                            }
-                        }
                         // Empties the whole trash for good, so it waits for Confirm.
                         AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
                             Box(
@@ -1123,6 +1123,15 @@ private fun Library(viewModel: GalleryViewModel) {
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
                             ) {
                                 BasicText("DELETE NOW", style = Type.microLabel.copy(color = Palette.danger))
+                            }
+                        }
+                        AnimatedVisibility(placePill != null, enter = TOP_ENTER, exit = TOP_EXIT) {
+                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                // The arrow in the label's own colours, ink on the place colour, so the two read as one way out.
+                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 10.dp, vertical = 5.dp)) { BackIcon(Palette.sunkenDeep, size = 16.dp) }
+                                Box(Modifier.pressable(onClick = leavePlace).background(pillAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                    BasicText(lastPill, style = Type.microLabel.copy(color = Palette.sunkenDeep))
+                                }
                             }
                         }
                         SectionBar(

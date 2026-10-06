@@ -138,8 +138,7 @@ class TimelineGrab {
         val local = timeline.windowToLocal(root)
         // Only the window's stretch of each edge takes a finger.
         if (local.y < trackTop - labelSlack || local.y > trackTop + trackHeight + labelSlack) return false
-        val isOnStrip = local.x >= timeline.size.width - stripWidth || local.x <= stripWidth
-        // The timeline is drawn on the right, but either edge takes hold of it, so it reaches under either thumb.
+        val isOnStrip = local.x >= timeline.size.width - stripWidth
         return isOnStrip || labels.values.any { it.isAttached && timeline.localBoundingBoxOf(it, clipBounds = false).inflate(labelSlack).contains(local) }
     }
 

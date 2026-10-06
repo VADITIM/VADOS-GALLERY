@@ -1,5 +1,15 @@
 package com.vaditim.gallery.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.BoxScope
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.mutableStateOf
 import com.vaditim.gallery.Settings
 import com.vaditim.gallery.SettingsView
@@ -100,6 +110,37 @@ private val DAY_FORMAT = DateTimeFormatter.ofPattern("EEE dd/MM", Locale.ENGLISH
 val LocalFavoritesOnly = compositionLocalOf { false }
 // How far the viewer has grown over the grid, 0 to 1: the timeline slides off the right edge with it and back in as the photo shrinks, as the top row and the nav leave by theirs.
 val LocalViewerGrowth = compositionLocalOf<() -> Float> { { 0f } }
+
+// The grid lies under the viewer's photo, so its timeline is drawn a second time on a layer above the photo. Both are always composed and only swap which one shows while the viewer is up, read at draw time, so the swap never misses a frame.
+class TimelineAbove {
+    val grids = mutableStateListOf<TimelineAboveGrid>()
+    var isViewerShown by mutableStateOf(false)
+
+    fun isShownAbove(grid: TimelineAboveGrid): Boolean = isViewerShown && grids.lastOrNull() === grid
+}
+
+class TimelineAboveGrid {
+    var content by mutableStateOf<@Composable () -> Unit>({})
+    var bounds by mutableStateOf(Rect.Zero)
+}
+
+val LocalTimelineAbove = compositionLocalOf<TimelineAbove?> { null }
+
+// The layer above the photo: the newest grid's timeline, exactly over the grid's own one.
+@Composable
+fun BoxScope.TimelineAboveHost(above: TimelineAbove, modifier: Modifier = Modifier) {
+    val grid = above.grids.lastOrNull() ?: return
+    val bounds = grid.bounds
+    val density = LocalDensity.current
+    key(grid) {
+        Box(
+            modifier
+                .offset { IntOffset(bounds.left.roundToInt(), bounds.top.roundToInt()) }
+                .size(with(density) { bounds.width.toDp() }, with(density) { bounds.height.toDp() })
+                .graphicsLayer { alpha = if (above.isShownAbove(grid)) 1f else 0f },
+        ) { grid.content() }
+    }
+}
 
 // True while a sheet covers the screen: a grid still gliding stops, so the blur behind the sheet is not redrawn every frame of its arrival.
 val LocalScreenCovered = compositionLocalOf { false }
@@ -275,7 +316,8 @@ fun MediaGrid(
         }
     }
     val timelineGrab = remember { TimelineGrab() }
-    Box(modifier.fillMaxSize().timelineGrab(timelineGrab)) {
+    val aboveGrid = remember { TimelineAboveGrid() }
+    Box(modifier.fillMaxSize().onGloballyPositioned { aboveGrid.bounds = it.boundsInWindow() }.timelineGrab(timelineGrab)) {
     ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -332,7 +374,25 @@ fun MediaGrid(
     }
     }
     val viewerGrowth = LocalViewerGrowth.current
-    GridTimeline(entries, state, contentPadding, timelineGrab, Modifier.align(Alignment.TopEnd).graphicsLayer { translationX = viewerGrowth() * TIMELINE_LEAVE.toPx() })
+    val above = LocalTimelineAbove.current
+    if (above != null) {
+        DisposableEffect(above) {
+            above.grids.add(aboveGrid)
+            onDispose { above.grids.remove(aboveGrid) }
+        }
+        // The copy above only shows; the grid's own one keeps the finger.
+        val aboveGrab = remember { TimelineGrab() }
+        SideEffect {
+            aboveGrid.content = { GridTimeline(entries, state, contentPadding, aboveGrab, Modifier.fillMaxSize().graphicsLayer { translationX = viewerGrowth() * TIMELINE_LEAVE.toPx() }) }
+        }
+    }
+    GridTimeline(
+        entries, state, contentPadding, timelineGrab,
+        Modifier.align(Alignment.TopEnd).graphicsLayer {
+            translationX = viewerGrowth() * TIMELINE_LEAVE.toPx()
+            alpha = if (above != null && above.isShownAbove(aboveGrid)) 0f else 1f
+        },
+    )
     }
 }
 
