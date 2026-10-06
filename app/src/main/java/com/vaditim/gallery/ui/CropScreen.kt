@@ -1,6 +1,27 @@
 package com.vaditim.gallery.ui
 
 import android.graphics.RectF
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.vaditim.gallery.vas.Motion
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.launch
+import kotlin.math.pow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -76,6 +97,11 @@ private const val MIN_TRIM_MS = 500L
 private const val TRIM_FRAMES = 8
 private const val PREVIEW_PIXELS = 2048
 private val FULL = Rect(0f, 0f, 1f, 1f)
+private const val MAX_CROP_ZOOM = 8f
+// One notch of a mouse wheel zooms by this much.
+private const val WHEEL_ZOOM_STEP = 1.1f
+// One tap on a trim arrow moves its end by a tenth of a second.
+private const val TRIM_STEP_MS = 100L
 
 // Width over height; ORIGINAL takes the picture's own.
 private enum class Aspect(val label: String, val ratio: Float?) {
@@ -94,13 +120,17 @@ private enum class Handle { MOVE, LEFT, TOP, RIGHT, BOTTOM, TOP_LEFT, TOP_RIGHT,
 @Composable
 fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val video = rememberVideoState(item)
     var imageRatio by remember { mutableStateOf<Float?>(null) }
     val fallbackRatio = if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else 1f
     val ratio = (if (video != null) video.ratio else imageRatio) ?: fallbackRatio
-    // The kept part, as fractions of the upright picture.
+    // The frame on screen, as fractions of the picture's box; it stays put while the picture zooms under it.
     var crop by remember { mutableStateOf(FULL) }
     var aspect by remember { mutableStateOf(Aspect.FREE) }
+    // The picture's zoom under the frame, and its shift from centre as fractions of its box; the box is always covered, so the frame never holds empty space.
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
     val duration = video?.durationMs ?: 0L
     var startMs by remember { mutableLongStateOf(0L) }
     var endMs by remember { mutableLongStateOf(0L) }
@@ -113,8 +143,15 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
         -1f -> ratio
         else -> aspect.ratio
     }
+    // What is kept, as fractions of the upright picture: the frame seen through the zoom.
+    val kept = Rect(
+        0.5f + (crop.left - 0.5f - pan.x) / zoom,
+        0.5f + (crop.top - 0.5f - pan.y) / zoom,
+        0.5f + (crop.right - 0.5f - pan.x) / zoom,
+        0.5f + (crop.bottom - 0.5f - pan.y) / zoom,
+    )
     val isTrimmed = video != null && duration > 0 && (startMs > 0 || endMs < duration)
-    val isChanged = crop != FULL || isTrimmed
+    val isChanged = kept != FULL || isTrimmed
 
     // The trimmed part plays round and round, so the cut can be watched while it is set.
     if (video != null) {
@@ -126,12 +163,27 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
         }
     }
 
+    // 0 is the viewer's layout, 1 the crop's: the picture travels from where the viewer showed it into the frame, and the controls come in from the edges; leaving runs it back.
+    val arrival = remember { Animatable(0f) }
+    val isMotionReduced = remember { android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
+    var isLeaving by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (isMotionReduced) arrival.snapTo(1f) else arrival.animateTo(1f, tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerThreeInOut)) }
+    val leave = leave@{
+        if (isLeaving) return@leave
+        isLeaving = true
+        video?.player?.pause()
+        scope.launch {
+            if (isMotionReduced) arrival.snapTo(0f) else arrival.animateTo(0f, tween(Motion.VIEWER_ENTER_MS, easing = Motion.powerThreeInOut))
+            onClose()
+        }
+    }
+
     BackHandler {
         if (savingJob != null) {
             savingJob?.cancel()
             savingJob = null
         } else {
-            onClose()
+            leave()
         }
     }
 
@@ -141,90 +193,148 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
         progress = 0f
         savingJob = actions.crop(
             item,
-            RectF(crop.left, crop.top, crop.right, crop.bottom),
+            RectF(kept.left, kept.top, kept.right, kept.bottom),
             startMs = if (video != null) startMs else 0L,
             endMs = if (video != null && endMs < duration) endMs else C.TIME_END_OF_SOURCE,
             onProgress = { progress = it },
         ) { isDone ->
             savingJob = null
-            if (isDone) onClose()
+            if (isDone) leave()
+        }
+    }
+    val revert = {
+        crop = FULL
+        aspect = Aspect.FREE
+        zoom = 1f
+        pan = Offset.Zero
+        if (video != null) {
+            startMs = 0L
+            endMs = duration
         }
     }
 
-    // The viewer's photo lies under this screen; its glass must not blur that through, so the panes here are plain.
-    CompositionLocalProvider(LocalHazeState provides null) {
-    Box(Modifier.fillMaxSize().background(Palette.viewerGround)) {
+    // Where the screen and the frame are, so the picture can start on the viewer's spot and land in the frame.
+    var screen by remember { mutableStateOf(Rect.Zero) }
+    var frame by remember { mutableStateOf(Rect.Zero) }
+    val hazeState = rememberHazeState()
+    // Its own glass over its own picture: the viewer's photo lies under this screen and must not be blurred through.
+    CompositionLocalProvider(LocalHazeState provides hazeState, LocalAccent provides Palette.cropViolet) {
+    Box(Modifier.fillMaxSize().onGloballyPositioned { screen = it.boundsInWindow() }.background(Palette.viewerGround)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.pressable(onClick = onClose).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
-                    BasicText("‹", style = Type.cardTitle.copy(color = LocalAccent.current))
-                }
-                Spacer(Modifier.weight(1f))
-                if (crop != FULL) {
-                    Box(Modifier.padding(end = 8.dp).pressable(onClick = { crop = FULL; aspect = Aspect.FREE }).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 16.dp, vertical = 11.dp)) {
-                        BasicText("RESET", style = Type.microLabel)
-                    }
-                }
-                Box(Modifier.pressable(onClick = save).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
-                    BasicText("SAVE", style = Type.microLabel.copy(color = if (isChanged) LocalAccent.current else Palette.textMuted))
-                }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).graphicsLayer {
+                    translationY = -(1f - arrival.value) * (size.height + 12.dp.toPx())
+                },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TopButton(leave) { BackIcon(LocalAccent.current) }
             }
 
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp), contentAlignment = Alignment.Center) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp).hazeSource(hazeState), contentAlignment = Alignment.Center) {
                 val isWiderThanRoom = maxWidth / maxHeight > ratio
                 val frameWidth = if (isWiderThanRoom) maxHeight * ratio else maxWidth
                 val frameHeight = if (isWiderThanRoom) maxHeight else maxWidth / ratio
-                Box(Modifier.size(frameWidth, frameHeight)) {
-                    if (video != null) {
-                        VideoSurface(video, Modifier.fillMaxSize())
-                    } else {
-                        val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).size(PREVIEW_PIXELS).build() }
-                        AsyncImage(
-                            model = request,
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Fit,
-                            onSuccess = { success ->
-                                val size = success.painter.intrinsicSize
-                                if (size.width > 0f && size.height > 0f) imageRatio = size.width / size.height
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                Box(
+                    Modifier
+                        .size(frameWidth, frameHeight)
+                        .onGloballyPositioned { frame = it.boundsInWindow() }
+                        .graphicsLayer {
+                            // From the box the viewer fits the picture in to this one, as one move and one scale, so the picture never changes shape on the way.
+                            val viewerSpot = fitInside(ratio, screen.width, screen.height).translate(screen.topLeft)
+                            if (frame.width > 0f && viewerSpot.width > 0f) {
+                                val away = 1f - arrival.value
+                                transformOrigin = TransformOrigin(0f, 0f)
+                                val travel = 1f + (viewerSpot.width / frame.width - 1f) * away
+                                scaleX = travel
+                                scaleY = travel
+                                translationX = (viewerSpot.left - frame.left) * away
+                                translationY = (viewerSpot.top - frame.top) * away
+                            }
+                        },
+                ) {
+                    Box(Modifier.fillMaxSize().clipToBounds()) {
+                        if (video != null) {
+                            VideoSurface(video, Modifier.fillMaxSize())
+                        } else {
+                            val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).size(PREVIEW_PIXELS).build() }
+                            AsyncImage(
+                                model = request,
+                                contentDescription = item.name,
+                                contentScale = ContentScale.Fit,
+                                onSuccess = { success ->
+                                    val size = success.painter.intrinsicSize
+                                    if (size.width > 0f && size.height > 0f) imageRatio = size.width / size.height
+                                },
+                                modifier = Modifier.fillMaxSize().graphicsLayer {
+                                    scaleX = zoom
+                                    scaleY = zoom
+                                    translationX = pan.x * size.width
+                                    translationY = pan.y * size.height
+                                },
+                            )
+                        }
                     }
                     CropFrame(
                         crop = crop,
                         lockedRatio = lockedRatio,
                         onChange = { crop = it },
                         onTap = { video?.let { if (it.player.isPlaying) it.player.pause() else it.player.play() } },
+                        // Zooming is for the photo; a video's frame is cropped as it is.
+                        onZoom = if (video != null) null else { { factor, shift, focus ->
+                            val nextZoom = (zoom * factor).coerceIn(1f, MAX_CROP_ZOOM)
+                            // The point under the fingers stays under them, as in the viewer.
+                            val centre = Offset(0.5f, 0.5f)
+                            val moved = (focus - centre) - (focus - centre - pan) * (nextZoom / zoom) + shift
+                            val limit = (nextZoom - 1f) / 2f
+                            zoom = nextZoom
+                            pan = Offset(moved.x.coerceIn(-limit, limit), moved.y.coerceIn(-limit, limit))
+                        } },
+                        modifier = Modifier.graphicsLayer { alpha = arrival.value },
                     )
                 }
             }
 
-            if (video != null && duration > 0 && endMs > 0) {
-                TrimBar(
-                    item = item,
-                    video = video,
-                    durationMs = duration,
-                    startMs = startMs,
-                    endMs = endMs,
-                    onTrim = { start, end ->
-                        startMs = start
-                        endMs = end
-                    },
-                )
-            }
-
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                Modifier.fillMaxWidth().graphicsLayer {
+                    translationY = (1f - arrival.value) * (size.height + 12.dp.toPx())
+                    alpha = arrival.value
+                },
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Aspect.entries.forEach { option ->
-                    Box(
-                        Modifier.pressable(onClick = {
-                            aspect = option
-                            crop = fitted(option.ratio?.let { if (it < 0f) ratio else it }, ratio) ?: crop
-                        }).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
-                    ) {
-                        BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = if (option == aspect) LocalAccent.current else Palette.textBody))
+                if (video != null && duration > 0 && endMs > 0) {
+                    TrimBar(
+                        item = item,
+                        video = video,
+                        durationMs = duration,
+                        startMs = startMs,
+                        endMs = endMs,
+                        onTrim = { start, end ->
+                            startMs = start
+                            endMs = end
+                        },
+                    )
+                }
+
+                NavBar(
+                    Aspect.entries,
+                    aspect,
+                    onSelect = { option ->
+                        aspect = option
+                        crop = fitted(option.ratio?.let { if (it < 0f) ratio else it }, ratio) ?: crop
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp),
+                    scroll = rememberScrollState(),
+                ) { option ->
+                    val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
+                    BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                }
+
+                Row(Modifier.padding(top = 12.dp, bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.pressable(onClick = revert).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
+                        BasicText(if (video != null) "REVERT" else "RESET", style = Type.microLabel.copy(color = if (isChanged) Palette.textBody else Palette.textMuted))
+                    }
+                    Box(Modifier.pressable(onClick = save).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 11.dp)) {
+                        BasicText("SAVE", style = Type.microLabel.copy(color = if (isChanged) LocalAccent.current else Palette.textMuted))
                     }
                 }
             }
@@ -265,9 +375,9 @@ private fun fitted(target: Float?, pictureRatio: Float): Rect? {
     }
 }
 
-// The crop rectangle over the picture: corners and edges resize it, the inside moves it, the rest is veiled.
+// The crop rectangle over the picture: corners and edges resize it, the inside moves it, the rest is veiled. Two fingers zoom and pan the picture under it; so does one finger outside it once zoomed, and a mouse wheel.
 @Composable
-private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit, onTap: () -> Unit) {
+private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit, onTap: () -> Unit, onZoom: ((factor: Float, shift: Offset, focus: Offset) -> Unit)?, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val reach = with(density) { HANDLE_REACH.toPx() }
     val minimum = with(density) { MIN_CROP.toPx() }
@@ -276,23 +386,70 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
     val lock by rememberUpdatedState(lockedRatio)
     val change by rememberUpdatedState(onChange)
     val tap by rememberUpdatedState(onTap)
+    val zoom by rememberUpdatedState(onZoom)
     var handle by remember { mutableStateOf<Handle?>(null) }
     Canvas(
-        Modifier
+        modifier
             .fillMaxSize()
             .pointerInput(Unit) { detectTapGestures { tap() } }
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { at -> handle = hit(at, current.scaledTo(size.width.toFloat(), size.height.toFloat()), reach) },
-                    onDragEnd = { handle = null },
-                    onDragCancel = { handle = null },
-                ) { pointer, amount ->
-                    val held = handle ?: return@detectDragGestures
-                    pointer.consume()
-                    val width = size.width.toFloat()
-                    val height = size.height.toFloat()
-                    val moved = dragged(current.scaledTo(width, height), held, amount, Size(width, height), lock, minimum)
-                    change(Rect(moved.left / width, moved.top / height, moved.right / width, moved.bottom / height))
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val zoomBy = zoom ?: continue
+                        if (event.type != PointerEventType.Scroll) continue
+                        val wheel = event.changes.first()
+                        zoomBy(WHEEL_ZOOM_STEP.pow(-wheel.scrollDelta.y), Offset.Zero, Offset(wheel.position.x / size.width, wheel.position.y / size.height))
+                        wheel.consume()
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var travelled = Offset.Zero
+                    var isDragging = false
+                    var isPinching = false
+                    // Null with the drag started away from the frame: that drag pans the picture.
+                    var held: Handle? = null
+                    do {
+                        val event = awaitPointerEvent()
+                        val width = size.width.toFloat()
+                        val height = size.height.toFloat()
+                        val zoomBy = zoom
+                        if (zoomBy != null && event.changes.count { it.pressed } >= 2) {
+                            isPinching = true
+                            handle = null
+                        }
+                        if (isPinching) {
+                            val centroid = event.calculateCentroid(useCurrent = false)
+                            if (zoomBy != null && centroid.isSpecified) {
+                                val shift = event.calculatePan()
+                                zoomBy(event.calculateZoom(), Offset(shift.x / width, shift.y / height), Offset(centroid.x / width, centroid.y / height))
+                            }
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            continue
+                        }
+                        val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val amount = pointer.position - pointer.previousPosition
+                        if (!isDragging) {
+                            travelled += amount
+                            if (travelled.getDistance() <= viewConfiguration.touchSlop) continue
+                            isDragging = true
+                            held = hit(down.position, current.scaledTo(width, height), reach)
+                            handle = held
+                        }
+                        val grip = held
+                        if (grip != null) {
+                            val moved = dragged(current.scaledTo(width, height), grip, amount, Size(width, height), lock, minimum)
+                            change(Rect(moved.left / width, moved.top / height, moved.right / width, moved.bottom / height))
+                            pointer.consume()
+                        } else if (zoomBy != null) {
+                            zoomBy(1f, Offset(amount.x / width, amount.y / height), Offset(0.5f, 0.5f))
+                            pointer.consume()
+                        }
+                    } while (event.changes.any { it.pressed })
+                    handle = null
                 }
             },
     ) {
@@ -315,10 +472,9 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
         drawRect(Palette.textBright, r.topLeft, r.size, style = Stroke(1.dp.toPx()))
         val length = min(CORNER_LENGTH.toPx(), min(r.width, r.height) / 2f)
         val thick = 3.dp.toPx()
-        val cornerColor = if (handle != null) accent else Palette.textBright
         listOf(r.topLeft to Offset(1f, 1f), r.topRight to Offset(-1f, 1f), r.bottomLeft to Offset(1f, -1f), r.bottomRight to Offset(-1f, -1f)).forEach { (corner, inward) ->
-            drawLine(cornerColor, corner, corner + Offset(length * inward.x, 0f), thick, StrokeCap.Round)
-            drawLine(cornerColor, corner, corner + Offset(0f, length * inward.y), thick, StrokeCap.Round)
+            drawLine(accent, corner, corner + Offset(length * inward.x, 0f), thick, StrokeCap.Round)
+            drawLine(accent, corner, corner + Offset(0f, length * inward.y), thick, StrokeCap.Round)
         }
     }
 }
@@ -416,11 +572,30 @@ private fun TrimBar(item: MediaItem, video: VideoState, durationMs: Long, startM
                 .build()
         }
     }
+    // At most one seek a frame, always to where the finger is now: a drag reports more often than the screen draws, and seeks queued behind each other leave the picture trailing the finger.
+    val pendingSeek = remember { mutableLongStateOf(-1L) }
+    LaunchedEffect(video) {
+        while (true) {
+            withFrameMillis { }
+            val target = pendingSeek.longValue
+            if (target >= 0L) {
+                pendingSeek.longValue = -1L
+                video.player.seekTo(target)
+            }
+        }
+    }
+    val show = { ms: Long ->
+        video.positionMs = ms
+        pendingSeek.longValue = ms
+    }
+    // A tenth of a second at a time, never past either end of the video nor across the other end of the cut.
+    val stepStart = { by: Long -> (start + by).coerceIn(0L, end - MIN_TRIM_MS).also { trim(it, end); show(it) } }
+    val stepEnd = { by: Long -> (end + by).coerceIn(start + MIN_TRIM_MS, durationMs).also { trim(start, it); show(it) } }
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            MicroLabel(trimTime(startMs))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            TrimStepper(trimTime(startMs), onEarlier = { stepStart(-TRIM_STEP_MS) }, onLater = { stepStart(TRIM_STEP_MS) })
             BasicText(trimTime(endMs - startMs), style = Type.microLabel.copy(color = accent))
-            MicroLabel(trimTime(endMs))
+            TrimStepper(trimTime(endMs), onEarlier = { stepEnd(-TRIM_STEP_MS) }, onLater = { stepEnd(TRIM_STEP_MS) })
         }
         Box(
             Modifier
@@ -430,11 +605,7 @@ private fun TrimBar(item: MediaItem, video: VideoState, durationMs: Long, startM
                 .clip(Shapes.cover)
                 .background(Palette.sunken)
                 .pointerInput(durationMs) {
-                    detectTapGestures { at ->
-                        val ms = (at.x / size.width * durationMs).toLong().coerceIn(start, end)
-                        video.positionMs = ms
-                        video.player.seekTo(ms)
-                    }
+                    detectTapGestures { at -> show((at.x / size.width * durationMs).toLong().coerceIn(start, end)) }
                 }
                 .pointerInput(durationMs) {
                     var held = 0
@@ -461,8 +632,7 @@ private fun TrimBar(item: MediaItem, video: VideoState, durationMs: Long, startM
                             1 -> ms.coerceAtLeast(start + MIN_TRIM_MS).coerceAtMost(durationMs).also { trim(start, it) }
                             else -> ms.coerceIn(start, end)
                         }
-                        video.positionMs = shown
-                        video.player.seekTo(shown)
+                        show(shown)
                     }
                 },
         ) {
@@ -493,4 +663,15 @@ private fun trimTime(millis: Long): String {
     val tenths = (millis / 100) % 10
     val seconds = millis / 1000
     return "%d:%02d.%d".format(seconds / 60, seconds % 60, tenths)
+}
+
+// One end of the cut: its time between an arrow back and an arrow on.
+@Composable
+private fun TrimStepper(time: String, onEarlier: () -> Unit, onLater: () -> Unit) {
+    val accent = LocalAccent.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.pressable(onClick = onEarlier).padding(6.dp)) { BackIcon(accent, size = 16.dp) }
+        MicroLabel(time)
+        Box(Modifier.pressable(onClick = onLater).padding(6.dp).graphicsLayer { rotationZ = 180f }) { BackIcon(accent, size = 16.dp) }
+    }
 }

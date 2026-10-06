@@ -182,14 +182,12 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
     var currentYear: Int? = null
     var currentMonth: YearMonth? = null
     var currentDay: LocalDate? = null
-    // The open week's header is put in when its first photo comes and labelled once its last day is known.
+    // The open week's header is put in when its first photo comes and labelled when the week closes.
     var weekHeaderAt = -1
     var weekFirst: LocalDate? = null
-    var weekLast: LocalDate? = null
     fun closeWeek() {
         val first = weekFirst ?: return
-        val last = weekLast ?: first
-        entries[weekHeaderAt] = GridEntry.Header(weekStamp(first, last), "week-${YearMonth.from(first)}-${calendarWeekOf(first)}", DateGroup.WEEKS)
+        entries[weekHeaderAt] = GridEntry.Header(calendarWeekLabel(first), "week-${YearMonth.from(first)}-${calendarWeekOf(first)}", DateGroup.WEEKS)
         weekFirst = null
     }
     val stackAt = arrayOfNulls<List<MediaItem>>(items.size)
@@ -223,7 +221,6 @@ fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isS
                 entries += GridEntry.Header("", "", DateGroup.WEEKS)
                 weekFirst = day
             }
-            weekLast = day
         }
         if (isDays && day != currentDay) entries += GridEntry.Header(DAY_FORMAT.format(day).uppercase(Locale.ENGLISH), "day-$day", DateGroup.DAYS)
         entries += GridEntry.Photo(item, index, stack.orEmpty(), isOpen, stampDay = if (!isWeeks && !isDays && day != currentDay) day else null)

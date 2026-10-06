@@ -38,6 +38,8 @@ object Palette {
     val privateRed = Color(0xFFFA3438)
     val locationBlue = Color(0xFF148BC7)
     val trashGray = Color(0xFF9A9A9A)
+    // Cropping and trimming wear their own accent, photo or video, so the editor reads as a mode of its own.
+    val cropViolet = Color(0xFF7E55DD)
 
     // Photos are the only colour that matters in the viewer, so it stands on black rather than the ground: a grey frame around a picture shifts how its own blacks read.
     val viewerGround = Color(0xFF000000)

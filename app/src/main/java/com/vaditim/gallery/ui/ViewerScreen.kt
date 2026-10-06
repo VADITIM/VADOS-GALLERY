@@ -227,6 +227,10 @@ fun BoxScope.ViewerScreen(
                         ) { TrashIcon(Palette.danger) }
                     } else {
                     IconButton(onClick = { actions.toggleFavorite(current) }) { HeartIcon(current.isFavorite, if (current.isFavorite) Palette.favorite else Palette.textBody) }
+                    IconButton(onClick = {
+                        video?.player?.pause()
+                        cropping = current
+                    }) { CropIcon(Palette.textBody) }
                     if (isPrivate) {
                         IconButton(
                             onClick = { pendingDelete = { actions.deletePrivate(listOf(current)) } },
@@ -262,11 +266,6 @@ fun BoxScope.ViewerScreen(
                         overlay = Overlay.NONE
                         onSetCover(current)
                     }
-                }
-                SheetRow("Crop", icon = { CropIcon(it) }) {
-                    overlay = Overlay.NONE
-                    video?.player?.pause()
-                    cropping = current
                 }
                 SheetRow("Details", icon = { InfoIcon(it) }) { overlay = Overlay.DETAILS }
             }

@@ -975,16 +975,19 @@ private fun Library(viewModel: GalleryViewModel) {
                     },
             ) {
                 Box(Modifier.height(with(LocalDensity.current) { navigationHeight.toDp() }), contentAlignment = Alignment.Center) {
-                    val pillWidth = cornerPillWidth(lastTotal)
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        if (canNarrowToFavorites) {
-                            // No pill: the heart stands on the photos with a black shadow under it.
-                            Box(Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }).padding(6.dp), contentAlignment = Alignment.Center) {
-                                Box(Modifier.offset(y = 1.dp).blur(3.dp, BlurredEdgeTreatment.Unbounded)) { HeartIcon(isFilled = isFavoritesOnly, color = Color.Black, size = 18.dp) }
-                                HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBright, size = 18.dp)
-                            }
+                        // No pill: the heart stands on the photos with a black shadow under it. Where there is nothing to narrow it still holds its room, unseen, so the count never climbs into its place.
+                        Box(
+                            Modifier
+                                .then(if (canNarrowToFavorites) Modifier.pressable(onClick = { isFavoritesOnly = !isFavoritesOnly }) else Modifier)
+                                .graphicsLayer { alpha = if (canNarrowToFavorites) 1f else 0f }
+                                .padding(6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.offset(y = 1.dp).blur(3.dp, BlurredEdgeTreatment.Unbounded)) { HeartIcon(isFilled = isFavoritesOnly, color = Color.Black, size = 18.dp) }
+                            HeartIcon(isFilled = isFavoritesOnly, color = if (isFavoritesOnly) Palette.favorite else Palette.textBright, size = 18.dp)
                         }
-                        if (isCountShown) PhotoCount(lastMonthCount, lastTotal, Modifier.width(pillWidth).padding(horizontal = 4.dp))
+                        if (isCountShown) PhotoCount(lastMonthCount, lastTotal)
                     }
                 }
             }
@@ -1995,8 +1998,9 @@ private fun RowScope.ShownTopButton(onClick: (() -> Unit)?, isGapAfter: Boolean 
     }
 }
 
+// The round glass button of the top row; the crop screen's back is this same button.
 @Composable
-private fun TopButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
+fun TopButton(onClick: () -> Unit, icon: @Composable () -> Unit) {
     Box(Modifier.pressable(onClick = onClick).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) { icon() }
 }
 
@@ -2008,33 +2012,22 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-// The count small, every symbol its own piece spread evenly across the pill, so the pill keeps one width while scrolling. A symbol that changes slides its new self in; only the month's digits change while scrolling.
+// The count small: the month's number in a slot of its own against the slash, the total in one after it, both as wide as the total's digits, so a number gaining or losing a digit never moves the slash or the other number. Each types itself over when it changes, as the month does.
 @Composable
 private fun PhotoCount(monthCount: Int, total: Int, modifier: Modifier = Modifier) {
-    val symbols = "$monthCount/$total"
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        symbols.forEachIndexed { index, symbol ->
-            AnimatedContent(
-                symbol,
-                transitionSpec = { (fadeIn(tween(Motion.STATE_MS)) + slideInVertically(tween(Motion.STATE_MS, easing = Motion.powerTwoOut)) { it / 2 }).togetherWith(fadeOut(tween(Motion.PRESS_MS))) },
-                label = "count-$index",
-            ) { shown ->
-                BasicText(shown.toString(), style = COUNT_STYLE.copy(color = if (shown == '/') Palette.textMuted else Palette.textBright, shadow = Type.dropShadow))
-            }
-        }
+    val measurer = rememberTextMeasurer()
+    val digits = total.toString().length
+    val slotWidth = with(LocalDensity.current) { remember(digits) { measurer.measure("0".repeat(digits), COUNT_STYLE).size.width }.toDp() }
+    val numberStyle = COUNT_STYLE.copy(color = Palette.textBright, shadow = Type.dropShadow)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(slotWidth), contentAlignment = Alignment.CenterEnd) { TypewriterText(monthCount.toString(), numberStyle, isCaretShown = false) }
+        BasicText("/", style = COUNT_STYLE.copy(color = Palette.textMuted, shadow = Type.dropShadow), modifier = Modifier.padding(horizontal = 2.dp))
+        Box(Modifier.width(slotWidth), contentAlignment = Alignment.CenterStart) { TypewriterText(total.toString(), numberStyle, isCaretShown = false) }
     }
 }
 
-private val COUNT_STYLE = Type.microLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp)
-
-// Wide enough for the count's symbols at a little more than their own width, and never narrower than the heart's button; it only changes when the total gains a digit.
-@Composable
-private fun cornerPillWidth(total: Int): androidx.compose.ui.unit.Dp {
-    val measurer = rememberTextMeasurer()
-    val digits = total.toString().length
-    val width = remember(digits) { measurer.measure("0".repeat(digits * 2 + 1), COUNT_STYLE).size.width }
-    return maxOf(with(LocalDensity.current) { width.toDp() } * 1.3f + 14.dp, 40.dp)
-}
+// Every digit as wide as every other, so a number's width depends only on how many digits it has.
+private val COUNT_STYLE = Type.microLabel.copy(fontSize = 8.sp, letterSpacing = 0.sp, fontFeatureSettings = "tnum")
 
 private fun List<MediaItem>.favoritesOnlyIf(isFavoritesOnly: Boolean): List<MediaItem> = if (isFavoritesOnly) filter { it.isFavorite } else this
 
