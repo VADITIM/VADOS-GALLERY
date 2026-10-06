@@ -157,6 +157,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
                 SettingsHeader("Photos")
                 SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
+                SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
                 SettingsHeader("Backup")
                 SheetRow("Back up", onClick = onBackup)
                 SheetRow("Restore", onClick = onRestore)

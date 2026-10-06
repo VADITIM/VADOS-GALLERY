@@ -52,6 +52,9 @@ object Settings {
     val headers: Boolean get() = headersIn(view)
     var autoplayVideos by mutableStateOf(true)
         private set
+    // The day pill at the top left of a day's first photo, everywhere at once.
+    var dayStamps by mutableStateOf(true)
+        private set
     val albumColumns: Int get() = albumColumnsIn(view)
     // Albums in the order the user arranged them, by folder path; albums not in it keep the default order after these.
     var albumOrder by mutableStateOf<List<String>>(emptyList())
@@ -109,6 +112,7 @@ object Settings {
             albumColumnsByView[each] = preferences.getInt("albumColumns.${each.name}", preferences.getInt("albumColumns", DEFAULT_ALBUM_COLUMNS))
         }
         autoplayVideos = preferences.getBoolean("autoplay", true)
+        dayStamps = preferences.getBoolean("dayStamps", true)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         albumNames = preferences.getString("albumNames", null)?.split('\n')?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.orEmpty().toMap()
@@ -230,6 +234,11 @@ object Settings {
         val clean = AlbumStack.cleanName(name).ifEmpty { return }
         albumNames = if (clean == folderName) albumNames - path else albumNames + (path to clean)
         preferences.edit().putString("albumNames", albumNames.entries.joinToString("\n") { "${it.key}\t${it.value}" }).apply()
+    }
+
+    fun updateDayStamps(value: Boolean) {
+        dayStamps = value
+        preferences.edit().putBoolean("dayStamps", value).apply()
     }
 
     fun updateAutoplayVideos(value: Boolean) {

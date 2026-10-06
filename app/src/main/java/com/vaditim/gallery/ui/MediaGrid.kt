@@ -354,7 +354,7 @@ fun MediaGrid(
                         isMarked = isMarked(item),
                         stackSize = if (entry.isFoldedStack) entry.stack.size else 0,
                         // From four columns a tile is too small to carry a date over the picture.
-                        stampDay = entry.stampDay.takeIf { Settings.headersIn(memory.view) && columns <= MAX_STAMP_COLUMNS },
+                        stampDay = entry.stampDay.takeIf { Settings.dayStamps && Settings.headersIn(memory.view) && columns <= MAX_STAMP_COLUMNS },
                         stackPlace = if (entry.isStackOpen) "${entry.stack.indexOf(item) + 1}/${entry.stack.size}" else null,
                         onCloseStack = { memory.openStacks = memory.openStacks - entry.stack.last().id },
                         onClick = {
