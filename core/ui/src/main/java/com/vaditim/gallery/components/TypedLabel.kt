@@ -51,7 +51,7 @@ fun TypedLabel(
     val measurer = rememberTextMeasurer()
     val sides = padding.calculateLeftPadding(layoutDirection) + padding.calculateRightPadding(layoutDirection)
     fun widthOf(label: String): Float = with(density) {
-        (measurer.measure(label, Type.microLabel, maxLines = 1, softWrap = false).size.width.toDp() + sides).coerceAtMost(maxWidth).toPx()
+        (measurer.measure(label, Type.placeLabel, maxLines = 1, softWrap = false).size.width.toDp() + sides).coerceAtMost(maxWidth).toPx()
     }
     var stage by remember { mutableStateOf(if (isTypedIn) "" else text) }
     var shownAccent by remember { mutableStateOf(accent) }
@@ -88,7 +88,7 @@ fun TypedLabel(
         contentAlignment = contentAlignment,
     ) {
         // A caret would widen text whose pill is sized to it, so only a fixed-width label shows one.
-        FadingOverflow { TypewriterText(stage, style = Type.microLabel.copy(color = ink), isCaretShown = fixedWidth != null) }
+        FadingOverflow { TypewriterText(stage, style = Type.placeLabel.copy(color = ink), isCaretShown = fixedWidth != null) }
     }
 }
 
