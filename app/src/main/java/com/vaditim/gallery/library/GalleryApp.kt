@@ -34,6 +34,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -117,7 +118,8 @@ private fun Library(viewModel: GalleryViewModel) {
     val viewer = controller.viewer
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val screen = LibraryScreen(navigation, content, selection, controller.memories)
+    // Kept between recompositions and remade only when something it reads changes, so the screens under it can skip when the app recomposes for anything else.
+    val screen by remember(content, controller) { derivedStateOf { LibraryScreen(navigation, content, selection, controller.memories) } }
 
     LibraryEffects(controller, content, screen)
 

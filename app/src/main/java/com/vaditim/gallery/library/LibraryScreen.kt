@@ -12,7 +12,7 @@ import com.vaditim.gallery.settings.SettingsView
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vault.PrivateGroup
 
-// What is on screen, worked out once per frame from where the user stands and what the library holds: the folder open, its photos, its name, and what the bars around it offer.
+// What is on screen, worked out again only when something it reads changes, from where the user stands and what the library holds: the folder open, its photos, its name, and what the bars around it offer.
 class LibraryScreen(
     private val navigation: LibraryNavigation,
     private val content: LibraryContent,

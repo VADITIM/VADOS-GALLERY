@@ -1,3 +1,3 @@
-# 1.1.31
+# 1.1.32
 
-- Going into or out of Private, the nav buttons now change colour only once the old view has left, instead of while it is still animating.
+- Switching sections and views is smooth again: the screen is no longer redrawn from scratch for every small change, which the last rebuild had brought in.
