@@ -1,4 +1,3 @@
-# 1.1.23
+# 1.1.24
 
-- Less room between groups.
-- A shut group's arrow sits further left of its name.
+- Roadmap added: drawing in crop and dragging albums into groups, planned for 1.2.0.
