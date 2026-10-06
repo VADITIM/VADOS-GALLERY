@@ -1,4 +1,4 @@
-# v0.130
+# v1.0.0
 
-- Settings → General has Back up and Restore. Back up saves your settings, covers, album order and groups, favourites albums, names and review progress to a file you choose; Restore reads it back and restarts the app.
-- Still signed with the old key, so it installs over your current app.
+- First release signed with the dedicated release key; every update from here installs over the last one.
+- Uninstall the old app once before installing, then restore your backup from Settings → General → Restore.
