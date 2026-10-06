@@ -583,7 +583,8 @@ private fun Tile(
         ImageRequest.Builder(context).data(data).size(sizePixels).apply { if (item.isVideo && item.uri.scheme != "content") decoderFactory(VideoFrameDecoder.Factory()) }.build()
     }
     // The system's cached thumbnail is small, and for some photos stale: pixelated, or turned the wrong way. So every tile gets the photo itself on top (decoded sampled and upright) once it has stood on screen a moment; scrolling shows the thumbnails. Tiles off screen are not composed at all, so nothing far away is ever decoded.
-    val needsSharp = item.uri.scheme == "content"
+    // A video's own decode picks another frame than its system thumbnail, so the tile would change picture once it settles; it keeps the thumbnail.
+    val needsSharp = item.uri.scheme == "content" && !item.isVideo
     var isSharpWanted by remember(item.id, sizePixels) { mutableStateOf(needsSharp && isSettled) }
     LaunchedEffect(needsSharp, isSettled) {
         if (needsSharp && isSettled && !isSharpWanted) {
@@ -721,12 +722,19 @@ fun formatDuration(millis: Long): String {
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 }
 
+private const val GLIDE_SCREENS = 3
+
 // Far enough right that the strip and its labels are off the screen.
 private val TIMELINE_LEAVE = 96.dp
 
 // One continuous glide from where the grid stands to its end. The distance left is only known once the end is on screen, so it is guessed from the rows shown and guessed again every frame; the eased progress is applied to the latest guess, so the motion stays smooth and lands exactly.
 private suspend fun LazyGridState.glideToEnd() {
     val viewport = layoutInfo.viewportSize.height.coerceAtLeast(1)
+    // Gliding through every row composes and loads every tile on the way, so from far off it jumps to a few screens before the end and glides only those.
+    val shownCount = layoutInfo.visibleItemsInfo.size
+    if (shownCount > 0 && remainingToEnd() > viewport * GLIDE_SCREENS) {
+        scrollToItem((layoutInfo.totalItemsCount - shownCount * (GLIDE_SCREENS + 1)).coerceAtLeast(firstVisibleItemIndex))
+    }
     val first = remainingToEnd()
     if (first <= 0f) return
     val screens = first / viewport

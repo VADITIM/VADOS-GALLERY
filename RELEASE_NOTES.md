@@ -1,3 +1,4 @@
-# 1.1.32
+# 1.1.33
 
-- Switching sections and views is smooth again: the screen is no longer redrawn from scratch for every small change, which the last rebuild had brought in.
+- Videos in a grid keep the same picture when you stop scrolling, instead of switching to another frame.
+- Tapping the section to jump to the newest photos no longer stutters from far up: it skips most of the way and glides only the last stretch.
