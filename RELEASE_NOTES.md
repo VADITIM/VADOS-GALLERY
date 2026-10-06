@@ -1,3 +1,3 @@
-# 1.1.40
+# 1.1.39
 
-- Opening a photo pops the top buttons and the navigation away to nothing, and closing it pops them back, instead of sliding them off the screen. Tapping a photo to hide its buttons still slides them out.
+- The nav's highlight no longer sits slightly to the right and slides back when a selection ends; it is in place from the start.

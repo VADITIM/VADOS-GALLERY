@@ -14,6 +14,3 @@ internal val TOP_EXIT = fadeOut(tween(Motion.STATE_MS, easing = Motion.powerTwoI
 // The old look pops away to nothing, then the new one pops in past full size.
 internal val TOP_POP_IN = scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
 internal val TOP_POP_OUT = scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f)
-
-// The scale the top buttons take from the viewer's growth, read where they draw.
-internal val LocalViewerPop = androidx.compose.runtime.staticCompositionLocalOf<() -> Float> { { 1f } }

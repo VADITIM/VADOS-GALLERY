@@ -45,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -183,16 +182,12 @@ private fun Library(viewModel: GalleryViewModel) {
             TimelineAboveHost(timelineAbove, Modifier.zIndex(-0.5f))
 
             // Everything from here up floats over the content and blurs it; none of it is inside the haze source, or it would blur itself.
-            // As the photo grows the top buttons and the navigation pop away, and both pop back in as it shrinks.
-            val viewerSink = if (viewer.shown == null) Modifier else Modifier.graphicsLayer {
-                val scale = viewer.popScale()
-                scaleX = scale
-                scaleY = scale
-                transformOrigin = TransformOrigin(0.5f, 1f)
-            }
+            // As the photo grows the top row leaves off the top and the navigation off the bottom, with the photo, and both come back as it shrinks, so the photo passes behind them.
+            val viewerRise = if (viewer.shown == null) Modifier else Modifier.graphicsLayer { translationY = -viewer.growth() * (size.height + 12.dp.toPx()) }
+            val viewerSink = if (viewer.shown == null) Modifier else Modifier.graphicsLayer { translationY = viewer.growth() * (size.height + 12.dp.toPx()) }
             val visibleMonth = screen.folderMemory?.let { rememberVisibleMonth(screen.gridItems, it).value } ?: VisibleMonth("", 0)
             val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-            CompositionLocalProvider(LocalViewerPop provides viewer::popScale) {
+            Box(viewerRise) {
                 TopRow(
                     month = visibleMonth,
                     title = screen.folderName.takeUnless { Settings.folderLabel },

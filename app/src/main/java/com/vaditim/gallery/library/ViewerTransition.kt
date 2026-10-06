@@ -46,9 +46,6 @@ class ViewerTransition {
     // Read only where it draws, so the animation never recomposes the library.
     fun growth(): Float = if (shown == null) 0f else progress.value * (1f - pull)
 
-    // The buttons pop away to nothing as the photo grows and pop back in past full size as it shrinks, frame by frame with it.
-    fun popScale(): Float = (1f - Motion.backIn.transform(growth().coerceIn(0f, 1f))).coerceAtLeast(0f)
-
     fun open(source: ViewerSource, index: Int) {
         request = ViewerRequest(source, index)
     }
