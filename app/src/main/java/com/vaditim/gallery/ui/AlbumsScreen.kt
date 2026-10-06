@@ -177,8 +177,13 @@ fun AlbumsScreen(
                 }
             }
         }
-        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCardRow(onNewAlbum, onNewGroup) } }
-        item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { footer() } }
+        // One item with what follows it, so no row gap pushes the divider under the buttons further away than the one above them.
+        item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") {
+            Column(Modifier.animateItem(placementSpec = glide).entrance()) {
+                AddCardRow(onNewAlbum, onNewGroup)
+                footer()
+            }
+        }
     }
 }
 
@@ -259,6 +264,8 @@ private fun GroupRow(
     val time = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     // A swipe left pulls the opened group shut by the finger: it drives the same time, on the closing curve, so letting go carries on from where the cards are.
     var isPulled by remember(stack.name) { mutableStateOf(false) }
+    // A swipe right opening the shut group by the finger, so its name is sliced away in step as the heading's is when pulled shut.
+    var isPushed by remember(stack.name) { mutableStateOf(false) }
     // Where the arrow is, 0 at the end of the heading's name to 1 at the right end of the row. Opening, it pops out of the name late in the sweep and slides right; closing, it slides back, and the name is cut the moment it reaches it, then the closed name sweeps in.
     val arrow = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     var isHeadingShown by remember(stack.name) { mutableStateOf(isOpen) }
@@ -278,7 +285,7 @@ private fun GroupRow(
         }
     }
     LaunchedEffect(isOpen) {
-        if (!isOpen) isPulled = false
+        if (!isOpen) isPulled = false else isPushed = false
         val target = if (isOpen) 1f else 0f
         // Started part way, by a pull, it takes only the share of the time that is left.
         time.animateTo(target, tween((Motion.STACK_MS * abs(target - time.value)).roundToInt(), easing = LinearEasing))
@@ -361,6 +368,7 @@ private fun GroupRow(
                     val settle = {
                         scope.launch {
                             time.animateTo(0f, tween((Motion.STATE_MS * time.value).roundToInt(), easing = Motion.powerTwoOut))
+                            isPushed = false
                             onMotion(false)
                         }
                         Unit
@@ -368,6 +376,7 @@ private fun GroupRow(
                     detectHorizontalDragGestures(
                         onDragStart = {
                             pushed = 0f
+                            isPushed = true
                             onMotion(true)
                         },
                         onDragEnd = {
@@ -399,8 +408,14 @@ private fun GroupRow(
                 if (isOpen) Modifier else Modifier.pressable(onClick = openGroup, pressedScale = 0.98f, onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(albums) else onStackLongPress() } }),
                 verticalArrangement = Arrangement.Center,
             ) {
-                // Closing, the name sweeps back in as the heading does on opening, over its own width.
-                LabelReveal(stack.name, isShown = !isHeadingShown, style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current), isRevealedAtStart = true)
+                // Closing, the name sweeps back in as the heading does on opening, over its own width; opening, or pushed open, it is sliced away from its right end in step with the cards.
+                LabelReveal(
+                    stack.name,
+                    isShown = !isHeadingShown,
+                    style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current),
+                    presence = { if (isOpen || isPushed) 1f - time.value else 1f },
+                    isRevealedAtStart = true,
+                )
                 BasicText(
                     albums.sumOf { it.items.size }.toString(),
                     style = Type.value.copy(fontSize = 15.sp),

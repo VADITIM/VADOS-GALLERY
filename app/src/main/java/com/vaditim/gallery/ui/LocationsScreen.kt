@@ -59,10 +59,10 @@ fun FolderEntries(onPrivate: () -> Unit, onLocations: () -> Unit, onTrash: () ->
 // A little larger than the icons on buttons, so it holds the middle of a cover.
 private val FOLDER_ICON = 34.dp
 
-// A hairline with room around it between the albums and the rows after them, so the rows read as their own places.
+// A hairline with room under it between the albums and the rows after them, so the rows read as their own places; the new album buttons above bring their own room.
 @Composable
 fun FolderDivider() {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp).height(1.dp).background(Palette.border))
+    Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp).height(1.dp).background(Palette.border))
 }
 
 // Trashed photos, kept by Android for 30 days. A tap opens one like anywhere else; a long press selects.
