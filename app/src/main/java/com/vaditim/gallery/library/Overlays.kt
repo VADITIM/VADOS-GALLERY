@@ -1,5 +1,6 @@
 package com.vaditim.gallery.library
 
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -99,13 +100,15 @@ internal fun ReviewOverlay(controller: LibraryController, content: LibraryConten
 
 // The viewer grows out of the tile it was opened from and shrinks back into the tile of the photo it ends on; when that tile is not on screen it falls back to a quiet fade.
 @Composable
-internal fun BoxScope.ViewerOverlay(controller: LibraryController, content: LibraryContent, screen: LibraryScreen, scope: CoroutineScope) {
+internal fun BoxScope.ViewerOverlay(controller: LibraryController, content: LibraryContent, screen: LibraryScreen, metrics: BarMetrics, scope: CoroutineScope) {
     val transition = controller.viewer
     val request = transition.shown ?: return
     ViewerScreen(
         // Progress is read inside the draw lambdas, so the animation never recomposes the library.
         photoModifier = Modifier.viewerFlight(transition),
-        isChromeAllowed = transition.isSettled,
+        // Allowed from the moment it opens; the buttons pop in once the library's have popped away.
+        isChromeAllowed = transition.isOpen,
+        barStartSize = IntSize(metrics.navigationWidth, metrics.navigationHeight),
         isBehindNavigation = transition.isShrunk,
         items = content.itemsFor(request.source),
         startIndex = request.startIndex,

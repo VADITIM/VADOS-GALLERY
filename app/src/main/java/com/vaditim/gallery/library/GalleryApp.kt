@@ -218,7 +218,7 @@ private fun Library(viewModel: GalleryViewModel) {
 
             PickerOverlay(controller, content)
             ReviewOverlay(controller, content)
-            ViewerOverlay(controller, content, screen, scope)
+            ViewerOverlay(controller, content, screen, metrics, scope)
 
             // Above the viewer too, since a photo can be deleted or moved from there.
             UndoPill(

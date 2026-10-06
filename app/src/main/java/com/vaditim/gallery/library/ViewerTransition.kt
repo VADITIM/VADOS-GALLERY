@@ -14,9 +14,6 @@ import com.vaditim.gallery.components.TileBounds
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.vas.Motion
 
-// How far the viewer has grown into place before its buttons start arriving.
-private const val VIEWER_CHROME_AT = 0.85f
-
 // The viewer growing out of the tile it was opened from and shrinking back into the tile of the photo it ends on.
 @Stable
 class ViewerTransition {
@@ -37,8 +34,6 @@ class ViewerTransition {
     private val photoRatios = HashMap<Long, Float>()
     val progress = Animatable(0f)
 
-    // The viewer's buttons come in once the photo has nearly grown into place, and leave as soon as it starts closing.
-    val isSettled by derivedStateOf { request != null && progress.value > VIEWER_CHROME_AT }
     // Anything short of full size is on its way to or from its tile, where the navigation lies in front of it.
     val isShrunk by derivedStateOf { progress.value * (1f - pull) < 1f }
     val isOpen: Boolean get() = request != null

@@ -1,5 +1,6 @@
 package com.vaditim.gallery.library
 
+import androidx.compose.foundation.layout.size
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -166,7 +167,8 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                         }
                         BottomBar.COVERS -> CoverActions(controller, screen)
                         BottomBar.PHOTOS -> PhotoActions(controller, content, screen)
-                        BottomBar.HIDDEN -> Box {}
+                        // The empty pill keeps the nav's size, so the viewer's bar grows out of it and the nav's buttons pop back into it.
+                        BottomBar.HIDDEN -> with(LocalDensity.current) { Box(Modifier.size(metrics.navigationWidth.toDp(), metrics.navigationHeight.toDp())) }
                         BottomBar.NAVIGATION -> SectionBar(
                             hasGlass = false,
                             itemModifier = pop,

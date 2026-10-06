@@ -1,5 +1,16 @@
 package com.vaditim.gallery.viewer
 
+import kotlin.math.roundToInt
+import com.vaditim.gallery.components.LocalButtonPop
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animate
@@ -148,6 +159,8 @@ fun BoxScope.ViewerScreen(
     onPull: (Float) -> Unit = {},
     places: Map<Long, Place> = emptyMap(),
     isChromeAllowed: Boolean = true,
+    // The size of the nav the action bar takes the place of, so it grows out of it.
+    barStartSize: IntSize = IntSize.Zero,
     photoModifier: Modifier = Modifier,
     // While it grows out of or shrinks back into its tile, the photo passes behind the navigation; open, it covers it.
     isBehindNavigation: Boolean = false,
@@ -170,7 +183,6 @@ fun BoxScope.ViewerScreen(
     var pull by remember { mutableFloatStateOf(0f) }
     // How far a swipe up has raised the details, 0 to 1: the sheet rises with the finger rather than appearing on release.
     var lift by remember { mutableFloatStateOf(0f) }
-    val isChromeShown = isChromeVisible && isChromeAllowed
     val current = items[pagerState.currentPage.coerceIn(0, items.lastIndex)]
     val video = rememberVideoState(current)
     val context = LocalContext.current
@@ -217,7 +229,7 @@ fun BoxScope.ViewerScreen(
                 horizontalArrangement = Arrangement.End,
             ) {
                 // The date stays through a swipe up: the details rise below it and it is still there once they are open.
-                ChromePiece(isChromeShown, isFromTop = true, order = 0, pull = { pull }) {
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, pull = { pull }) {
                     Row(
                         Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -234,14 +246,17 @@ fun BoxScope.ViewerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                ChromePiece(isChromeShown, isFromTop = false, order = 2, pull = { maxOf(pull, lift) }) { ConfirmPill(pendingDelete, onDone = { pendingDelete = null }) }
-                if (video != null) ChromePiece(isChromeShown, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
-                ChromePiece(isChromeShown, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }) {
-                Row(
-                    Modifier
-                        .glass(Shapes.capsule, Palette.viewerGround)
-                        .padding(5.dp),
-                ) {
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 2, pull = { maxOf(pull, lift) }) { ConfirmPill(pendingDelete, onDone = { pendingDelete = null }) }
+                if (video != null) ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }, isPoppedWhole = false) {
+                // The pill grows out of the nav it takes the place of, while its buttons pop in one by one, as the bar does when a selection begins.
+                val morph = transition.animateFloat(
+                    transitionSpec = { tween(if (targetState == EnterExitState.Visible) Motion.STATE_MS * 2 else Motion.STATE_MS, easing = Motion.powerThreeInOut) },
+                    label = "bar-morph",
+                ) { if (it == EnterExitState.Visible) 1f else 0f }
+                MorphingPill(barStartSize, { morph.value }) {
+                CompositionLocalProvider(LocalButtonPop provides Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT)) {
+                Row(Modifier.padding(5.dp)) {
                     IconButton(onClick = { actions.share(listOf(current)) }) { ShareIcon(Palette.textBody) }
                     if (isTrash) {
                         IconButton(onClick = { actions.restore(listOf(current)) }) { RestoreIcon(LocalAccent.current) }
@@ -268,6 +283,8 @@ fun BoxScope.ViewerScreen(
                     }
                     IconButton(onClick = { overlay = Overlay.MORE }) { MoreIcon(Palette.textBody) }
                     }
+                }
+                }
                 }
                 }
                 }
@@ -621,27 +638,56 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
     }
 }
 
-// One of the viewer's floating buttons: each slides off its own edge and fades, a step after the one before, instead of the whole set going as one sheet.
-@Composable
-private fun ChromePiece(isShown: Boolean, isFromTop: Boolean, order: Int, pull: () -> Float = { 0f }, content: @Composable () -> Unit) {
-    val delay = order * Motion.CHROME_STAGGER_MS
-    AnimatedVisibility(
-        // Follows the pull frame by frame, so the buttons move exactly as far as the finger has.
-        modifier = Modifier.graphicsLayer {
-            val out = (pull() / CHROME_PULL_SHARE).coerceIn(0f, 1f)
-            translationY = (if (isFromTop) -1f else 1f) * size.height * CHROME_TRAVEL * out
-            alpha = 1f - out
-        },
-        visible = isShown,
-        enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.powerTwoOut)) +
-            slideInVertically(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.backOut)) { if (isFromTop) -it else it },
-        exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) +
-            slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) { if (isFromTop) -it else it },
-    ) { content() }
-}
-
 private fun formatStamp(item: MediaItem): String =
     STAMP_FORMAT.format(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH) + " · " + calendarWeekLabel(dayOf(item.timestampMillis))
 
 private fun formatSize(bytes: Long): String =
     if (bytes >= 1_000_000) "%.1f MB".format(bytes / 1_000_000.0) else "%d KB".format(bytes / 1000)
+
+// One of the viewer's floating buttons. As the viewer opens it pops in once the library's buttons have popped away, and pops away as it closes, like a bar changing kind; a tap on the photo slides it off its own edge and back, a step after the one before.
+// `isPoppedWhole` off, the piece pops its own parts, through the scope it is given.
+@Composable
+private fun ChromePiece(isAllowed: Boolean, isShown: Boolean, isFromTop: Boolean, order: Int, pull: () -> Float = { 0f }, isPoppedWhole: Boolean = true, content: @Composable AnimatedVisibilityScope.() -> Unit) {
+    val delay = order * Motion.CHROME_STAGGER_MS
+    AnimatedVisibility(isAllowed, enter = EnterTransition.None, exit = ExitTransition.None) {
+        val opening = this
+        AnimatedVisibility(
+            // Follows the pull frame by frame, so the buttons move exactly as far as the finger has.
+            modifier = Modifier.graphicsLayer {
+                val out = (pull() / CHROME_PULL_SHARE).coerceIn(0f, 1f)
+                translationY = (if (isFromTop) -1f else 1f) * size.height * CHROME_TRAVEL * out
+                alpha = 1f - out
+            },
+            visible = isShown,
+            enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.powerTwoOut)) +
+                slideInVertically(tween(Motion.OVERLAY_ENTER_MS, delay, Motion.backOut)) { if (isFromTop) -it else it },
+            exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) +
+                slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, delay, Motion.powerTwoIn)) { if (isFromTop) -it else it },
+        ) {
+            if (isPoppedWhole) Box(with(opening) { Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT) }) { opening.content() } else opening.content()
+        }
+    }
+}
+
+// A glass pill whose size goes from `from` (the nav it replaces) to its content's own as `fraction` goes from 0 to 1, the content centred in it and never squeezed.
+@Composable
+private fun MorphingPill(from: IntSize, fraction: () -> Float, content: @Composable () -> Unit) {
+    Layout(content = {
+        Box(Modifier.glass(Shapes.capsule, Palette.viewerGround))
+        content()
+    }) { measurables, constraints ->
+        val inside = measurables[1].measure(constraints.copy(minWidth = 0, minHeight = 0))
+        val progress = fraction()
+        val width = if (from.width == 0) inside.width else (from.width + (inside.width - from.width) * progress).roundToInt()
+        val height = if (from.height == 0) inside.height else (from.height + (inside.height - from.height) * progress).roundToInt()
+        val glass = measurables[0].measure(Constraints.fixed(width.coerceAtLeast(0), height.coerceAtLeast(0)))
+        layout(width, height) {
+            glass.place(0, 0)
+            inside.place((width - inside.width) / 2, (height - inside.height) / 2)
+        }
+    }
+}
+
+// The viewer's buttons pop in once the library's have popped away, and pop away at once.
+private val POP_IN = scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+private val POP_OUT = scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f)
