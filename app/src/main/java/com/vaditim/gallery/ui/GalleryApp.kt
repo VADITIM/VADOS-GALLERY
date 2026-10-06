@@ -183,7 +183,7 @@ private enum class AppSheet {
     STACK_MENU, STACK_RENAME, ALBUM_STACK, ALBUM_NEW_STACK,
     FAVORITE_NEW_ALBUM, FAVORITE_ALBUM_PICK, FAVORITE_SELECTION_NEW_ALBUM, FAVORITE_ALBUM_MENU, FAVORITE_ALBUM_RENAME,
     FAVORITE_STACK_MENU, FAVORITE_STACK_RENAME, FAVORITE_ALBUM_STACK, FAVORITE_ALBUM_NEW_STACK,
-    NEW_GROUP_NAME, NEW_GROUP_ALBUMS, GROUP_DELETE_CHECK,
+    NEW_GROUP_NAME, NEW_GROUP_ALBUMS, NEW_GROUP_MOVE_CHECK, GROUP_DELETE_CHECK,
 }
 
 // A group about to be deleted that still holds photos: how many, and the delete itself, asked about once more after Confirm.
@@ -289,8 +289,19 @@ private fun Library(viewModel: GalleryViewModel) {
     // A group being made from New group: its name, and whether it is a Favorites group, while its albums are ticked.
     var newGroupName by remember { mutableStateOf("") }
     var isNewGroupInFavorites by remember { mutableStateOf(false) }
+    // The albums ticked for it, kept while asking about those that already belong to another group.
+    var newGroupKeys by remember { mutableStateOf(emptySet<String>()) }
     var groupDeleteCheck by remember { mutableStateOf<GroupDeleteCheck?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
+    // Makes the group from New group with the albums ticked for it, taking each out of any group it was in.
+    fun createNewGroup() {
+        if (isNewGroupInFavorites) {
+            Settings.updateFavoriteStacks(newGroupKeys.fold(Settings.favoriteStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
+        } else {
+            Settings.updateAlbumStacks(newGroupKeys.fold(Settings.albumStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
+        }
+        sheet = AppSheet.NONE
+    }
     // Deleting a group waits for Confirm as every delete does; one that still holds photos then asks again, naming how many.
     fun askDeleteGroup(name: String, photoCount: Int, delete: () -> Unit) {
         pendingDelete = {
@@ -1343,21 +1354,33 @@ private fun Library(viewModel: GalleryViewModel) {
             AlbumChoiceSheet(
                 visible = sheet == AppSheet.NEW_GROUP_ALBUMS,
                 label = newGroupName.uppercase(),
+                initiallyTicked = newGroupKeys,
                 choices = if (isNewGroupInFavorites) {
                     favoriteAlbumViews.map { it.name to (it.name to it.items.size) }
                 } else {
                     albums.map { it.relativePath to (it.name to it.items.size) }
                 },
                 onCreate = { keys ->
-                    if (isNewGroupInFavorites) {
-                        Settings.updateFavoriteStacks(keys.fold(Settings.favoriteStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
-                    } else {
-                        Settings.updateAlbumStacks(keys.fold(Settings.albumStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
-                    }
-                    sheet = AppSheet.NONE
+                    newGroupKeys = keys
+                    // An album already in another group would leave it, so that is asked first.
+                    val stacks = if (isNewGroupInFavorites) Settings.favoriteStacks else Settings.albumStacks
+                    if (stacks.any { stack -> stack.name != newGroupName && stack.paths.any { it in keys } }) sheet = AppSheet.NEW_GROUP_MOVE_CHECK else createNewGroup()
                 },
                 onDismiss = { sheet = AppSheet.NONE },
             )
+            run {
+                val stacks = if (isNewGroupInFavorites) Settings.favoriteStacks else Settings.albumStacks
+                val elsewhere = stacks.filter { stack -> stack.name != newGroupName && stack.paths.any { it in newGroupKeys } }
+                val movedCount = elsewhere.sumOf { stack -> stack.paths.count { it in newGroupKeys } }
+                OverlaySheet(
+                    visible = sheet == AppSheet.NEW_GROUP_MOVE_CHECK,
+                    label = "${if (movedCount == 1) "ALBUM" else "$movedCount ALBUMS"} ALREADY IN ${elsewhere.joinToString(", ") { it.name }.uppercase()}",
+                    onDismiss = { sheet = AppSheet.NEW_GROUP_ALBUMS },
+                ) {
+                    SheetRow("Add anyway", trailing = newGroupKeys.size.toString()) { createNewGroup() }
+                    SheetRow("Cancel", color = Palette.textMuted) { sheet = AppSheet.NEW_GROUP_ALBUMS }
+                }
+            }
             // After Confirm, a group that still holds photos asks once more, saying how many.
             var lastCheck by remember { mutableStateOf<GroupDeleteCheck?>(null) }
             groupDeleteCheck?.let { lastCheck = it }
@@ -1580,6 +1603,7 @@ private fun Library(viewModel: GalleryViewModel) {
                     action = "CHOOSE ALBUMS",
                     onConfirm = { name ->
                         newGroupName = AlbumStack.cleanName(name)
+                        newGroupKeys = emptySet()
                         sheet = if (newGroupName.isEmpty()) AppSheet.NONE else AppSheet.NEW_GROUP_ALBUMS
                     },
                     onDismiss = { sheet = AppSheet.NONE },

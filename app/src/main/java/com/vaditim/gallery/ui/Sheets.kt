@@ -264,8 +264,8 @@ fun GroupPickerSheet(
 
 // Ticking albums for a new group: every album with its count, ticked ones in the accent, and the row that makes the group once any are ticked.
 @Composable
-fun AlbumChoiceSheet(visible: Boolean, label: String, choices: List<Pair<String, Pair<String, Int>>>, onCreate: (Set<String>) -> Unit, onDismiss: () -> Unit) {
-    var ticked by remember(visible) { mutableStateOf(emptySet<String>()) }
+fun AlbumChoiceSheet(visible: Boolean, label: String, choices: List<Pair<String, Pair<String, Int>>>, onCreate: (Set<String>) -> Unit, onDismiss: () -> Unit, initiallyTicked: Set<String> = emptySet()) {
+    var ticked by remember(visible) { mutableStateOf(initiallyTicked) }
     OverlaySheet(visible = visible, label = label, onDismiss = onDismiss) {
         LazyColumn(Modifier.heightIn(max = 380.dp)) {
             items(choices, key = { it.first }) { (key, nameAndCount) ->
