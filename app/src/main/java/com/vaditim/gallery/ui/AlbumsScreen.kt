@@ -94,6 +94,8 @@ fun AlbumsScreen(
     onStackLongPress: (String) -> Unit,
     onNewAlbum: () -> Unit,
     contentPadding: PaddingValues,
+    // Shown above New album while the albums are grouped.
+    onNewGroup: (() -> Unit)? = null,
     footer: @Composable () -> Unit = {},
     isRearranging: Boolean = false,
     onArrange: (paths: List<String>) -> Unit = {},
@@ -175,6 +177,7 @@ fun AlbumsScreen(
                 }
             }
         }
+        if (onNewGroup != null) item(key = "new-group", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New group", onClick = onNewGroup) } }
         item(key = "new-album", span = { GridItemSpan(maxLineSpan) }, contentType = "new-album") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { AddCard("New album", onClick = onNewAlbum) } }
         item(key = "footer", span = { GridItemSpan(maxLineSpan) }, contentType = "footer") { Box(Modifier.animateItem(placementSpec = glide).entrance()) { footer() } }
     }

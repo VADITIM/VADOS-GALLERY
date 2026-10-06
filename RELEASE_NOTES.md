@@ -1,4 +1,6 @@
-# v0.126
+# v0.127
 
-- The favourites-only heart and the photo count right of the nav stand straight on the photos with a black drop shadow instead of pills.
-- The month shown while holding the timeline has the same drop shadow instead of a pill.
+- Hide from Recent is gone: an album's menu has Delete album in its place, and the selection bar no longer has the eye.
+- While albums are grouped, a New group row stands above New album: name the group, tick its albums, create.
+- Every group's menu has Delete group at the very top. After Confirm, a group that still holds photos asks once more with how many.
+- The app stays upright; only a photo or video being viewed turns with the phone.

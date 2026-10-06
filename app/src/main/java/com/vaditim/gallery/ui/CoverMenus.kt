@@ -14,20 +14,11 @@ fun AlbumMenuRows(
     onRearrange: () -> Unit,
     group: GroupRow?,
     onPrivate: () -> Unit,
-    isHiddenFromRecent: Boolean,
-    onToggleRecent: () -> Unit,
     onAddPhotos: () -> Unit,
     onDelete: () -> Unit,
 ) {
     SheetHeader("Albums")
-    SplitSheetRow(
-        if (isHiddenFromRecent) "Show in Recent" else "Hide from Recent",
-        icon = { EyeIcon(it, isCrossed = !isHiddenFromRecent) },
-        onClick = onToggleRecent,
-        sideIcon = { TrashIcon(it) },
-        onSide = onDelete,
-        sideColor = Palette.danger,
-    )
+    SheetRow("Delete album", color = Palette.danger, icon = { TrashIcon(it) }, onClick = onDelete)
     if (group?.name != null) SheetRow("Remove from group", trailing = group.name, icon = { CloseIcon(it) }, onClick = group.onRemove)
     SheetRow("Add photos", icon = { PlusIcon(it) }, onClick = onAddPhotos)
     SheetHeader("Edit")
@@ -40,11 +31,14 @@ fun AlbumMenuRows(
     SelectRow(onSelect, onRearrange)
 }
 
-// The long-press menu of a group, of albums or of private photos, laid out as an album's: what it does to the groups, changing this one, and selecting last.
+// The long-press menu of a group, of albums or of private photos, laid out as an album's: deleting it at the very top, then what it does to the groups, changing this one, and selecting last.
 @Composable
-fun GroupMenuRows(onRename: () -> Unit, onSelect: () -> Unit, onRearrange: () -> Unit, groups: @Composable () -> Unit, edit: @Composable () -> Unit = {}) {
-    SheetHeader("Groups")
-    groups()
+fun GroupMenuRows(onRename: () -> Unit, onSelect: () -> Unit, onRearrange: () -> Unit, onDelete: () -> Unit, groups: (@Composable () -> Unit)? = null, edit: @Composable () -> Unit = {}) {
+    SheetRow("Delete group", color = Palette.danger, icon = { TrashIcon(it) }, onClick = onDelete)
+    if (groups != null) {
+        SheetHeader("Groups")
+        groups()
+    }
     SheetHeader("Edit")
     SheetRow("Rename", icon = { PenIcon(it) }, onClick = onRename)
     edit()

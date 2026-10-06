@@ -82,8 +82,6 @@ object Settings {
     var privateFavoritesAsGroups by mutableStateOf(false)
         private set
 
-    // Album folders kept out of Recent; they still open as albums.
-    var hiddenFromRecent by mutableStateOf<Set<String>>(emptySet())
     // An album's name as shown, by folder path; renaming only ever changes this, never the folder, so nothing that saves into it is thrown off.
     var albumNames by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -113,7 +111,6 @@ object Settings {
         autoplayVideos = preferences.getBoolean("autoplay", true)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
-        hiddenFromRecent = preferences.getString("hiddenFromRecent", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty().toSet()
         albumNames = preferences.getString("albumNames", null)?.split('\n')?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.orEmpty().toMap()
         groundBrightness = preferences.getFloat("groundBrightness", DEFAULT_GROUND_BRIGHTNESS)
         favoriteAlbums = preferences.getString("favoriteAlbums", null)?.split('\n')?.filter { it.isNotEmpty() }?.map { line ->
@@ -213,11 +210,6 @@ object Settings {
         preferences.edit().putString("albumOrder", paths.joinToString("\n")).apply()
     }
 
-    fun updateHiddenFromRecent(paths: Set<String>) {
-        hiddenFromRecent = paths
-        preferences.edit().putString("hiddenFromRecent", paths.joinToString("\n")).apply()
-    }
-
     fun updateStackSimilar(value: Boolean) {
         stackSimilarByView[view] = value
         preferences.edit().putBoolean("stackSimilar.${view.name}", value).apply()
@@ -255,9 +247,6 @@ enum class SettingsView(val label: String) {
 }
 
 data class FavoriteAlbum(val name: String, val ids: List<Long>)
-
-// A Favorites album kept out of Recent sits in the same set as hidden folders; a folder's path never holds a tab, so this key cannot meet one.
-fun hiddenFavoriteKey(name: String): String = "\t$name"
 
 // Photos join a Favorites album, or one made for them; an album renamed onto another's name joins it.
 fun List<FavoriteAlbum>.withPhotos(albumName: String, ids: List<Long>): List<FavoriteAlbum> {

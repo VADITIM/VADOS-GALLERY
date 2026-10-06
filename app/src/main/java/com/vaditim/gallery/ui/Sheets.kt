@@ -5,6 +5,7 @@ import com.vaditim.gallery.AlbumStack
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalAnimationApi
@@ -258,5 +259,25 @@ fun GroupPickerSheet(
             }
             item { SheetRow("+ New group", color = Palette.textMuted, onClick = onNewGroup) }
         }
+    }
+}
+
+// Ticking albums for a new group: every album with its count, ticked ones in the accent, and the row that makes the group once any are ticked.
+@Composable
+fun AlbumChoiceSheet(visible: Boolean, label: String, choices: List<Pair<String, Pair<String, Int>>>, onCreate: (Set<String>) -> Unit, onDismiss: () -> Unit) {
+    var ticked by remember(visible) { mutableStateOf(emptySet<String>()) }
+    OverlaySheet(visible = visible, label = label, onDismiss = onDismiss) {
+        LazyColumn(Modifier.heightIn(max = 380.dp)) {
+            items(choices, key = { it.first }) { (key, nameAndCount) ->
+                val isTicked = key in ticked
+                SheetRow(
+                    nameAndCount.first,
+                    trailing = nameAndCount.second.toString(),
+                    color = if (isTicked) LocalAccent.current else Palette.textBright,
+                    icon = if (isTicked) { color -> CheckIcon(color) } else null,
+                ) { ticked = if (isTicked) ticked - key else ticked + key }
+            }
+        }
+        SheetRow(if (ticked.isEmpty()) "Create group" else "Create group with ${ticked.size}", color = if (ticked.isEmpty()) Palette.textFaint else LocalAccent.current, isEnabled = ticked.isNotEmpty()) { onCreate(ticked) }
     }
 }

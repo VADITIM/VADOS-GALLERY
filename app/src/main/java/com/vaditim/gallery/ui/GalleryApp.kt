@@ -1,5 +1,9 @@
 package com.vaditim.gallery.ui
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+
 import androidx.compose.animation.animateContentSize
 
 import androidx.compose.ui.graphics.Color
@@ -26,7 +30,6 @@ import com.vaditim.gallery.withPhotos
 import com.vaditim.gallery.renamed
 import com.vaditim.gallery.withAlbum
 import com.vaditim.gallery.withoutAlbum
-import com.vaditim.gallery.hiddenFavoriteKey
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -180,7 +183,11 @@ private enum class AppSheet {
     STACK_MENU, STACK_RENAME, ALBUM_STACK, ALBUM_NEW_STACK,
     FAVORITE_NEW_ALBUM, FAVORITE_ALBUM_PICK, FAVORITE_SELECTION_NEW_ALBUM, FAVORITE_ALBUM_MENU, FAVORITE_ALBUM_RENAME,
     FAVORITE_STACK_MENU, FAVORITE_STACK_RENAME, FAVORITE_ALBUM_STACK, FAVORITE_ALBUM_NEW_STACK,
+    NEW_GROUP_NAME, NEW_GROUP_ALBUMS, GROUP_DELETE_CHECK,
 }
+
+// A group about to be deleted that still holds photos: how many, and the delete itself, asked about once more after Confirm.
+private class GroupDeleteCheck(val name: String, val photoCount: Int, val delete: () -> Unit)
 
 // Locations and the trash carry their own colour, in their views and on their buttons; every other place takes its section's.
 private fun placeAccentOf(place: AlbumsPlace): Color? = when (place) {
@@ -240,12 +247,7 @@ private fun Library(viewModel: GalleryViewModel) {
     // GPS in photos is stripped by the system unless this is granted; it is asked once, the first time the library shows.
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refreshLocationPermission() }
     LaunchedEffect(Unit) { locationPermission.launch(Manifest.permission.ACCESS_MEDIA_LOCATION) }
-    // Recent without the folders kept out of it; everything else (albums, the picker, locations) still sees the whole library.
-    val recent = remember(library, Settings.hiddenFromRecent, Settings.favoriteAlbums) {
-        val hidden = Settings.hiddenFromRecent
-        val hiddenIds = Settings.favoriteAlbums.filter { hiddenFavoriteKey(it.name) in hidden }.flatMap { it.ids }.toSet()
-        if (hidden.isEmpty()) library else library.filter { it.relativePath !in hidden && it.id !in hiddenIds }
-    }
+    val recent = library
     val actions = rememberMediaActions(viewModel.repository, viewModel.vault, onPrivateChanged = { viewModel.refreshPrivate() }, samsungTrash = viewModel.samsungTrash, onTrashChanged = { viewModel.refreshTrash() })
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -255,6 +257,13 @@ private fun Library(viewModel: GalleryViewModel) {
     var viewer by remember { mutableStateOf<ViewerRequest?>(null) }
     // `viewer` is what is wanted open; `shownViewer` stays composed through the closing animation.
     var shownViewer by remember { mutableStateOf<ViewerRequest?>(null) }
+    // The app stands upright; only a photo or video being viewed turns with the phone.
+    val activity = LocalContext.current.findActivity()
+    val isViewing = viewer != null
+    DisposableEffect(isViewing, activity) {
+        activity?.requestedOrientation = if (isViewing) ActivityInfo.SCREEN_ORIENTATION_FULL_USER else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onDispose { }
+    }
     var viewerCurrentId by remember { mutableStateOf<Long?>(null) }
     var viewerRect by remember { mutableStateOf<Rect?>(null) }
     var viewerRatio by remember { mutableFloatStateOf(1f) }
@@ -277,7 +286,22 @@ private fun Library(viewModel: GalleryViewModel) {
     var navigationWidth by remember { mutableIntStateOf(0) }
     var screenWidth by remember { mutableIntStateOf(0) }
     var pendingDelete by remember { mutableStateOf<(() -> Unit)?>(null) }
+    // A group being made from New group: its name, and whether it is a Favorites group, while its albums are ticked.
+    var newGroupName by remember { mutableStateOf("") }
+    var isNewGroupInFavorites by remember { mutableStateOf(false) }
+    var groupDeleteCheck by remember { mutableStateOf<GroupDeleteCheck?>(null) }
     var sheet by remember { mutableStateOf(AppSheet.NONE) }
+    // Deleting a group waits for Confirm as every delete does; one that still holds photos then asks again, naming how many.
+    fun askDeleteGroup(name: String, photoCount: Int, delete: () -> Unit) {
+        pendingDelete = {
+            if (photoCount > 0) {
+                groupDeleteCheck = GroupDeleteCheck(name, photoCount, delete)
+                sheet = AppSheet.GROUP_DELETE_CHECK
+            } else {
+                delete()
+            }
+        }
+    }
     var sheetAlbum by remember { mutableStateOf<Album?>(null) }
     var sheetGroup by remember { mutableStateOf<PrivateGroup?>(null) }
     var sheetStack by remember { mutableStateOf<String?>(null) }
@@ -686,6 +710,10 @@ private fun Library(viewModel: GalleryViewModel) {
                                 sheet = AppSheet.STACK_MENU
                             },
                             onNewAlbum = { sheet = AppSheet.NEW_ALBUM },
+                            onNewGroup = if (Settings.groupedAlbumsIn(SettingsView.ALBUMS)) { {
+                                isNewGroupInFavorites = false
+                                sheet = AppSheet.NEW_GROUP_NAME
+                            } } else null,
                             contentPadding = insetPadding,
                             footer = {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -809,6 +837,10 @@ private fun Library(viewModel: GalleryViewModel) {
                                 sheet = AppSheet.FAVORITE_STACK_MENU
                             },
                             onNewAlbum = { sheet = AppSheet.FAVORITE_NEW_ALBUM },
+                            onNewGroup = if (Settings.groupedAlbumsIn(SettingsView.FAVORITES)) { {
+                                isNewGroupInFavorites = true
+                                sheet = AppSheet.NEW_GROUP_NAME
+                            } } else null,
                             contentPadding = insetPadding,
                         )
                         is FavoritesView.InAlbum -> favoriteAlbumViews.firstOrNull { it.name == shownView.name }?.let { album ->
@@ -954,13 +986,6 @@ private fun Library(viewModel: GalleryViewModel) {
                             val isFavorites = section == Section.FAVORITES
                             if (Settings.groupedAlbums) IconButton(onClick = { sheet = if (isFavorites) AppSheet.FAVORITE_ALBUM_STACK else AppSheet.ALBUM_STACK }) { MoveIcon(Palette.textBody) }
                             IconButton(onClick = { sheet = AppSheet.ALBUM_GROUP }) { LockIcon(Palette.textBody) }
-                            // Hides every selected album from Recent, or shows them again once all of them are hidden.
-                            val hiddenKeys = selectedAlbums.map { if (isFavorites) hiddenFavoriteKey(it.name) else it.relativePath }.toSet()
-                            val isAllHidden = Settings.hiddenFromRecent.containsAll(hiddenKeys)
-                            IconButton(onClick = {
-                                Settings.updateHiddenFromRecent(if (isAllHidden) Settings.hiddenFromRecent - hiddenKeys else Settings.hiddenFromRecent + hiddenKeys)
-                                clearSelection()
-                            }) { EyeIcon(Palette.textBody, isCrossed = !isAllHidden) }
                             // Whole albums at once, so it waits for Confirm even though the trash can give them back; a Favorites album only lets its photos go, but cannot be brought back.
                             IconButton(onClick = {
                                 pendingDelete = {
@@ -1153,7 +1178,6 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed album: one entry, because moving the whole folder into Private is the thing it is for.
             OverlaySheet(visible = sheet == AppSheet.ALBUM_MENU, label = sheetAlbum?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 val albumPath = sheetAlbum?.relativePath.orEmpty()
-                val isHiddenFromRecent = albumPath in Settings.hiddenFromRecent
                 AlbumMenuRows(
                     onRename = { sheet = AppSheet.ALBUM_RENAME },
                     onSelect = {
@@ -1173,11 +1197,6 @@ private fun Library(viewModel: GalleryViewModel) {
                         },
                     ) else null,
                     onPrivate = { sheet = AppSheet.ALBUM_GROUP },
-                    isHiddenFromRecent = isHiddenFromRecent,
-                    onToggleRecent = {
-                        Settings.updateHiddenFromRecent(if (isHiddenFromRecent) Settings.hiddenFromRecent - albumPath else Settings.hiddenFromRecent + albumPath)
-                        sheet = AppSheet.NONE
-                    },
                     onAddPhotos = {
                         sheetAlbum?.let { picker = PickerTarget.IntoAlbum(it.relativePath, it.name) }
                         sheet = AppSheet.NONE
@@ -1195,6 +1214,16 @@ private fun Library(viewModel: GalleryViewModel) {
             OverlaySheet(visible = sheet == AppSheet.STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 val stackPaths = Settings.albumStacks.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
                 GroupMenuRows(
+                    // Deleting a group of albums sends their photos to the trash.
+                    onDelete = {
+                        val name = sheetStack.orEmpty()
+                        val photos = albums.filter { it.relativePath in stackPaths }.flatMap { it.items }
+                        sheet = AppSheet.NONE
+                        askDeleteGroup(name, photos.size) {
+                            if (photos.isNotEmpty()) actions.trash(photos)
+                            Settings.updateAlbumStacks(Settings.albumStacks.filter { it.name != name })
+                        }
+                    },
                     onRename = { sheet = AppSheet.STACK_RENAME },
                     onSelect = {
                         selectedCovers = stackPaths.toSet()
@@ -1240,8 +1269,6 @@ private fun Library(viewModel: GalleryViewModel) {
             // The same menu as an album's in Albums; deleting takes only the album, the photos stay favourites, but it cannot be brought back, so it takes a second tap.
             OverlaySheet(visible = sheet == AppSheet.FAVORITE_ALBUM_MENU, label = sheetFavoriteAlbum?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 val albumName = sheetFavoriteAlbum.orEmpty()
-                val hiddenKey = hiddenFavoriteKey(albumName)
-                val isHiddenFromRecent = hiddenKey in Settings.hiddenFromRecent
                 AlbumMenuRows(
                     onRename = { sheet = AppSheet.FAVORITE_ALBUM_RENAME },
                     onSelect = {
@@ -1261,11 +1288,6 @@ private fun Library(viewModel: GalleryViewModel) {
                         },
                     ) else null,
                     onPrivate = { sheet = AppSheet.ALBUM_GROUP },
-                    isHiddenFromRecent = isHiddenFromRecent,
-                    onToggleRecent = {
-                        Settings.updateHiddenFromRecent(if (isHiddenFromRecent) Settings.hiddenFromRecent - hiddenKey else Settings.hiddenFromRecent + hiddenKey)
-                        sheet = AppSheet.NONE
-                    },
                     onAddPhotos = {
                         picker = PickerTarget.IntoFavoriteAlbum(albumName)
                         sheet = AppSheet.NONE
@@ -1279,6 +1301,16 @@ private fun Library(viewModel: GalleryViewModel) {
             OverlaySheet(visible = sheet == AppSheet.FAVORITE_STACK_MENU, label = sheetStack?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 val stackNames = Settings.favoriteStacks.firstOrNull { it.name == sheetStack }?.paths.orEmpty()
                 GroupMenuRows(
+                    // Deleting a group of Favorites albums lets the albums go; their photos stay favourites.
+                    onDelete = {
+                        val name = sheetStack.orEmpty()
+                        val photoCount = favoriteAlbumViews.filter { it.name in stackNames }.sumOf { it.items.size }
+                        sheet = AppSheet.NONE
+                        askDeleteGroup(name, photoCount) {
+                            Settings.updateFavoriteAlbums(Settings.favoriteAlbums.filter { it.name !in stackNames })
+                            Settings.updateFavoriteStacks(Settings.favoriteStacks.filter { it.name != name })
+                        }
+                    },
                     onRename = { sheet = AppSheet.FAVORITE_STACK_RENAME },
                     onSelect = {
                         selectedCovers = stackNames.toSet()
@@ -1308,6 +1340,46 @@ private fun Library(viewModel: GalleryViewModel) {
                 onDismiss = { sheet = AppSheet.NONE },
             )
 
+            AlbumChoiceSheet(
+                visible = sheet == AppSheet.NEW_GROUP_ALBUMS,
+                label = newGroupName.uppercase(),
+                choices = if (isNewGroupInFavorites) {
+                    favoriteAlbumViews.map { it.name to (it.name to it.items.size) }
+                } else {
+                    albums.map { it.relativePath to (it.name to it.items.size) }
+                },
+                onCreate = { keys ->
+                    if (isNewGroupInFavorites) {
+                        Settings.updateFavoriteStacks(keys.fold(Settings.favoriteStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
+                    } else {
+                        Settings.updateAlbumStacks(keys.fold(Settings.albumStacks) { stacks, key -> stacks.withAlbum(key, newGroupName) })
+                    }
+                    sheet = AppSheet.NONE
+                },
+                onDismiss = { sheet = AppSheet.NONE },
+            )
+            // After Confirm, a group that still holds photos asks once more, saying how many.
+            var lastCheck by remember { mutableStateOf<GroupDeleteCheck?>(null) }
+            groupDeleteCheck?.let { lastCheck = it }
+            OverlaySheet(
+                visible = sheet == AppSheet.GROUP_DELETE_CHECK,
+                label = "${lastCheck?.photoCount ?: 0} PHOTOS IN ${lastCheck?.name?.uppercase().orEmpty()}",
+                onDismiss = {
+                    sheet = AppSheet.NONE
+                    groupDeleteCheck = null
+                },
+            ) {
+                SheetRow("Delete anyway", color = Palette.danger, icon = { TrashIcon(it) }) {
+                    groupDeleteCheck?.delete?.invoke()
+                    groupDeleteCheck = null
+                    sheet = AppSheet.NONE
+                }
+                SheetRow("Cancel", color = Palette.textMuted) {
+                    groupDeleteCheck = null
+                    sheet = AppSheet.NONE
+                }
+            }
+
             SettingsSheet(
                 visible = sheet == AppSheet.SETTINGS,
                 isCovers = folderMemory == null,
@@ -1325,6 +1397,11 @@ private fun Library(viewModel: GalleryViewModel) {
             // A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
             OverlaySheet(visible = sheet == AppSheet.GROUP_MENU, label = sheetGroup?.name?.uppercase().orEmpty(), onDismiss = { sheet = AppSheet.NONE }) {
                 GroupMenuRows(
+                    onDelete = {
+                        val group = sheetGroup
+                        sheet = AppSheet.NONE
+                        if (group != null) askDeleteGroup(group.name, group.items.size) { actions.deleteGroup(group) }
+                    },
                     onRename = { sheet = AppSheet.GROUP_RENAME },
                     onSelect = {
                         sheetGroup?.let { selectedCovers = setOf(it.name) }
@@ -1333,17 +1410,6 @@ private fun Library(viewModel: GalleryViewModel) {
                     onRearrange = {
                         isRearranging = true
                         sheet = AppSheet.NONE
-                    },
-                    groups = {
-                        SheetRow(
-                            "Delete group",
-                            color = Palette.danger,
-                            icon = { TrashIcon(it) },
-                        ) {
-                            val group = sheetGroup
-                            sheet = AppSheet.NONE
-                            pendingDelete = { group?.let { actions.deleteGroup(it) } }
-                        }
                     },
                     edit = {
                         SheetRow("Move group out to album", trailing = sheetGroup?.items?.size?.toString(), icon = { MoveIcon(it) }) { sheet = AppSheet.GROUP_MOVE_OUT }
@@ -1492,7 +1558,6 @@ private fun Library(viewModel: GalleryViewModel) {
                                 Settings.updateFavoriteStacks(Settings.favoriteStacks.map { stack -> stack.copy(paths = stack.paths.map { if (it == old) new else it }.distinct()) })
                                 Settings.updateFavoriteAlbumOrder(Settings.favoriteAlbumOrder.map { if (it == old) new else it }.distinct())
                                 viewModel.moveAlbumCover(old.hashCode().toLong(), new.hashCode().toLong())
-                                if (hiddenFavoriteKey(old) in Settings.hiddenFromRecent) Settings.updateHiddenFromRecent(Settings.hiddenFromRecent - hiddenFavoriteKey(old) + hiddenFavoriteKey(new))
                                 if (openFavoriteAlbum == old) openFavoriteAlbum = new
                             }
                         }
@@ -1507,6 +1572,15 @@ private fun Library(viewModel: GalleryViewModel) {
                     onConfirm = { name ->
                         sheetStack?.let { Settings.updateFavoriteStacks(Settings.favoriteStacks.renamed(it, name)) }
                         sheet = AppSheet.NONE
+                    },
+                    onDismiss = { sheet = AppSheet.NONE },
+                )
+                AppSheet.NEW_GROUP_NAME -> NameSheet(
+                    label = "NEW GROUP",
+                    action = "CHOOSE ALBUMS",
+                    onConfirm = { name ->
+                        newGroupName = AlbumStack.cleanName(name)
+                        sheet = if (newGroupName.isEmpty()) AppSheet.NONE else AppSheet.NEW_GROUP_ALBUMS
                     },
                     onDismiss = { sheet = AppSheet.NONE },
                 )
@@ -1899,3 +1973,9 @@ private fun cornerPillWidth(total: Int): androidx.compose.ui.unit.Dp {
 }
 
 private fun List<MediaItem>.favoritesOnlyIf(isFavoritesOnly: Boolean): List<MediaItem> = if (isFavoritesOnly) filter { it.isFavorite } else this
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
