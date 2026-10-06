@@ -22,7 +22,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -269,7 +268,7 @@ fun MediaGrid(
     // Only a tap made while this grid is shown scrolls it; coming back to it keeps where it was left.
     val requestOnArrival = remember { scrollToNewestRequest }
     LaunchedEffect(scrollToNewestRequest) {
-        if (scrollToNewestRequest != requestOnArrival && entries.isNotEmpty()) state.glideToEnd(entries.lastIndex)
+        if (scrollToNewestRequest != requestOnArrival && entries.isNotEmpty()) state.glideToEnd()
     }
 
     if (shownItems.isEmpty()) {
@@ -724,27 +723,41 @@ fun formatDuration(millis: Long): String {
 // Far enough right that the strip and its labels are off the screen.
 private val TIMELINE_LEAVE = 96.dp
 
-// animateScrollToItem aims the last item's top at the top of the screen, past where the grid can go, and stalls as it corrects. Instead it lands on the end, steps back up at most a screen and a half (no further than where it was), and glides that exact distance down.
-private suspend fun LazyGridState.glideToEnd(lastIndex: Int) {
-    val startIndex = firstVisibleItemIndex
-    val startTop = layoutInfo.visibleItemsInfo.firstOrNull { it.index == startIndex }?.offset?.y ?: 0
-    val runway = layoutInfo.viewportSize.height * NEWEST_RUNWAY
-    val step = layoutInfo.viewportSize.height / 8f
-    scrollToItem(lastIndex)
-    var back = 0f
-    while (back < runway) {
-        val moved = -scrollBy(-minOf(step, runway - back))
-        if (moved <= 0f) break
-        back += moved
-        // Back where it started: the gap above it is trimmed, so the glide never starts higher than the grid stood.
-        val start = layoutInfo.visibleItemsInfo.firstOrNull { it.index == startIndex } ?: continue
-        if (start.offset.y >= startTop) {
-            back -= scrollBy((start.offset.y - startTop).toFloat())
-            break
+// One continuous glide from where the grid stands to its end. The distance left is only known once the end is on screen, so it is guessed from the rows shown and guessed again every frame; the eased progress is applied to the latest guess, so the motion stays smooth and lands exactly.
+private suspend fun LazyGridState.glideToEnd() {
+    val viewport = layoutInfo.viewportSize.height.coerceAtLeast(1)
+    val first = remainingToEnd()
+    if (first <= 0f) return
+    val screens = first / viewport
+    val duration = (Motion.SCROLL_TO_END_MS + Motion.SCROLL_TO_END_PER_SCREEN_MS * screens).coerceAtMost(Motion.SCROLL_TO_END_MAX_MS.toFloat())
+    scroll {
+        var scrolled = 0f
+        val start = withFrameNanos { it }
+        while (true) {
+            val now = withFrameNanos { it }
+            val progress = ((now - start) / 1_000_000f / duration).coerceIn(0f, 1f)
+            val total = scrolled + remainingToEnd()
+            // Never back up when a guess comes in shorter; the glide only ever moves toward the end.
+            scrolled += scrollBy((Motion.powerThreeInOut.transform(progress) * total - scrolled).coerceAtLeast(0f))
+            if (progress >= 1f) {
+                // Whatever the last guess missed, now that the end is on screen.
+                while (scrollBy(viewport.toFloat()) > 0f) Unit
+                break
+            }
         }
     }
-    animateScrollBy(back, tween(Motion.SCROLL_TO_END_MS, easing = Motion.powerThreeInOut))
 }
 
-// How far above the end, in screens, the glide to the newest starts from far away.
-private const val NEWEST_RUNWAY = 1.5f
+// How far the grid still is from its end: exact once the last item shows, otherwise the rows left at the height the shown ones average.
+private fun LazyGridState.remainingToEnd(): Float {
+    val info = layoutInfo
+    val shown = info.visibleItemsInfo
+    if (shown.isEmpty()) return 0f
+    val firstShown = shown.first()
+    val lastShown = shown.maxBy { it.offset.y + it.size.height }
+    val lastIndex = shown.maxOf { it.index }
+    val bottom = (lastShown.offset.y + lastShown.size.height).toFloat()
+    val perItem = (bottom - firstShown.offset.y) / (lastIndex - firstShown.index + 1).coerceAtLeast(1)
+    val itemsLeft = info.totalItemsCount - 1 - lastIndex
+    return (bottom + info.afterContentPadding - info.viewportEndOffset + itemsLeft * perItem).coerceAtLeast(0f)
+}

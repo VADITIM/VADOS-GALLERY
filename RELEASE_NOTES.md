@@ -1,5 +1,3 @@
-# v1.1.18
+# v1.1.19
 
-- Inside Private, Recent and Favorites are underlined in the accent in the nav.
-- A closed group now shows its arrow left of its name, pointing right; opening, the arrow travels to the right end and turns to point left half way.
-- Groups sit a little closer together.
+- Tapping Recent (or any photo grid's section) again now scrolls continuously all the way down to the newest photos instead of jumping.
