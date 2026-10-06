@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyLayoutScrollScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.BasicText
@@ -722,24 +723,19 @@ fun formatDuration(millis: Long): String {
     return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 }
 
-private const val GLIDE_SCREENS = 3
-
 // Far enough right that the strip and its labels are off the screen.
 private val TIMELINE_LEAVE = 96.dp
 
 // One continuous glide from where the grid stands to its end. The distance left is only known once the end is on screen, so it is guessed from the rows shown and guessed again every frame; the eased progress is applied to the latest guess, so the motion stays smooth and lands exactly.
+// Scrolled row by row, a frame that moves far would compose and load every tile it passes; so a frame moving more than half a screen skips straight to where it lands, which at that speed looks the same.
 private suspend fun LazyGridState.glideToEnd() {
     val viewport = layoutInfo.viewportSize.height.coerceAtLeast(1)
-    // Gliding through every row composes and loads every tile on the way, so from far off it jumps to a few screens before the end and glides only those.
-    val shownCount = layoutInfo.visibleItemsInfo.size
-    if (shownCount > 0 && remainingToEnd() > viewport * GLIDE_SCREENS) {
-        scrollToItem((layoutInfo.totalItemsCount - shownCount * (GLIDE_SCREENS + 1)).coerceAtLeast(firstVisibleItemIndex))
-    }
     val first = remainingToEnd()
     if (first <= 0f) return
     val screens = first / viewport
     val duration = (Motion.SCROLL_TO_END_MS + Motion.SCROLL_TO_END_PER_SCREEN_MS * screens).coerceAtMost(Motion.SCROLL_TO_END_MAX_MS.toFloat())
     scroll {
+        val items = LazyLayoutScrollScope(this@glideToEnd, this)
         var scrolled = 0f
         val start = withFrameNanos { it }
         while (true) {
@@ -747,7 +743,14 @@ private suspend fun LazyGridState.glideToEnd() {
             val progress = ((now - start) / 1_000_000f / duration).coerceIn(0f, 1f)
             val total = scrolled + remainingToEnd()
             // Never back up when a guess comes in shorter; the glide only ever moves toward the end.
-            scrolled += scrollBy((Motion.powerThreeInOut.transform(progress) * total - scrolled).coerceAtLeast(0f))
+            val step = (Motion.powerThreeInOut.transform(progress) * total - scrolled).coerceAtLeast(0f)
+            val skipped = if (step > viewport * SKIP_FROM_SCREENS) (step / itemHeight()).toInt() else 0
+            if (skipped > 0) {
+                with(items) { snapToItem(firstVisibleItemIndex + skipped, firstVisibleItemScrollOffset) }
+                scrolled += skipped * itemHeight()
+            } else {
+                scrolled += scrollBy(step)
+            }
             if (progress >= 1f) {
                 // Whatever the last guess missed, now that the end is on screen.
                 while (scrollBy(viewport.toFloat()) > 0f) Unit
@@ -762,11 +765,21 @@ private fun LazyGridState.remainingToEnd(): Float {
     val info = layoutInfo
     val shown = info.visibleItemsInfo
     if (shown.isEmpty()) return 0f
-    val firstShown = shown.first()
     val lastShown = shown.maxBy { it.offset.y + it.size.height }
     val lastIndex = shown.maxOf { it.index }
     val bottom = (lastShown.offset.y + lastShown.size.height).toFloat()
-    val perItem = (bottom - firstShown.offset.y) / (lastIndex - firstShown.index + 1).coerceAtLeast(1)
     val itemsLeft = info.totalItemsCount - 1 - lastIndex
-    return (bottom + info.afterContentPadding - info.viewportEndOffset + itemsLeft * perItem).coerceAtLeast(0f)
+    return (bottom + info.afterContentPadding - info.viewportEndOffset + itemsLeft * itemHeight()).coerceAtLeast(0f)
 }
+
+// The height each item adds on average, from the ones on screen: a row's height shared by the tiles in it.
+private fun LazyGridState.itemHeight(): Float {
+    val shown = layoutInfo.visibleItemsInfo
+    if (shown.isEmpty()) return 1f
+    val firstShown = shown.first()
+    val lastShown = shown.maxBy { it.offset.y + it.size.height }
+    val bottom = (lastShown.offset.y + lastShown.size.height).toFloat()
+    return ((bottom - firstShown.offset.y) / (shown.maxOf { it.index } - firstShown.index + 1).coerceAtLeast(1)).coerceAtLeast(1f)
+}
+
+private const val SKIP_FROM_SCREENS = 0.5f

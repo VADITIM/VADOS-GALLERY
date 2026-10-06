@@ -70,6 +70,8 @@ import kotlinx.coroutines.launch
 
 // The window the timeline shows through is this share of the grid's height, centred on it.
 private const val TRACK_SHARE = 0.3f
+// How close to the last label, in steps, the finger counts as at the strip's end.
+private const val END_REACH = 0.02f
 // The strip a finger takes hold of along each edge, besides the labels themselves; narrow so tiles under it stay tappable.
 private val STRIP_WIDTH = 24.dp
 // Room around a label that still counts as taking hold of it.
@@ -385,8 +387,9 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
             if (mark != heldMark) {
                 if (heldMark != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                 heldMark = mark
-                target.intValue = mark.index
             }
+            // Held at the strip's very end the grid goes to its very end, not to the top of the newest month.
+            target.intValue = if (at >= labels.lastIndex - END_REACH) entries.lastIndex else mark.index
         }
         grab.release = {
             if (heldMark != null) {
