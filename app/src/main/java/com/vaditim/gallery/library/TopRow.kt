@@ -65,7 +65,12 @@ internal fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean,
         transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false)) },
         label = "topRow",
     ) { isSelecting ->
-        val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT)
+        val viewerPop = LocalViewerPop.current
+        val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT).graphicsLayer {
+            val scale = viewerPop()
+            scaleX = scale
+            scaleY = scale
+        }
         // As tall as a button, whether or not one is shown, so the month pill never moves up or down as back and add come and go.
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp).height(TOP_ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
             if (isSelecting) {
