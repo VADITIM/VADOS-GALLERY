@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.memory.MemoryCache
-import coil3.request.placeholderMemoryCacheKey
 import coil3.size.Size
 
 // A photo at full quality: drawn screen-sized with smooth filtering, and once it is zoomed the full-resolution decode lays itself over it, so the pixels hold up close.
