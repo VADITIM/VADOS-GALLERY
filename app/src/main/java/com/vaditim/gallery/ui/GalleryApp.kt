@@ -62,6 +62,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -1936,8 +1937,11 @@ private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, 
                 val isMonthShown = month.label.isNotEmpty()
                 var lastLabel by remember { mutableStateOf(title ?: month.label.uppercase()) }
                 if (isMonthShown) lastLabel = title ?: month.label.uppercase()
-                MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
-                AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
+                val monthVisibility = remember { MutableTransitionState(isMonthShown) }
+                monthVisibility.targetState = isMonthShown
+                // The pill slides aside only when it stays; arriving or leaving with back, it pops in or out where it ends up.
+                MakeRoomButton(onBack, isNeighbourStaying = monthVisibility.currentState && isMonthShown) { BackIcon(LocalAccent.current) }
+                AnimatedVisibility(monthVisibility, enter = TOP_ENTER, exit = TOP_EXIT) {
                     // A section-coloured pill while it names the folder; with the folder named above the nav, the glass pill with the month in the section colour.
                     TypedLabel(
                         lastLabel,
@@ -1963,9 +1967,9 @@ private fun TopRow(month: VisibleMonth, title: String?, isMonthFilled: Boolean, 
     }
 }
 
-// The back button takes its room and gives it back in two steps: leaving, it pops away first and then the month slides into its place; arriving, the month slides over first and then it pops in.
+// The back button takes its room and gives it back in two steps when the month stays: leaving, it pops away and then the month slides into its place; arriving, the month slides over and then it pops in. With the month coming or going too, the room is taken or given at once.
 @Composable
-private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit) {
+private fun MakeRoomButton(onClick: (() -> Unit)?, isNeighbourStaying: Boolean, icon: @Composable () -> Unit) {
     var lastClick by remember { mutableStateOf(onClick) }
     if (onClick != null) lastClick = onClick
     val isShown = onClick != null
@@ -1974,11 +1978,11 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, icon: @Composable () -> Unit)
     val pop = remember { Animatable(if (isShown) 1f else 0f) }
     LaunchedEffect(isShown) {
         if (isShown) {
-            room.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut))
+            if (isNeighbourStaying) room.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut)) else room.snapTo(1f)
             pop.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.backOut))
         } else {
             pop.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backIn))
-            room.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut))
+            if (isNeighbourStaying) room.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut)) else room.snapTo(0f)
         }
     }
     if (room.value == 0f && pop.value == 0f && !isShown) return

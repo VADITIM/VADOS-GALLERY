@@ -1,3 +1,3 @@
-# v1.1.13
+# v1.1.14
 
-- The button beside settings no longer has one button leaving while another arrives: when it changes between add, grid and albums, or takes a new section's colour, it pops away and back in with its new icon, like the albums icon in the nav.
+- Opening a folder, the date or folder pill now pops in where it belongs next to the back button instead of sliding over from the left. It only slides when back comes or goes while the pill stays.
