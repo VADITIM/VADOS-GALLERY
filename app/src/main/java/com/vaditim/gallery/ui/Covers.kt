@@ -33,6 +33,11 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import coil3.video.VideoFrameDecoder
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.compositionLocalOf
 import com.vaditim.gallery.SettingsView
@@ -62,6 +67,7 @@ import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
 
 private const val COVER_PIXELS = 512
+private const val SHARP_COVER_DELAY_MS = 120L
 private const val PINCH_STEP = 1.28f
 val LIST_COVER = 84.dp
 val COVER_GAP = 14.dp
@@ -104,10 +110,11 @@ val LocalAccentedCoverNames = staticCompositionLocalOf { false }
 @Composable
 fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = coverColumns() == 1) {
     val request = rememberCoverRequest(cover)
+    val sharpRequest = rememberSharpCoverRequest(cover)
     val nameColor = if (LocalAccentedCoverNames.current) LocalAccent.current else Palette.textBright
     if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
-            CoverImage(request, name, Modifier.size(LIST_COVER), isSelected)
+            CoverImage(request, sharpRequest, name, Modifier.size(LIST_COVER), isSelected)
             Column(Modifier.padding(start = 18.dp).weight(1f).graphicsLayer { alpha = labelAlpha() }) {
                 BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = nameColor), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
@@ -115,7 +122,7 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
         }
     } else {
         Column(modifier.pressable(onClick = onClick, pressedScale = 0.96f, onLongClick = onLongClick)) {
-            CoverImage(request, name, Modifier.fillMaxWidth().aspectRatio(1f), isSelected)
+            CoverImage(request, sharpRequest, name, Modifier.fillMaxWidth().aspectRatio(1f), isSelected)
             // Narrow cards shrink the name until it fits, down to a size that still reads; only past that is it cut.
             BasicText(
                 name,
@@ -148,6 +155,23 @@ private fun rememberCoverRequest(cover: MediaItem?): ImageRequest? {
     }
 }
 
+// The system's cached thumbnail is small, and for some photos stale (pixelated, or turned the wrong way), so the cover gets the photo itself on top once it has stood on screen a moment, as a tile in a grid does.
+@Composable
+private fun rememberSharpCoverRequest(cover: MediaItem?): ImageRequest? {
+    val context = LocalContext.current
+    var isStanding by remember(cover?.uri) { mutableStateOf(false) }
+    LaunchedEffect(cover?.uri) {
+        if (cover != null && cover.uri.scheme == "content") {
+            delay(SHARP_COVER_DELAY_MS)
+            isStanding = true
+        }
+    }
+    if (!isStanding) return null
+    return remember(cover?.uri) {
+        cover?.let { ImageRequest.Builder(context).data(it.uri).size(COVER_PIXELS).apply { if (it.isVideo) decoderFactory(VideoFrameDecoder.Factory()) }.build() }
+    }
+}
+
 // The cards under the top one fan out to the right, each leaning further, shifted further and a little smaller and darker, so the stack reads as several cards at a glance.
 fun stackTilt(depth: Int): Float = STACK_TILT_DEGREES * min(depth, STACK_VISIBLE_LAYERS - 1)
 fun stackShift(depth: Int): Dp = STACK_SHIFT * min(depth, STACK_VISIBLE_LAYERS - 1)
@@ -170,12 +194,21 @@ fun CollapseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 
 // `shade` below 1 darkens the picture, for the cards lying deeper in a stack.
 @Composable
-private fun CoverImage(request: ImageRequest?, name: String, modifier: Modifier, isSelected: Boolean = false, shade: Float = 1f) {
+private fun CoverImage(request: ImageRequest?, sharpRequest: ImageRequest?, name: String, modifier: Modifier, isSelected: Boolean = false, shade: Float = 1f) {
     val selectedScale by animateFloatAsState(if (isSelected) 0.9f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
     Box(modifier.graphicsLayer { scaleX = selectedScale; scaleY = selectedScale }.clip(Shapes.cover).background(Palette.sunken)) {
         if (request != null) {
             AsyncImage(
                 model = request,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                colorFilter = if (shade < 1f) ColorFilter.colorMatrix(ColorMatrix().apply { setToScale(shade, shade, shade, 1f) }) else null,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (sharpRequest != null) {
+            AsyncImage(
+                model = sharpRequest,
                 contentDescription = name,
                 contentScale = ContentScale.Crop,
                 colorFilter = if (shade < 1f) ColorFilter.colorMatrix(ColorMatrix().apply { setToScale(shade, shade, shade, 1f) }) else null,

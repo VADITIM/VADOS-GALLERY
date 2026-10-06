@@ -510,8 +510,8 @@ private fun Tile(
         // A file without an extension gives the loader no type, so a video says so itself.
         ImageRequest.Builder(context).data(data).size(sizePixels).apply { if (item.isVideo && item.uri.scheme != "content") decoderFactory(VideoFrameDecoder.Factory()) }.build()
     }
-    // The system's cached thumbnail is small; a tile bigger than it (few columns) is blurry from it, so it gets the photo itself on top once it has stood on screen a moment. Tiles off screen are not composed at all, so nothing far away is ever decoded.
-    val needsSharp = item.uri.scheme == "content" && sizePixels > SYSTEM_THUMBNAIL_PIXELS
+    // The system's cached thumbnail is small, and for some photos stale: pixelated, or turned the wrong way. So every tile gets the photo itself on top (decoded sampled and upright) once it has stood on screen a moment; scrolling shows the thumbnails. Tiles off screen are not composed at all, so nothing far away is ever decoded.
+    val needsSharp = item.uri.scheme == "content"
     var isSharpWanted by remember(item.id, sizePixels) { mutableStateOf(needsSharp && isSettled) }
     LaunchedEffect(needsSharp, isSettled) {
         if (needsSharp && isSettled && !isSharpWanted) {
@@ -632,8 +632,6 @@ private fun Tile(
     }
 }
 
-// Above this a tile outgrows the system's cached thumbnail and loads the photo itself.
-private const val SYSTEM_THUMBNAIL_PIXELS = 320
 private val TILE_HEART = 11.dp
 private const val SHARP_DELAY_MS = 120L
 private const val MAX_STAMP_COLUMNS = 3
