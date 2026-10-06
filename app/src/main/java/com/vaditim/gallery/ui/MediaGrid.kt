@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -268,7 +269,7 @@ fun MediaGrid(
     // Only a tap made while this grid is shown scrolls it; coming back to it keeps where it was left.
     val requestOnArrival = remember { scrollToNewestRequest }
     LaunchedEffect(scrollToNewestRequest) {
-        if (scrollToNewestRequest != requestOnArrival && entries.isNotEmpty()) state.animateScrollToItem(entries.lastIndex)
+        if (scrollToNewestRequest != requestOnArrival && entries.isNotEmpty()) state.glideToEnd(entries.lastIndex)
     }
 
     if (shownItems.isEmpty()) {
@@ -722,3 +723,28 @@ fun formatDuration(millis: Long): String {
 
 // Far enough right that the strip and its labels are off the screen.
 private val TIMELINE_LEAVE = 96.dp
+
+// animateScrollToItem aims the last item's top at the top of the screen, past where the grid can go, and stalls as it corrects. Instead it lands on the end, steps back up at most a screen and a half (no further than where it was), and glides that exact distance down.
+private suspend fun LazyGridState.glideToEnd(lastIndex: Int) {
+    val startIndex = firstVisibleItemIndex
+    val startTop = layoutInfo.visibleItemsInfo.firstOrNull { it.index == startIndex }?.offset?.y ?: 0
+    val runway = layoutInfo.viewportSize.height * NEWEST_RUNWAY
+    val step = layoutInfo.viewportSize.height / 8f
+    scrollToItem(lastIndex)
+    var back = 0f
+    while (back < runway) {
+        val moved = -scrollBy(-minOf(step, runway - back))
+        if (moved <= 0f) break
+        back += moved
+        // Back where it started: the gap above it is trimmed, so the glide never starts higher than the grid stood.
+        val start = layoutInfo.visibleItemsInfo.firstOrNull { it.index == startIndex } ?: continue
+        if (start.offset.y >= startTop) {
+            back -= scrollBy((start.offset.y - startTop).toFloat())
+            break
+        }
+    }
+    animateScrollBy(back, tween(Motion.SCROLL_TO_END_MS, easing = Motion.powerThreeInOut))
+}
+
+// How far above the end, in screens, the glide to the newest starts from far away.
+private const val NEWEST_RUNWAY = 1.5f

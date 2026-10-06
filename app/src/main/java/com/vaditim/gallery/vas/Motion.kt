@@ -73,6 +73,9 @@ object Motion {
     // How long a delete or a move can still be taken back from the pill above the bar.
     const val UNDO_MS = 4500
 
+    // The glide down to the newest photos when their section is tapped again.
+    const val SCROLL_TO_END_MS = 520
+
     // A delete's restore pill leaves sooner: the trash keeps the photo anyway.
     const val TRASH_UNDO_MS = 2500
 }
