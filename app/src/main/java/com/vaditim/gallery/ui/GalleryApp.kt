@@ -89,6 +89,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicText
@@ -135,6 +136,7 @@ private val BAR_ROOM = 84.dp
 private val PILL_ROOM = 40.dp
 private val HEADER_ROOM = 56.dp
 private val MONTH_CHIP_WIDTH = 148.dp
+private val FOLDER_LABEL_MAX_WIDTH = 240.dp
 // How far the viewer has grown into place before its buttons start arriving.
 private const val VIEWER_CHROME_AT = 0.85f
 
@@ -399,12 +401,6 @@ private fun Library(viewModel: GalleryViewModel) {
         accent = accentTarget
     }
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // The PRIVATE or LOCATIONS pill sits over the bar, so the content ends that much higher to stay clear of it.
-    val isPlacePillShown = isPrivateMode || (section == Section.ALBUMS && (albumsPlace == AlbumsPlace.Locations || albumsPlace is AlbumsPlace.Location))
-    val insetPadding = PaddingValues(
-        top = statusBarHeight + HEADER_ROOM,
-        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + BAR_ROOM + if (isPlacePillShown) PILL_ROOM else 0.dp,
-    )
 
     val place = if (section == Section.ALBUMS) albumsPlace else null
     val openAlbum = (place as? AlbumsPlace.Folder)?.let { folder -> albums.firstOrNull { it.id == folder.albumId } }
@@ -430,6 +426,24 @@ private fun Library(viewModel: GalleryViewModel) {
     LaunchedEffect(openPrivateFavorite == null) { if (openPrivateFavorite == null) openPrivateFavoriteGroup = null }
     val isPrivateFavoritesGrouped = Settings.privateFavoritesAsGroups && openPrivateFavorite == null
     val openLocation = (place as? AlbumsPlace.Location)?.let { shown -> locations.firstOrNull { it.key == shown.key } }
+    // The name of the photo grid on screen; a grid of covers is not inside anything, and the trash has its own pill.
+    val folderName = when {
+        section == Section.RECENT -> "RECENT"
+        isPrivateMode && section == Section.FAVORITES -> openPrivateFavorite?.name ?: if (isPrivateFavoritesGrouped) null else "FAVORITES"
+        section == Section.FAVORITES -> openFavorite?.name ?: if (favoritesView == FavoritesView.All) "FAVORITES" else null
+        openAlbum != null -> openAlbum.name
+        openPrivateGroup != null -> openPrivateGroup.name
+        openLocation != null -> openLocation.city
+        else -> null
+    }?.uppercase()
+    val isFolderLabelShown = Settings.folderLabel && folderName != null
+    // The PRIVATE, LOCATIONS or TRASH pill and the folder label sit over the bar, so the content ends that much higher to stay clear of them.
+    val isPlacePillShown = isPrivateMode || (section == Section.ALBUMS && (albumsPlace == AlbumsPlace.Locations || albumsPlace is AlbumsPlace.Location || albumsPlace == AlbumsPlace.Trash))
+    val insetPadding = PaddingValues(
+        top = statusBarHeight + HEADER_ROOM,
+        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + BAR_ROOM +
+            (if (isPlacePillShown) PILL_ROOM else 0.dp) + (if (isFolderLabelShown) PILL_ROOM else 0.dp),
+    )
     // A Favorites album's path is its name, so both cover grids pick by path.
     val selectedAlbums = when {
         place == AlbumsPlace.Folders -> arrangedAlbums.filter { it.relativePath in selectedCovers }
@@ -920,6 +934,7 @@ private fun Library(viewModel: GalleryViewModel) {
             }
             Box(viewerRise) { TopRow(
                 month = visibleMonth,
+                title = folderName.takeUnless { Settings.folderLabel },
                 selectedCount = selectedItems.size + selectedAlbums.size + selectedGroups.size,
                 onBack = if (canGoBack) { { backDispatcher?.onBackPressed() } } else null,
                 // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
@@ -1116,6 +1131,15 @@ private fun Library(viewModel: GalleryViewModel) {
                         val pillAccent = rememberOwnAccent(placePill != null)
                         // Out of Private; out of Locations entirely, from a location as from the list; out of the trash. The label is the way out as much as the arrow beside it.
                         val leavePlace: () -> Unit = { if (isPrivateMode) { leavePrivate() } else { albumsPlace = AlbumsPlace.Folders } }
+                        // Where you are, in the section's colour; not a control, so no arrow and no press.
+                        var lastFolderName by remember { mutableStateOf(folderName.orEmpty()) }
+                        if (isFolderLabelShown) lastFolderName = folderName.orEmpty()
+                        val folderAccent = rememberOwnAccent(isFolderLabelShown)
+                        AnimatedVisibility(isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
+                            FadingOverflow(Modifier.padding(bottom = 8.dp).widthIn(max = FOLDER_LABEL_MAX_WIDTH).background(folderAccent, Shapes.capsule).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                BasicText(lastFolderName, style = Type.microLabel.copy(color = Palette.sunkenDeep), maxLines = 1, softWrap = false)
+                            }
+                        }
                         // Empties the whole trash for good, so it waits for Confirm.
                         AnimatedVisibility(place is AlbumsPlace.Trash && trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
                             Box(
@@ -1897,7 +1921,7 @@ private const val PRIVATE_FAVORITE_GROUPS = "\tgroups"
 // The top layer: the way back out of a folder and the month you are looking at, or — while selecting — the count and the way out of the selection.
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @Composable
-private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+private fun TopRow(month: VisibleMonth, title: String?, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = selectedCount > 0,
@@ -1911,14 +1935,14 @@ private fun TopRow(month: VisibleMonth, selectedCount: Int, onBack: (() -> Unit)
                 Box(Modifier.weight(1f))
                 Chip("$selectedCount selected")
             } else {
-                // Back sits at the far left, then the month, which types itself over as it changes; the buttons gather at the right.
+                // Back sits at the far left, then the month, or the folder's name in its place, which types itself over as it changes; the buttons gather at the right.
                 val isMonthShown = month.label.isNotEmpty()
-                var lastMonth by remember { mutableStateOf(month) }
-                if (isMonthShown) lastMonth = month
+                var lastLabel by remember { mutableStateOf(title ?: month.label.uppercase()) }
+                if (isMonthShown) lastLabel = title ?: month.label.uppercase()
                 MakeRoomButton(onBack) { BackIcon(LocalAccent.current) }
                 AnimatedVisibility(isMonthShown, enter = TOP_ENTER, exit = TOP_EXIT) {
                     Box(Modifier.width(MONTH_CHIP_WIDTH).glass(Shapes.capsule).padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
-                        TypewriterText(lastMonth.label.uppercase(), style = Type.microLabel, isTypedIn = true)
+                        FadingOverflow { TypewriterText(lastLabel, style = Type.microLabel, isTypedIn = true) }
                     }
                 }
                 Box(Modifier.weight(1f))

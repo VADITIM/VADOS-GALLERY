@@ -41,8 +41,9 @@ object Settings {
     fun columnsIn(view: SettingsView): Int = columnsByView[view] ?: DEFAULT_COLUMNS
     // Empty is the layout without any cut: one run of photos.
     fun dateGroupsIn(view: SettingsView): Set<DateGroup> = dateGroupsByView[view] ?: setOf(DateGroup.MONTHS)
-    // Off, the grid keeps its cuts but shows no date on them nor on its tiles.
+    // Off, the grid has no cuts at all; the layout picked stays stored for when they come back on.
     fun headersIn(view: SettingsView): Boolean = headersByView[view] ?: true
+    fun activeDateGroupsIn(view: SettingsView): Set<DateGroup> = if (headersIn(view)) dateGroupsIn(view) else emptySet()
     fun stackSimilarIn(view: SettingsView): Boolean = stackSimilarByView[view] ?: true
     fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbumsByView[view] ?: (view == SettingsView.FAVORITES)
     fun albumColumnsIn(view: SettingsView): Int = albumColumnsByView[view] ?: DEFAULT_ALBUM_COLUMNS
@@ -54,6 +55,9 @@ object Settings {
         private set
     // The day pill at the top left of a day's first photo, everywhere at once.
     var dayStamps by mutableStateOf(true)
+        private set
+    // The open folder's name above the nav; off, it takes the month's place in the top pill.
+    var folderLabel by mutableStateOf(true)
         private set
     val albumColumns: Int get() = albumColumnsIn(view)
     // Albums in the order the user arranged them, by folder path; albums not in it keep the default order after these.
@@ -113,6 +117,7 @@ object Settings {
         }
         autoplayVideos = preferences.getBoolean("autoplay", true)
         dayStamps = preferences.getBoolean("dayStamps", true)
+        folderLabel = preferences.getBoolean("folderLabel", true)
         albumOrder = preferences.getString("albumOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         groupOrder = preferences.getString("groupOrder", null)?.split('\n')?.filter { it.isNotEmpty() }.orEmpty()
         albumNames = preferences.getString("albumNames", null)?.split('\n')?.mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }.orEmpty().toMap()
@@ -239,6 +244,11 @@ object Settings {
     fun updateDayStamps(value: Boolean) {
         dayStamps = value
         preferences.edit().putBoolean("dayStamps", value).apply()
+    }
+
+    fun updateFolderLabel(value: Boolean) {
+        folderLabel = value
+        preferences.edit().putBoolean("folderLabel", value).apply()
     }
 
     fun updateAutoplayVideos(value: Boolean) {

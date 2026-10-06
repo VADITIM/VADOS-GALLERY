@@ -176,7 +176,7 @@ sealed interface GridEntry {
 
 fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false, view: SettingsView = Settings.view): List<GridEntry> {
     val entries = ArrayList<GridEntry>(items.size + 24)
-    val groups = Settings.dateGroupsIn(view)
+    val groups = Settings.activeDateGroupsIn(view)
     val isWeeks = DateGroup.WEEKS in groups
     val isDays = DateGroup.DAYS in groups
     var currentYear: Int? = null
@@ -250,7 +250,7 @@ fun MediaGrid(
     // Narrowed to favourites by the corner toggle; a tap still opens the photo by its place among all of them.
     val isFavoritesOnly = LocalFavoritesOnly.current
     val shownItems = remember(items, isFavoritesOnly) { if (isFavoritesOnly) items.filter { it.isFavorite } else items }
-    val entries = remember(shownItems, Settings.dateGroupsIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
+    val entries = remember(shownItems, Settings.activeDateGroupsIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -332,8 +332,6 @@ fun MediaGrid(
         ) { entry ->
             when (entry) {
                 is GridEntry.Header -> when {
-                    // Without labels a cut is only the room it leaves.
-                    !Settings.headersIn(memory.view) -> Box(Modifier.height(HEADER_GAP))
                     entry.group == DateGroup.WEEKS -> WeekHeader(entry.label)
                     entry.group == DateGroup.DAYS -> DayHeader(entry.label)
                     entry.group == DateGroup.YEARS -> YearHeader(entry.label)
@@ -529,7 +527,7 @@ private fun Modifier.dragSelect(
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<VisibleMonth> {
-    val entries = remember(items, Settings.dateGroupsIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
+    val entries = remember(items, Settings.activeDateGroupsIn(memory.view), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     val countByMonth = remember(items) { items.groupingBy { YearMonth.from(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault())) }.eachCount() }
     return remember(entries, memory, countByMonth) {
         derivedStateOf {
@@ -709,7 +707,6 @@ private val TILE_HEART = 11.dp
 private const val SHARP_DELAY_MS = 120L
 private const val MAX_STAMP_COLUMNS = 3
 private val MARKED_SHADE = androidx.compose.ui.graphics.Color(0x99000000)
-private val HEADER_GAP = 14.dp
 
 @Composable
 private fun thumbnailPixels(columns: Int, gap: Dp): Int {

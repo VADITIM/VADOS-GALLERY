@@ -148,8 +148,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                         Settings.updateDefaultColumns(it)
                         onColumnsChanged(it)
                     }
-                    LayoutChoice(Settings.dateGroups) { Settings.updateDateGroups(it) }
-                    SettingsToggle("Headers", Settings.headers) { Settings.updateHeaders(it) }
+                    HeadersLayout(Settings.headers, Settings.dateGroups)
                 }
             }
             SettingsTab.GENERAL -> {
@@ -158,6 +157,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 SettingsHeader("Photos")
                 SettingsToggle("Stack similar shots", Settings.stackSimilar) { Settings.updateStackSimilar(it) }
                 SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
+                SettingsToggle("Folder label", Settings.folderLabel) { Settings.updateFolderLabel(it) }
                 SettingsHeader("Backup")
                 SheetRow("Back up", onClick = onBackup)
                 SheetRow("Restore", onClick = onRestore)
@@ -256,7 +256,7 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
 
 // A switch whose knob slides across on the overshoot and stretches while pressed, the track taking the accent as it goes.
 @Composable
-private fun SettingsToggle(label: String, isOn: Boolean, isEnabled: Boolean = true, onChange: (Boolean) -> Unit) {
+private fun SettingsToggle(label: String, isOn: Boolean, isEnabled: Boolean = true, isDivided: Boolean = true, onChange: (Boolean) -> Unit) {
     val accent = LocalAccent.current
     val travel by animateFloatAsState(if (isOn) 1f else 0f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "toggle-travel")
     val track by animateColorAsState(if (isOn) accent else Palette.borderControl, tween(Motion.STATE_MS), label = "toggle-track")
@@ -264,7 +264,7 @@ private fun SettingsToggle(label: String, isOn: Boolean, isEnabled: Boolean = tr
     Row(
         Modifier
             .fillMaxWidth()
-            .rowDivider()
+            .then(if (isDivided) Modifier.rowDivider() else Modifier)
             .then(if (isEnabled) Modifier.pressable(onClick = { onChange(!isOn) }, pressedScale = 0.98f) else Modifier.alpha(DISABLED_ALPHA))
             .padding(horizontal = 20.dp, vertical = 13.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -366,19 +366,26 @@ private fun SettingsSteps(label: String, range: IntRange, value: Int, isEnabled:
 
 private val STEPS_HEIGHT = 36.dp
 
-// Days, weeks, months and years can be on together; None turns them all off and greys them, and picking any of them again ends None.
+// Days, weeks, months and years can be on together, at least one; the switch under them turns every cut off and greys them, keeping the pick for when it comes back.
+// An empty pick stored before it could not be emptied reads as off, and turning on from it starts at months.
 @Composable
-private fun LayoutChoice(groups: Set<DateGroup>, onChange: (Set<DateGroup>) -> Unit) {
-    val isNone = groups.isEmpty()
-    Column(Modifier.fillMaxWidth().rowDivider().padding(horizontal = 20.dp, vertical = 14.dp)) {
-        BasicText("Layout", style = Type.cardTitle)
-        Row(Modifier.padding(top = 10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            DateGroup.entries.forEach { group ->
-                LayoutChip(group.label, isOn = group in groups, isGreyed = isNone, modifier = Modifier.weight(1f)) {
-                    onChange(if (group in groups) groups - group else groups + group)
+private fun HeadersLayout(isOn: Boolean, groups: Set<DateGroup>) {
+    val isActive = isOn && groups.isNotEmpty()
+    Column(Modifier.fillMaxWidth().rowDivider()) {
+        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
+            BasicText("Headers - Layout", style = Type.cardTitle)
+            Row(Modifier.padding(top = 10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DateGroup.entries.forEach { group ->
+                    LayoutChip(group.label, isOn = group in groups, isGreyed = !isActive, modifier = Modifier.weight(1f)) {
+                        val next = if (group in groups) groups - group else groups + group
+                        if (next.isNotEmpty()) Settings.updateDateGroups(next)
+                    }
                 }
             }
-            LayoutChip("None", isOn = isNone, isGreyed = false, modifier = Modifier.weight(1f)) { onChange(emptySet()) }
+        }
+        SettingsToggle("Headers", isActive, isDivided = false) { isTurnedOn ->
+            if (isTurnedOn && groups.isEmpty()) Settings.updateDateGroups(setOf(DateGroup.MONTHS))
+            Settings.updateHeaders(isTurnedOn)
         }
     }
 }
