@@ -13,6 +13,7 @@ import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -649,7 +650,9 @@ private fun formatSize(bytes: Long): String =
 @Composable
 private fun ChromePiece(isAllowed: Boolean, isShown: Boolean, isFromTop: Boolean, order: Int, pull: () -> Float = { 0f }, isPoppedWhole: Boolean = true, content: @Composable AnimatedVisibilityScope.() -> Unit) {
     val delay = order * Motion.CHROME_STAGGER_MS
-    AnimatedVisibility(isAllowed, enter = EnterTransition.None, exit = ExitTransition.None) {
+    // Starts hidden even though the viewer opens allowed, so its first frame already pops in rather than appearing as it was.
+    val opened = remember { MutableTransitionState(false) }.apply { targetState = isAllowed }
+    AnimatedVisibility(opened, enter = EnterTransition.None, exit = ExitTransition.None) {
         val opening = this
         AnimatedVisibility(
             // Follows the pull frame by frame, so the buttons move exactly as far as the finger has.
