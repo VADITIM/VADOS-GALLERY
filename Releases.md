@@ -2,7 +2,7 @@
 
 What changed in each feature version. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
 
-## 1.3: duplicates and Private's trash (1.3.0 – 1.3.6)
+## 1.3: duplicates and Private's trash (1.3.0 – 1.3.5)
 
 - **Duplicates:** Settings → General → Find duplicates scans every photo and groups copies of the same picture by their pixels, whatever their names, sizes, dates or compression. Exact, Close and Loose set how alike they must be; the best copy of each set is kept and the rest are marked, deleted to the trash after Confirm. Its own feature module (`feature/duplicates`); the matching (`ImagePrint.kt`) is plain Kotlin, tested on a desktop against real photos.
 - **Private:** Find duplicates inside Private searches only the private photos, with its prints kept in the private folder.
