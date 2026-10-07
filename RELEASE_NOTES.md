@@ -1,4 +1,4 @@
-# 1.1.54
+# 1.1.55
 
-- The photo's date pill now pops in as a circle, widens, then types the date; closing and pulling a photo down run it back.
-- The divider between groups and albums sits in the middle of the gap.
+- Set as cover and Remove from group now pop in and out of the selection bar while it smoothly resizes.
+- Letting go of the last selected photo no longer makes the bar jump as it changes back to the nav.

@@ -1,5 +1,12 @@
 package com.vaditim.gallery.components
 
+import androidx.compose.ui.Alignment
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -72,6 +79,18 @@ private fun SvgGlyph(color: Color, size: Dp, viewBox: Float = 24f, strokeWidth: 
 
 // The pop of the bar an icon button sits in, so each button comes and goes on its own as the bar changes kind.
 val LocalButtonPop = androidx.compose.runtime.staticCompositionLocalOf<Modifier> { Modifier }
+
+// A button a bar holds only sometimes (Set as cover at one photo): leaving it pops away while the bar narrows round it, arriving the bar widens and then it pops in, as a whole bar's change does.
+@Composable
+fun OptionalButton(isShown: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        isShown,
+        enter = expandHorizontally(tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut), expandFrom = Alignment.CenterHorizontally, clip = false) +
+            scaleIn(tween(Motion.STATE_MS, Motion.STATE_MS, Motion.backOut), initialScale = 0f),
+        exit = scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f) +
+            shrinkHorizontally(tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut), shrinkTowards = Alignment.CenterHorizontally, clip = false),
+    ) { content() }
+}
 
 @Composable
 fun IconButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {

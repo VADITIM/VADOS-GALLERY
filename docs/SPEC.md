@@ -303,3 +303,4 @@ review, which is not a goal.
 - **Albums and groups apart.** While albums are grouped, a short hairline (35% of the width, centred) stands between a group and the albums before or after it.
 - **The viewer's date pill.** Opening a photo, the date's pill pops in as a circle, widens from its centre to both sides, and then the date types itself in; closing runs it back within the close: the date types out, the pill narrows to a circle, the circle pops away. Pulling the photo down runs the same steps back with the finger, instead of shrinking the pill. A tap still sends it off the top and back.
 - **Divider between groups and albums** stands in the middle of the room between them.
+- **Buttons that come and go in a bar.** A selection button shown only sometimes (Set as cover at one photo, Remove from group) pops away while the pill narrows round it, and pops in once the pill has widened; a bar leaving keeps the buttons it had until it has popped away.

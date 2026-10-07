@@ -2,6 +2,7 @@ package com.vaditim.gallery.library
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
@@ -63,6 +64,7 @@ import com.vaditim.gallery.components.IconButton
 import com.vaditim.gallery.components.ImageIcon
 import com.vaditim.gallery.components.LocalButtonPop
 import com.vaditim.gallery.components.LockIcon
+import com.vaditim.gallery.components.OptionalButton
 import com.vaditim.gallery.components.MoveIcon
 import com.vaditim.gallery.components.RestoreIcon
 import com.vaditim.gallery.components.SectionBar
@@ -199,13 +201,15 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                 contentAlignment = Alignment.Center,
             ) { shownBar ->
                 val pop = Modifier.animateEnterExit(enter = TOP_POP_IN, exit = TOP_POP_OUT)
+                // A bar on its way out keeps the selection it had, so no button of it vanishes before it pops away.
+                val isLeaving = transition.targetState == EnterExitState.PostExit
                 CompositionLocalProvider(LocalButtonPop provides pop) {
                     when (shownBar) {
                         BottomBar.REARRANGING -> Box(pop.pressable(onClick = { selection.isRearranging = false }).padding(horizontal = 22.dp, vertical = 13.dp)) {
                             CheckIcon(LocalAccent.current)
                         }
-                        BottomBar.COVERS -> CoverActions(controller, screen)
-                        BottomBar.PHOTOS -> PhotoActions(controller, content, screen)
+                        BottomBar.COVERS -> CoverActions(controller, screen, isLeaving)
+                        BottomBar.PHOTOS -> PhotoActions(controller, content, screen, isLeaving)
                         // The empty pill keeps the nav's size, so the viewer's bar grows out of it and the nav's buttons pop back into it.
                         BottomBar.VIEWER -> viewerPhoto?.let { (item, source) -> ViewerActions(controller, item, source) }
                         BottomBar.NAVIGATION -> SectionBar(
@@ -312,17 +316,19 @@ private fun ViewerActions(controller: LibraryController, item: MediaItem, source
 
 // Picked albums or private groups: group them, take them out of their group, move them into or out of Private, or delete them.
 @Composable
-private fun CoverActions(controller: LibraryController, screen: LibraryScreen) {
+private fun CoverActions(controller: LibraryController, screen: LibraryScreen, isLeaving: Boolean) {
     val selection = controller.selection
     val sheets = controller.sheets
+    val selectedGroups = rememberKept(screen.selectedGroups, isLeaving)
+    val selectedAlbums = rememberKept(screen.selectedAlbums, isLeaving)
     Row(Modifier.padding(5.dp)) {
         val deleteModifier = Modifier.pendingMark(selection.pendingDelete != null)
-        if (screen.selectedGroups.isNotEmpty()) {
+        if (selectedGroups.isNotEmpty()) {
             IconButton(onClick = { sheets.show(AppSheet.GROUP_MOVE_OUT) }) { LockIcon(Palette.textBody, isOpen = true) }
             // Private groups are outside the system trash, so deleting them waits for Confirm.
             IconButton(onClick = {
                 selection.confirmThen {
-                    screen.selectedGroups.forEach { controller.actions.deleteGroup(it) }
+                    selectedGroups.forEach { controller.actions.deleteGroup(it) }
                     controller.clearSelection()
                 }
             }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
@@ -335,17 +341,19 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen) {
                 }) { MoveIcon(Palette.textBody) }
             }
             // Only the selected albums that sit in a group can leave one.
-            val groupedPaths = screen.selectedAlbums.map { it.relativePath }.filter { path -> shelf.stacks.holding(path) != null }
-            if (Settings.groupedAlbumsInView && groupedPaths.isNotEmpty()) {
-                IconButton(onClick = {
-                    shelf.stacks.remove(groupedPaths)
-                    controller.clearSelection()
-                }) { CloseIcon(Palette.textBody) }
+            val groupedPaths = selectedAlbums.map { it.relativePath }.filter { path -> shelf.stacks.holding(path) != null }
+            if (Settings.groupedAlbumsInView) {
+                OptionalButton(groupedPaths.isNotEmpty()) {
+                    IconButton(onClick = {
+                        shelf.stacks.remove(groupedPaths)
+                        controller.clearSelection()
+                    }) { CloseIcon(Palette.textBody) }
+                }
             }
             IconButton(onClick = { sheets.show(AppSheet.ALBUM_GROUP) }) { LockIcon(Palette.textBody) }
             IconButton(onClick = {
                 selection.confirmThen {
-                    shelf.deleteAlbums(screen.selectedAlbums)
+                    shelf.deleteAlbums(selectedAlbums)
                     controller.clearSelection()
                 }
             }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
@@ -355,11 +363,11 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen) {
 
 // Picked photos: in the trash, restore or delete for good; elsewhere share, favourite, set as cover, move, take into or out of Private, or delete.
 @Composable
-private fun PhotoActions(controller: LibraryController, content: LibraryContent, screen: LibraryScreen) {
+private fun PhotoActions(controller: LibraryController, content: LibraryContent, screen: LibraryScreen, isLeaving: Boolean) {
     val selection = controller.selection
     val sheets = controller.sheets
     val actions = controller.actions
-    val selectedItems = screen.selectedItems
+    val selectedItems = rememberKept(screen.selectedItems, isLeaving)
     // Every delete waits for Confirm.
     val confirmDelete: (() -> Unit) -> Unit = { delete ->
         selection.confirmThen {
@@ -383,11 +391,13 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             controller.clearSelection()
         }) { HeartIcon(isFilled = isAllFavorite, color = if (isAllFavorite) Palette.favorite else Palette.textBody, size = 22.dp) }
         val coverSource = screen.gridSource?.takeIf { it is ViewerSource.InAlbum || it is ViewerSource.InPrivateGroup || it is ViewerSource.InFavoriteAlbum }
-        if (selectedItems.size == 1 && coverSource != null) {
-            IconButton(onClick = {
-                controller.setCover(coverSource, selectedItems.first(), content)
-                controller.clearSelection()
-            }) { ImageIcon(Palette.textBody) }
+        if (coverSource != null) {
+            OptionalButton(selectedItems.size == 1) {
+                IconButton(onClick = {
+                    selectedItems.firstOrNull()?.let { controller.setCover(coverSource, it, content) }
+                    controller.clearSelection()
+                }) { ImageIcon(Palette.textBody) }
+            }
         }
         if (screen.isPrivateMode) {
             // Private's Recent mixes every private album, so its photos only leave Private from there.
@@ -401,6 +411,15 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             IconButton(onClick = { confirmDelete { actions.trash(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
         }
     }
+}
+
+// The value a bar was showing, held while the bar leaves, so it pops away as it was rather than as what came after it.
+@Composable
+private fun <T> rememberKept(value: T, isLeaving: Boolean): T {
+    val kept = remember { arrayOfNulls<Any>(1).also { it[0] = value } }
+    if (!isLeaving) kept[0] = value
+    @Suppress("UNCHECKED_CAST")
+    return kept[0] as T
 }
 
 // The count small: the month's number in a slot of its own against the slash, the total in one after it, both as wide as the total's digits, so a number gaining or losing a digit never moves the slash or the other number. Each types itself over when it changes, as the month does.
