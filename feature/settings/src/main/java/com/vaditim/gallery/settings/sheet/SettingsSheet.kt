@@ -10,6 +10,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import java.util.Locale
 import java.util.Date
 import java.text.SimpleDateFormat
@@ -124,7 +129,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onRev
                 SettingsTabs(pager, SettingsTab.entries.map { it.label() }, caption)
             }
             // The tabs lie side by side and the finger drags between them; the pill above follows the same position, so a swipe and a tap move both together.
-            HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), beyondViewportPageCount = SettingsTab.entries.size - 1, verticalAlignment = Alignment.Top) { page ->
+            HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth().swipeFade(pager), beyondViewportPageCount = SettingsTab.entries.size - 1, verticalAlignment = Alignment.Top) { page ->
                 SettingsTabContent(SettingsTab.entries[page], isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore)
             }
             // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
@@ -591,3 +596,18 @@ private fun LayoutChip(label: String, isOn: Boolean, isGreyed: Boolean, modifier
         BasicText(label.uppercase(), style = Type.navigation.copy(color = ink), maxLines = 1)
     }
 }
+
+// While the tabs slide, what crosses the sheet's sides fades out there instead of being cut by them; at rest nothing is faded, so the cards keep their full edges.
+private fun Modifier.swipeFade(pager: PagerState): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+    drawContent()
+    val strength = (abs(pager.currentPageOffsetFraction) * SWIPE_FADE_RAMP).coerceAtMost(1f)
+    if (strength > 0f) {
+        val edge = (SWIPE_FADE_WIDTH.toPx() / size.width).coerceAtMost(0.5f)
+        val faded = Color.Black.copy(alpha = 1f - strength)
+        drawRect(Brush.horizontalGradient(0f to faded, edge to Color.Black, 1f - edge to Color.Black, 1f to faded), blendMode = BlendMode.DstIn)
+    }
+}
+
+private val SWIPE_FADE_WIDTH = 56.dp
+// The fade is full once the swipe is a quarter of the way across.
+private const val SWIPE_FADE_RAMP = 4f
