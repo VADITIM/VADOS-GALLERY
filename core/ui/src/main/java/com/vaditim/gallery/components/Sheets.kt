@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
@@ -34,6 +37,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -43,17 +47,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.settings.AlbumStack
 import com.vaditim.gallery.vas.LocalAccent
@@ -66,11 +77,12 @@ import com.vaditim.gallery.vas.glass
 import com.vaditim.gallery.vas.pressable
 import com.vaditim.gallery.vault.PrivateGroup
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, isCentered: Boolean = false, isFullHeight: Boolean = false, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, isCentered: Boolean = false, isFullHeight: Boolean = false, origin: Rect? = null, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
@@ -82,6 +94,24 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     LaunchedEffect(visible) { if (visible) pull = 0f }
     // How far down the sheet is pulled, 0 to 1 of its height, for what behind it should follow the finger.
     LaunchedEffect(Unit) { snapshotFlow { (pull / sheetHeight).coerceIn(0f, 1f) }.collect { onPull(it) } }
+    // With an origin, the pane opens out of the button that asked for it: it waits for the button's icon to leave, grows from the button's rectangle to its own, and what it holds then rises in one after another.
+    val grow = remember { Animatable(0f) }
+    val rise = remember { Animatable(0f) }
+    val hasOrigin = origin != null
+    LaunchedEffect(visible, hasOrigin) {
+        if (!hasOrigin) return@LaunchedEffect
+        if (visible) {
+            launch { grow.animateTo(1f, tween(Motion.MORPH_MS, delayMillis = Motion.STATE_MS, easing = Motion.powerThreeInOut)) }
+            rise.animateTo(RISE_TOTAL_MS, tween(RISE_TOTAL_MS.toInt(), delayMillis = Motion.STATE_MS + Motion.RISE_DELAY_MS, easing = LinearEasing))
+        } else {
+            // Closing goes the usual way down, so the next opening starts again from the button.
+            grow.snapTo(0f)
+            rise.snapTo(0f)
+        }
+    }
+    val morphProgress = { if (visible && hasOrigin) grow.value else 1f }
+    val riseElapsed = { if (visible && hasOrigin) rise.value else Float.MAX_VALUE }
+    var slotPosition by remember { mutableStateOf(Offset.Zero) }
     val pullDrag = rememberDraggableState { delta -> pull = (pull + delta).coerceAtLeast(0f) }
     AnimatedVisibility(
         visible = visible || isRevealing,
@@ -114,10 +144,10 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
             // A centred sheet sits in the middle of the screen, between the status and navigation bars.
             contentAlignment = if (isFullHeight) Alignment.TopCenter else if (isCentered) Alignment.Center else if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
-            Column(
+            Box(
                 Modifier
                     .animateEnterExit(
-                        enter = if (isRevealing && !visible) {
+                        enter = if ((isRevealing && !visible) || hasOrigin) {
                             EnterTransition.None
                         } else {
                             slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut)) { it / 6 } +
@@ -134,20 +164,59 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                     .then(if (isFullHeight) Modifier.fillMaxHeight() else Modifier)
                     .then(if (isFloating || isCentered) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
                     .fillMaxWidth()
-                    .glass(Shapes.sheet, ground)
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                    .padding(top = 18.dp, bottom = 10.dp),
+                    // Where the pane's own corner lies on screen, so the button's rectangle can be placed within it.
+                    .onGloballyPositioned { slotPosition = it.positionInRoot() },
             ) {
-                Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    MicroLabel(label)
-                    // What the sheet is about, at the other end of its label, in the section colour.
-                    if (trailingLabel != null) BasicText(trailingLabel.uppercase(), style = Type.microLabel.copy(color = LocalAccent.current))
+                Column(
+                    Modifier
+                        .graphicsLayer { alpha = if (hasOrigin && morphProgress() == 0f) 0f else 1f }
+                        .offset {
+                            val from = origin?.let { IntOffset((it.left - slotPosition.x).roundToInt(), (it.top - slotPosition.y).roundToInt()) } ?: IntOffset.Zero
+                            val progress = morphProgress()
+                            IntOffset(lerp(from.x, 0, progress), lerp(from.y, 0, progress))
+                        }
+                        .glass(Shapes.sheet, ground)
+                        // The pane is laid out at its full size throughout and only reports the part of it that has grown, so nothing inside is ever scaled.
+                        .then(if (origin != null) Modifier.layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            val progress = morphProgress()
+                            layout(lerp(origin.width.roundToInt(), placeable.width, progress), lerp(origin.height.roundToInt(), placeable.height, progress)) { placeable.place(0, 0) }
+                        } else Modifier)
+                        .then(if (isFullHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+                        .padding(top = 18.dp, bottom = 10.dp),
+                ) {
+                    CompositionLocalProvider(LocalSheetRise provides riseElapsed) {
+                        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 6.dp).risesIn(0), horizontalArrangement = Arrangement.SpaceBetween) {
+                            MicroLabel(label)
+                            // What the sheet is about, at the other end of its label, in the section colour.
+                            if (trailingLabel != null) BasicText(trailingLabel.uppercase(), style = Type.microLabel.copy(color = LocalAccent.current))
+                        }
+                        content()
+                    }
                 }
-                content()
             }
         }
     }
 }
+
+// How many milliseconds into its rising each element of an opening sheet is: they start one after another and each takes the same time.
+val LocalSheetRise = staticCompositionLocalOf<() -> Float> { { Float.MAX_VALUE } }
+
+// An element that fades in from below as its turn comes in an opening sheet; `order` is its place in the line. A sheet that does not open out of a button never delays it.
+@Composable
+fun Modifier.risesIn(order: Int): Modifier {
+    val elapsed = LocalSheetRise.current
+    return graphicsLayer {
+        val progress = Motion.powerTwoOut.transform(((elapsed() - order * Motion.RISE_STAGGER_MS) / Motion.RISE_MS).coerceIn(0f, 1f))
+        alpha = progress
+        translationY = (1f - progress) * RISE_DISTANCE.toPx()
+    }
+}
+
+private val RISE_DISTANCE = 28.dp
+private const val RISE_ORDERS = 8
+private const val RISE_TOTAL_MS = (Motion.RISE_MS + RISE_ORDERS * Motion.RISE_STAGGER_MS).toFloat()
 
 private val SCRIM = Color(0x4D000000)
 // A pull past this share of the sheet's height, or a flick faster than this in pixels per second, closes it.

@@ -1,3 +1,3 @@
-# 1.1.61
+# 1.1.62
 
-- The settings panel reaches a little further up.
+- Settings now open out of the settings button: the gear spins and pops away, the panel grows from the button, and its content rises in from below.

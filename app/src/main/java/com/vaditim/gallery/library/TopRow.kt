@@ -29,7 +29,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,6 +54,8 @@ import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.glass
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val MONTH_CHIP_WIDTH = 148.dp
 
@@ -58,7 +63,7 @@ private val MONTH_CHIP_WIDTH = 148.dp
 // The month chip has a fixed width, so a month with a longer name never shifts or resizes the buttons.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-internal fun TopRow(isHidden: Boolean, month: VisibleMonth, title: String?, isMonthFilled: Boolean, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
+internal fun TopRow(isHidden: Boolean, month: VisibleMonth, title: String?, isMonthFilled: Boolean, selectedCount: Int, onBack: (() -> Unit)?, onAdd: (() -> Unit)?, onCancelSelection: () -> Unit, onSettings: () -> Unit, isSettingsOpen: Boolean, onSettingsBounds: (Rect) -> Unit, onToggleView: (() -> Unit)? = null, isAlbumsView: Boolean = false) {
     // Selecting swaps the whole row: what stands there pops away, each on its own, then the new buttons pop in; otherwise each button comes and goes on its own as the place changes, the others sliding to make room.
     AnimatedContent(
         targetState = when {
@@ -107,11 +112,36 @@ internal fun TopRow(isHidden: Boolean, month: VisibleMonth, title: String?, isMo
                     else -> null
                 }
                 Box(pop) { TopActionButton(action, onAdd ?: onToggleView) }
-                Box(pop.padding(start = 8.dp)) { TopButton(onSettings) { SettingsIcon(Palette.textBright) } }
+                // The settings sheet opens out of this button, so it reports where it is.
+                Box(pop.padding(start = 8.dp).onGloballyPositioned { onSettingsBounds(it.boundsInRoot()) }) { TopButton(onSettings) { SpinningGear(isSettingsOpen) } }
             }
         }
     }
 }
+
+// The gear turns and pops down as settings open, so the sheet can grow from the empty button, and turns back in once the sheet has gone.
+@Composable
+private fun SpinningGear(isSettingsOpen: Boolean) {
+    val turn = remember { Animatable(0f) }
+    val pop = remember { Animatable(1f) }
+    LaunchedEffect(isSettingsOpen) {
+        if (isSettingsOpen) {
+            launch { turn.animateTo(GEAR_TURN, tween(Motion.STATE_MS, easing = Motion.backIn)) }
+            pop.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backIn))
+        } else {
+            delay(Motion.OVERLAY_LEAVE_MS.toLong())
+            launch { turn.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backOut)) }
+            pop.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.backOut))
+        }
+    }
+    Box(Modifier.graphicsLayer {
+        rotationZ = turn.value
+        scaleX = pop.value
+        scaleY = pop.value
+    }) { SettingsIcon(Palette.textBright) }
+}
+
+private const val GEAR_TURN = 180f
 
 // The back button takes its room and gives it back in two steps: leaving, it pops away and then the month slides into its place; arriving, the month slides over and then it pops in, unless the month arrives with it, when the room is taken at once.
 @Composable

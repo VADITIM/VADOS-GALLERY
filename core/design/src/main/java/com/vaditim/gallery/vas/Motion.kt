@@ -29,6 +29,12 @@ object Motion {
     // The dots and sparkles flying off a heart as it turns favourite.
     const val BURST_MS = 520
 
+    // A sheet opening out of its button: the pane growing from the button to its own size, then what it holds rising in one after another, starting this far into the growth.
+    const val MORPH_MS = 340
+    const val RISE_DELAY_MS = 200
+    const val RISE_MS = 280
+    const val RISE_STAGGER_MS = 40
+
     // An album group opening into its row, or folding back onto its top card.
     const val STACK_MS = 360
 

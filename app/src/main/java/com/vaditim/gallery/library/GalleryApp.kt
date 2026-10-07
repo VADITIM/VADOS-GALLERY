@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlurEffect
@@ -138,6 +139,8 @@ private fun Library(viewModel: GalleryViewModel) {
     )
     // The screen softens behind the settings, so the sheet reads as the one thing in front; pulling the sheet down clears the blur with the finger.
     var settingsPull by remember { mutableFloatStateOf(0f) }
+    // The settings button's place, which the settings sheet opens out of.
+    var settingsBounds by remember { mutableStateOf<Rect?>(null) }
     val timelineAbove = remember { TimelineAbove() }
     val isViewerUp = viewer.shown != null
     SideEffect { timelineAbove.isViewerShown = isViewerUp }
@@ -198,6 +201,8 @@ private fun Library(viewModel: GalleryViewModel) {
                     isAlbumsView = screen.isAlbumsView,
                     onCancelSelection = controller::clearSelection,
                     onSettings = { sheets.show(AppSheet.SETTINGS) },
+                    isSettingsOpen = sheets.isOpen(AppSheet.SETTINGS),
+                    onSettingsBounds = { settingsBounds = it },
                 )
             }
             FavoritesCorner(controller, screen, visibleMonth, metrics)
@@ -209,6 +214,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 visible = sheets.isOpen(AppSheet.SETTINGS),
                 isCovers = screen.folderMemory == null,
                 placeName = screen.folderName,
+                origin = settingsBounds,
                 // Sorting through the photos on screen; a place of covers has none to go through.
                 onReview = screen.reviewSource?.let { source -> { navigation.review = source } },
                 onDismiss = sheets::dismiss,

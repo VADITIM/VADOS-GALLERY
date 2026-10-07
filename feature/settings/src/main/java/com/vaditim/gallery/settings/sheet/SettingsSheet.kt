@@ -71,6 +71,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.backup.Backup
 import com.vaditim.gallery.components.OverlaySheet
+import com.vaditim.gallery.components.risesIn
+import androidx.compose.ui.geometry.Rect
 import com.vaditim.gallery.components.ReviewIcon
 import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.DateGroup
@@ -102,7 +104,7 @@ private const val DISABLED_ALPHA = 0.38f
 
 // `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any. `placeName`: the album, group or location open inside the view, named under the first tab.
 @Composable
-fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, onPull: (Float) -> Unit = {}) {
+fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, origin: Rect? = null, onPull: (Float) -> Unit = {}) {
     val pager = rememberPagerState { SettingsTab.entries.size }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -123,9 +125,9 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onRev
     val onRestore = { loadBackup.launch(arrayOf("*/*")) }
     // The view's own name is already the tab's, so only a place inside it gets the second line.
     val caption = placeName?.takeUnless { it.equals(Settings.view.label, ignoreCase = true) }
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isFullHeight = true, onPull = onPull) {
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isFullHeight = true, origin = origin, onPull = onPull) {
         Column(Modifier.fillMaxSize()) {
-            Box(Modifier.padding(start = SHEET_MARGIN, end = SHEET_MARGIN, top = 4.dp, bottom = CARD_GAP)) {
+            Box(Modifier.padding(start = SHEET_MARGIN, end = SHEET_MARGIN, top = 4.dp, bottom = CARD_GAP).risesIn(1)) {
                 SettingsTabs(pager, SettingsTab.entries.map { it.label() }, caption)
             }
             // The tabs lie side by side and the finger drags between them; the pill above follows the same position, so a swipe and a tap move both together.
@@ -135,7 +137,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onRev
             // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
             val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
             val footStyle = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f))
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Box(Modifier.fillMaxWidth().padding(top = 8.dp).risesIn(5)) {
                 BasicText("V/AS", style = footStyle, modifier = Modifier.align(Alignment.Center))
                 if (version != null) BasicText("V$version", style = footStyle, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp))
             }
@@ -150,13 +152,13 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
         when (shown) {
             SettingsTab.PLACE -> {
                 if (onReview != null) {
-                    SettingsButton("Review photos", Modifier.fillMaxWidth(), icon = { ReviewIcon(it, size = 18.dp) }) {
+                    SettingsButton("Review photos", Modifier.fillMaxWidth().risesIn(2), icon = { ReviewIcon(it, size = 18.dp) }) {
                         onDismiss()
                         onReview()
                     }
                 }
                 if (isCovers) {
-                    SettingsCard("Albums") {
+                    SettingsCard("Albums", order = 3) {
                         // Grouped albums lie as rows, so the column count only counts with grouping off.
                         val canGroup = Settings.view.canGroup
                         if (canGroup) {
@@ -170,7 +172,7 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 } else {
                     // An open album shows Recent's settings, greyed, until it is given its own.
                     val isEditable = Settings.folder == null || Settings.hasOwnSettings(Settings.folder)
-                    SettingsCard("Photos") {
+                    SettingsCard("Photos", order = 3) {
                         // Stacking is the view's, not the album's, so it stays live while the rest is greyed; the trash never stacks.
                         if (Settings.view != SettingsView.TRASH) {
                             SettingsToggle("Stack similar shots", Settings.stackSimilarInView) { Settings.updateStackSimilar(it) }
@@ -192,16 +194,16 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                     }
                 }
                 if (Settings.view == SettingsView.PRIVATE) {
-                    SettingsCard("Private") {
+                    SettingsCard("Private", order = 4) {
                         SettingsToggle("Today's selection", Settings.todaysSelection) { Settings.updateTodaysSelection(it) }
                     }
                 }
             }
             SettingsTab.GENERAL -> {
-                SettingsCard("Videos") {
+                SettingsCard("Videos", order = 2) {
                     SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
                 }
-                SettingsCard("Backup") {
+                SettingsCard("Backup", order = 3) {
                     Row(Modifier.fillMaxWidth().padding(start = CARD_INSET, end = CARD_INSET, top = 6.dp, bottom = CARD_INSET), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsButton("Back up", Modifier.weight(1f), onClick = onBackup)
                         SettingsButton("Restore", Modifier.weight(1f), onClick = onRestore)
@@ -217,17 +219,17 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
             }
             SettingsTab.INTERFACE -> {
                 // How a photo tile and the folder's name look are part of the look, not of what the app does.
-                SettingsCard("Tiles") {
+                SettingsCard("Tiles", order = 2) {
                     SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
                     CardDivider()
                     SettingsChoice("Folder label", listOf("Top", "Bottom"), if (Settings.folderLabel) 1 else 0) { Settings.updateFolderLabel(it == 1) }
                 }
-                SettingsCard("Glass") {
+                SettingsCard("Glass", order = 3) {
                     SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
                     CardDivider()
                     SettingsSlider("Opacity", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
                 }
-                SettingsCard("Background") {
+                SettingsCard("Background", order = 4) {
                     SettingsSlider("Brightness", Settings.groundBrightness, "${(Settings.groundBrightness * 100).toInt()}%") { Settings.updateGroundBrightness(it) }
                 }
             }
@@ -243,9 +245,10 @@ private val ROW_PADDING = 13.dp
 
 // One group of settings in a box of its own: a hairline edge and a darker fill than the glass, its name in the accent at the top left.
 @Composable
-private fun SettingsCard(label: String, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsCard(label: String, order: Int, content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
+            .risesIn(order)
             .fillMaxWidth()
             .clip(Shapes.field)
             .background(Palette.sunken.copy(alpha = CARD_FILL))
