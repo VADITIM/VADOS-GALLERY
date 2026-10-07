@@ -51,6 +51,7 @@ enum class PlaceGlyph { ALBUMS, LOCATIONS, TRASH, PRIVATE }
 // The chosen section's label grows by this much, landing on the overshoot.
 private const val ACTIVE_LABEL_SCALE = 1.06f
 
+// Prime component (VAS components/19-pop-bar.md): change the entry there first, then this.
 // Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
 @Composable
 fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }, albumsGlyph: PlaceGlyph = PlaceGlyph.ALBUMS, isMarked: (Section) -> Boolean = { false }, hasGlass: Boolean = true, itemModifier: Modifier = Modifier, washAlpha: () -> Float = { 1f }) {
@@ -99,6 +100,7 @@ fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier 
 private val MARK_GAP = 4.dp
 private val MARK_THICKNESS = 2.dp
 
+// Prime component (VAS components/19-pop-bar.md): change the entry there first, then this.
 // The nav's pill, for any row of choices: glass, a wash that slides to the chosen one, its label grown a little. `scroll` lets a row wider than the screen slide inside the pill.
 @Composable
 // Inside a glass shared with other bars it leaves the glass out; each option takes itemModifier, and the wash fades with washAlpha, so a bar swap can pop them.

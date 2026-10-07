@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -140,6 +141,7 @@ internal fun BoxScope.FavoritesCorner(controller: LibraryController, screen: Lib
     }
 }
 
+// Prime component (VAS components/19-pop-bar.md): change the entry there first, then this.
 // Under the content: Confirm for a waiting delete, the pills that name the place, and one glass bar that is the nav or a selection's actions.
 @Composable
 internal fun BottomControls(controller: LibraryController, content: LibraryContent, screen: LibraryScreen, metrics: BarMetrics, modifier: Modifier) {
@@ -189,7 +191,9 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
             }
         }
         val barTransition = rememberTransition(barState, label = "bottomBar")
-        Box(Modifier.glass(Shapes.capsule)) {
+        // Over a settled photo the pill is the viewer's black: the blur samples a radius past its edges, so a photo standing just above it would tint it.
+        val isOverSettledPhoto = controller.viewer.isOpen && !controller.viewer.isShrunk
+        Box(if (isOverSettledPhoto) Modifier.clip(Shapes.capsule).background(Palette.viewerGround) else Modifier.glass(Shapes.capsule)) {
             barTransition.AnimatedContent(
                 transitionSpec = { EnterTransition.None.togetherWith(ExitTransition.None).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
                 contentAlignment = Alignment.Center,

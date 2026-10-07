@@ -1,4 +1,3 @@
-# 1.1.50
+# 1.1.51
 
-- Own settings, at the bottom of an album's settings tab, gives that album its own image columns and headers; off, it follows Recent's.
-- The settings tabs now sit at the top of the sheet.
+- With a photo open, the nav no longer picks up the photo's colours when the photo ends just above it.
