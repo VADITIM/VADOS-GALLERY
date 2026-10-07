@@ -1,5 +1,5 @@
-# 1.2.2
+# 1.2.3
 
-- Drag an album out of its group: let go over another group to move it there, or anywhere else to take it out. Both can be undone.
-- Holding an album over a closed group opens it, and it closes again when you move off.
-- A cover you let go while rearranging now glides into its place instead of snapping.
+- Holding a cover until it vibrates and then dragging now picks it up and moves it right away; the menu that opened closes.
+- A long press on a cover no longer also counts as a long press on the empty space around it.
+- A group opened by holding an album over it now opens over the rows below instead of pushing them, so the album you hold stays under your finger.

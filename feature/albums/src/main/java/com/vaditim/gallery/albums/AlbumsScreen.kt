@@ -174,12 +174,12 @@ fun AlbumsScreen(
     // Groups trade places with groups and albums with albums, so an album never lands above a group.
     reorder.canSwap = { held, target -> (held is String) == (target is String) }
     reorder.canDropInto = { held, target -> held !is String && target is String }
-    // A group opened by an album hanging over it; it closes again once the album moves off, unless the album was let go into it.
-    var hoverOpened by remember { mutableStateOf<String?>(null) }
-    val regroup = { album: Album, group: String? ->
-        hoverOpened = null
-        onRegroup(album, group)
-    }
+    // The shut group an album hangs over, peeked open; it folds back once the album moves off it or is let go.
+    var peeked by remember { mutableStateOf<String?>(null) }
+    // How far each group's opened cards reach below its shut row, for the album hanging over a peek to still count as over the group.
+    val peekReach = remember { HashMap<String, Float>() }
+    reorder.reachBelow = { key -> if (key is String && key.removePrefix(STACK_KEY_PREFIX) == peeked) peekReach[key.removePrefix(STACK_KEY_PREFIX)] ?: 0f else 0f }
+    val regroup = onRegroup
     reorder.onDropInto = { held, target ->
         val album = entries.firstNotNullOfOrNull { (it as? AlbumEntry.Single)?.album?.takeIf { album -> album.id == held } }
         if (album != null && target is String) regroup(album, target.removePrefix(STACK_KEY_PREFIX))
@@ -195,15 +195,10 @@ fun AlbumsScreen(
     }
     val hovered = (reorder.dropTargetKey as? String)?.removePrefix(STACK_KEY_PREFIX)
     LaunchedEffect(hovered) {
-        val opened = hoverOpened
-        if (opened != null && opened != hovered) {
-            hoverOpened = null
-            setOpen(opened, false)
-        }
-        if (hovered != null && hovered !in currentOpenStacks) {
+        if (peeked != null && peeked != hovered) peeked = null
+        if (hovered != null && hovered !in currentOpenStacks && hovered != peeked) {
             delay(Motion.HOVER_OPEN_MS)
-            hoverOpened = hovered
-            setOpen(hovered, true)
+            peeked = hovered
         }
     }
 
@@ -257,10 +252,18 @@ fun AlbumsScreen(
                         onStartRearranging = if (isPicking) null else onStartRearranging,
                         reorder = reorder,
                         onRegroup = regroup,
+                        isPeeked = peeked == entry.name,
+                        onPeekReach = { reach -> peekReach[entry.name] = reach },
                         // Before rearranging, only a drag that starts on the stack's pictures picks the group up; anywhere else the swipe still opens it.
-                        modifier = reorderable(reorder, entry.key, isEnabled = !isOpen, placement = glide, startArea = { at, _ -> at.x < picturesWidth })
-                            // An album dragged out of this group is drawn by it, so the group lies above the rows it is dragged over.
-                            .zIndex(if (reorder.groupHoldingKey == entry.key) 1f else 0f)
+                        modifier = reorderable(
+                            reorder,
+                            entry.key,
+                            isEnabled = !isOpen,
+                            placement = glide,
+                            startArea = { at, _ -> at.x < picturesWidth },
+                            // An album dragged out of this group is drawn by it, so the group lies above the rows it is dragged over; a peek lies over the rows below it, under any held album.
+                            lift = if (reorder.groupHoldingKey == entry.key) 2f else if (peeked == entry.name) 1f else 0f,
+                        )
                             .graphicsLayer {
                                 scaleX = dropScale
                                 scaleY = dropScale
@@ -370,20 +373,30 @@ private fun GroupRow(
     reorder: Reorder,
     onRegroup: (Album, String?) -> Unit,
     onMotion: (Boolean) -> Unit,
+    // Opened only to show where an album hanging over it would go: the cards lay themselves out over the rows below, and the row keeps its shut height, so nothing under the finger moves.
+    isPeeked: Boolean = false,
+    // How far the opened cards reach below the shut row, measured each layout, so the album hanging over them still counts as over the group.
+    onPeekReach: (Float) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val albums = stack.albums
     val count = albums.size
+    val isShown = isOpen || isPeeked
     // Time through opening or closing, 0 to 1, run evenly; each card turns it into its own eased, staggered progress.
     val time = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
+    // Held while a peek is open and until it has folded back, so the row keeps its shut height the whole way.
+    var isPeekLayout by remember(stack.name) { mutableStateOf(false) }
+    LaunchedEffect(isPeeked, isOpen) {
+        if (isOpen) isPeekLayout = false else if (isPeeked) isPeekLayout = true
+    }
     // A swipe left pulls the opened group shut by the finger: it drives the same time, on the closing curve, so letting go carries on from where the cards are.
     var isPulled by remember(stack.name) { mutableStateOf(false) }
     // Where the arrow is, 0 left of the shut group's name, pointing right, to 1 at the right end of the heading, pointing left; it turns half way. Closing, the heading is cut the moment it is back.
     val arrow = remember(stack.name) { Animatable(if (isOpen) 1f else 0f) }
     var isHeadingShown by remember(stack.name) { mutableStateOf(isOpen) }
     // Before the effect below, which clears isPulled, so it can still tell a pull from a tap.
-    LaunchedEffect(isOpen) {
-        if (isOpen) {
+    LaunchedEffect(isShown) {
+        if (isShown) {
             isHeadingShown = true
             if (arrow.value < 1f) arrow.animateTo(1f, tween((Motion.STACK_MS * (1f - arrow.value)).roundToInt(), easing = Motion.backOut))
         } else {
@@ -392,18 +405,19 @@ private fun GroupRow(
             isHeadingShown = false
         }
     }
-    LaunchedEffect(isOpen) {
-        if (!isOpen) isPulled = false
-        val target = if (isOpen) 1f else 0f
+    LaunchedEffect(isShown) {
+        if (!isShown) isPulled = false
+        val target = if (isShown) 1f else 0f
         // Started part way, by a pull, it takes only the share of the time that is left.
         time.animateTo(target, tween((Motion.STACK_MS * abs(target - time.value)).roundToInt(), easing = LinearEasing))
         // The cards land a little after the time ends when they overshoot, so the rows below are freed only once they have.
         delay(Motion.STATE_MS.toLong())
+        if (!isShown) isPeekLayout = false
         onMotion(false)
     }
     // A group scrolled away mid-motion must not keep the rows below from gliding.
     DisposableEffect(stack.name) { onDispose { onMotion(false) } }
-    val isShut = !isOpen && time.value == 0f
+    val isShut = !isShown && time.value == 0f
     val isArranging = isRearranging && isOpen
     val geometry = remember { GroupGeometry() }
     val currentAlbums by rememberUpdatedState(albums)
@@ -415,6 +429,9 @@ private fun GroupRow(
     // Off the group's own row, the held album no longer trades places inside it: it is on its way out, or into another group.
     var isHeldOutside by remember { mutableStateOf(false) }
     var settling by remember { mutableStateOf<Job?>(null) }
+    // Where this group lay in the grid when one of its albums was picked up. Another group opening above pushes this one down, but the held album is the finger's, so it is drawn back by however far the group has moved.
+    var groupStart by remember { mutableStateOf<Offset?>(null) }
+    val drift = { groupStart?.let { start -> (reorder.topLeftOf(stack.key) ?: start) - start } ?: Offset.Zero }
     val groupGap = with(LocalDensity.current) { GROUP_GAP.toPx() }
     val heldScale by animateFloatAsState(if (reorder.dropTargetKey != null && heldId != null) DROPPING_SCALE else HELD_SCALE, tween(Motion.STATE_MS, easing = Motion.backOut), label = "held")
     val haptic = LocalHapticFeedback.current
@@ -423,7 +440,7 @@ private fun GroupRow(
     fun progressOf(index: Int): Float {
         val start = index.toFloat() / count * STAGGER_SPAN
         val local = ((time.value - start) / (1f - STAGGER_SPAN)).coerceIn(0f, 1f)
-        return if (isOpen && !isPulled) Motion.backOut.transform(local) else Motion.powerThreeInOut.transform(local)
+        return if (isShown && !isPulled) Motion.backOut.transform(local) else Motion.powerThreeInOut.transform(local)
     }
 
     val openGroup = { if (isPicking) onToggle(albums) else onOpenChange(true) }
@@ -595,18 +612,21 @@ private fun GroupRow(
                                             heldId = album.id
                                             isHeldOutside = false
                                             reorder.startFromGroup(stack.key)
+                                            groupStart = reorder.topLeftOf(stack.key)
                                         },
                                         onDrag = drag@{ amount ->
                                             heldOffset += amount
                                             val list = currentAlbums
                                             val from = list.indexOfFirst { it.id == album.id }
                                             if (from < 0) return@drag
+                                            // Where the card is drawn, in the group's terms, once the group's own movement is taken off.
+                                            val shown = heldOffset - drift()
                                             // Where its centre is in the grid, to tell whether it has left this group or hangs over another.
                                             val topLeft = reorder.topLeftOf(stack.key)
-                                            val inGroup = Offset(0f, geometry.headingSpace) + geometry.slot(from) + heldOffset + Offset(geometry.cell / 2f, geometry.cell / 2f)
+                                            val inGroup = Offset(0f, geometry.headingSpace) + geometry.slot(from) + shown + Offset(geometry.cell / 2f, geometry.cell / 2f)
                                             isHeldOutside = topLeft != null && reorder.hoverFromGroup(stack.key, album.id, topLeft + Offset(0f, groupGap) + inGroup)
                                             if (isHeldOutside) return@drag
-                                            val centre = geometry.slot(from) + heldOffset + Offset(geometry.cell / 2f, geometry.cell / 2f)
+                                            val centre = geometry.slot(from) + shown + Offset(geometry.cell / 2f, geometry.cell / 2f)
                                             val to = geometry.slotAt(centre, list.size)
                                             if (to != from) {
                                                 currentOnArrangeGroup(list.toMutableList().apply { add(to, removeAt(from)) })
@@ -619,6 +639,9 @@ private fun GroupRow(
                                             val target = reorder.endFromGroup()
                                             val isLeaving = target != null || isHeldOutside
                                             isHeldOutside = false
+                                            // From here on the card belongs to the group again, so the drift is folded into its offset.
+                                            heldOffset -= drift()
+                                            groupStart = null
                                             if (isLeaving) {
                                                 heldId = null
                                                 onRegroup(album, (target as? String)?.removePrefix(STACK_KEY_PREFIX))
@@ -644,7 +667,7 @@ private fun GroupRow(
                 isShown = isHeadingShown && !(isPulled && arrow.value <= 0f),
                 style = Type.title.copy(fontSize = 22.sp, color = LocalAccent.current),
                 // Closing, or pulled shut, the name is sliced away from its right end in step with the cards; opening, its own sweep brings it in.
-                presence = { if (isOpen && !isPulled) 1f else time.value },
+                presence = { if (isShown && !isPulled) 1f else time.value },
                 isRevealedAtStart = true,
             )
             // Shut, it stands left of the name pointing right and opens the group; opened, it folds the group back from the right end of its heading.
@@ -692,7 +715,9 @@ private fun GroupRow(
             val placement = placements[index]
             if (placement.isHeld) 0f else placement.y + cell / 2f + cell / 2f * placement.scale
         } ?: 0f
-        val height = maxOf(small + (openHeight - small) * openness, reach).roundToInt()
+        onPeekReach((openHeight - small).toFloat())
+        // A peek never moves the rows below; the opened cards lie over them.
+        val height = if (isPeekLayout) small else maxOf(small + (openHeight - small) * openness, reach).roundToInt()
         layout(width, height) {
             header.place(labelStart, 0)
             heading.place(0, (headingHeight - heading.height) / 2)
@@ -713,6 +738,12 @@ private fun GroupRow(
                     scaleX = scale
                     scaleY = scale
                     rotationZ = stackTilt(depth) * (1f - p)
+                    // The held card stays under the finger however far the group itself has been pushed.
+                    if (isHeld) {
+                        val moved = drift()
+                        translationX = -moved.x
+                        translationY = -moved.y
+                    }
                     // Deeper cards lie darker, as in the stack; the ground is near black, so fading darkens. Past the visible layers they are hidden until they leave.
                     val shade = if (index > STACK_DEPTH) 0f else stackShade(depth)
                     alpha = shade + (1f - shade) * p.coerceIn(0f, 1f)

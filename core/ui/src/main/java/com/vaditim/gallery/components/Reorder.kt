@@ -61,6 +61,8 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     // Whether the held cover goes into the one under it (an album into a group) instead of trading places.
     var canDropInto: (held: Any, target: Any) -> Boolean = { _, _ -> false }
     var onDropInto: (held: Any, target: Any) -> Unit = { _, _ -> }
+    // How far below its own row an item reaches while it draws over the rows under it (a peeked group), so a cover hanging over that part is still over it.
+    var reachBelow: (key: Any) -> Float = { 0f }
     var isRearranging: () -> Boolean = { false }
     // Null where a drag cannot turn rearranging on (while picking covers).
     var onStartRearranging: (() -> Unit)? = null
@@ -140,7 +142,7 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
         val visible = layout.visibleItemsInfo
         val held = visible.firstOrNull { it.key == heldKey } ?: return
         val centre = heldTopLeft + Offset(held.size.width / 2f, held.size.height / 2f)
-        val into = visible.firstOrNull { it.key != heldKey && canDropInto(heldKey, it.key) && it.holds(centre) }?.key
+        val into = visible.firstOrNull { it.key != heldKey && canDropInto(heldKey, it.key) && it.holds(centre, reachBelow(it.key)) }?.key
         aimAt(into)
         if (into != null) return
         val from = keys.indexOf(heldKey)
@@ -182,7 +184,7 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     fun hoverFromGroup(group: Any, album: Any, centre: Offset): Boolean {
         val visible = state.layoutInfo.visibleItemsInfo
         val isOutside = visible.firstOrNull { it.key == group }?.holds(centre) != true
-        aimAt(if (isOutside) visible.firstOrNull { it.key != group && canDropInto(album, it.key) && it.holds(centre) }?.key else null)
+        aimAt(if (isOutside) visible.firstOrNull { it.key != group && canDropInto(album, it.key) && it.holds(centre, reachBelow(it.key)) }?.key else null)
         return isOutside
     }
 
@@ -195,8 +197,8 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     }
 }
 
-private fun LazyGridItemInfo.holds(point: Offset): Boolean =
-    point.x >= offset.x && point.x < offset.x + size.width && point.y >= offset.y && point.y < offset.y + size.height
+private fun LazyGridItemInfo.holds(point: Offset, below: Float = 0f): Boolean =
+    point.x >= offset.x && point.x < offset.x + size.width && point.y >= offset.y && point.y < offset.y + size.height + below
 
 @Composable
 fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, to: Int) -> Unit): Reorder {
@@ -209,13 +211,13 @@ fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, t
 }
 
 // The modifier chain keeps one shape whether or not rearranging is on or this cover is the one held: swapping an element out recreates the pointer input below it and cancels the drag that just started (a drag can turn rearranging on mid-gesture). It goes on the grid item; the card inside it takes `jiggle`.
-// `startArea` limits where a drag may begin before rearranging is on, in the item's own pixels.
-fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean, placement: FiniteAnimationSpec<IntOffset>? = spring(), startArea: (Offset, IntSize) -> Boolean = { _, _ -> true }): Modifier {
-    if (!isEnabled) return Modifier.animateItem(placementSpec = placement)
+// `startArea` limits where a drag may begin before rearranging is on, in the item's own pixels. `lift` raises the item above the rows around it while it draws over them.
+fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean, placement: FiniteAnimationSpec<IntOffset>? = spring(), startArea: (Offset, IntSize) -> Boolean = { _, _ -> true }, lift: Float = 0f): Modifier {
+    if (!isEnabled) return Modifier.animateItem(placementSpec = placement).zIndex(lift)
     val isDragged = key == reorder.draggedKey || key == reorder.settlingKey
     return Modifier
         .animateItem(placementSpec = if (isDragged) null else if (reorder.isRearranging()) spring() else placement)
-        .zIndex(if (isDragged) 1f else 0f)
+        .zIndex(if (isDragged) maxOf(1f, lift) else lift)
         .graphicsLayer {
             val moved = reorder.offsetOf(key)
             translationX = moved.x
@@ -235,7 +237,7 @@ fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean
         )
 }
 
-// One gesture for every cover that can be arranged. While rearranging, a drag moves the cover at once. Otherwise a finger that rests a moment and then moves, before the long press would fire, turns rearranging on and carries the cover from there; one that moves straight away is a scroll or a swipe and is left alone.
+// One gesture for every cover that can be arranged. While rearranging, a drag moves the cover at once. Otherwise a finger that rests a moment and then moves turns rearranging on and carries the cover from there, before or after the long press (whose menu then closes); one that moves straight away is a scroll or a swipe and is left alone.
 fun Modifier.dragToArrange(
     key: Any,
     isRearranging: () -> Boolean,
@@ -252,18 +254,10 @@ fun Modifier.dragToArrange(
             if (withTimeoutOrNull(Motion.DRAG_REST_MS) { awaitLeave(down) } != null) return@awaitEachGesture
         }
         var overSlop = Offset.Zero
-        val onSlop = { change: PointerInputChange, over: Offset ->
+        val slop = awaitTouchSlopOrCancellation(down.id) { change, over ->
             change.consume()
             overSlop = over
-        }
-        // Past the long press the hold has become the cover's menu.
-        val slop = (
-            if (wasRearranging) {
-                awaitTouchSlopOrCancellation(down.id, onSlop)
-            } else {
-                withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis - Motion.DRAG_REST_MS) { awaitTouchSlopOrCancellation(down.id, onSlop) }
-            }
-            ) ?: return@awaitEachGesture
+        } ?: return@awaitEachGesture
         onStart()
         onDrag(overSlop)
         drag(slop.id) { change ->

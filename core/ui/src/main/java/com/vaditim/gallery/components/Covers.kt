@@ -114,13 +114,16 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, onBackgroundL
         modifier = Modifier
             .fillMaxSize()
             .pinchAlbumColumns(haptic)
-            // A cover takes its own presses, so only a hold on the grid between covers reaches this.
+            // A cover's press does not keep the touch from the grid, so a hold counts as the background's only where no cover lies under it.
             .pointerInput(Unit) {
-                detectTapGestures(onLongPress = {
-                    currentOnBackgroundLongPress?.let { start ->
-                        Haptics.tick(context)
-                        start()
+                detectTapGestures(onLongPress = { at ->
+                    val start = currentOnBackgroundLongPress ?: return@detectTapGestures
+                    val isOnItem = state.layoutInfo.visibleItemsInfo.any { info ->
+                        at.x >= info.offset.x && at.x < info.offset.x + info.size.width && at.y >= info.offset.y && at.y < info.offset.y + info.size.height
                     }
+                    if (isOnItem) return@detectTapGestures
+                    Haptics.tick(context)
+                    start()
                 })
             },
         content = content,
