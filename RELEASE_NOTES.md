@@ -1,3 +1,3 @@
-# 1.3.6
+# 1.3.7
 
-- Favouriting a selection no longer lets go of it: the photos stay selected, so the heart can be tapped again.
+- A group peeked open by an album hovering over it now pushes the groups and albums below it down instead of lying over them.

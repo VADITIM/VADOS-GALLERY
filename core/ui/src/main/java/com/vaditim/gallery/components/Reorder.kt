@@ -61,8 +61,6 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     // Whether the held cover goes into the one under it (an album into a group) instead of trading places.
     var canDropInto: (held: Any, target: Any) -> Boolean = { _, _ -> false }
     var onDropInto: (held: Any, target: Any) -> Unit = { _, _ -> }
-    // How far below its own row an item reaches while it draws over the rows under it (a peeked group), so a cover hanging over that part is still over it.
-    var reachBelow: (key: Any) -> Float = { 0f }
     var isRearranging: () -> Boolean = { false }
     // Null where a drag cannot turn rearranging on (while picking covers).
     var onStartRearranging: (() -> Unit)? = null
@@ -142,7 +140,7 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
         val visible = layout.visibleItemsInfo
         val held = visible.firstOrNull { it.key == heldKey } ?: return
         val centre = heldTopLeft + Offset(held.size.width / 2f, held.size.height / 2f)
-        val into = visible.firstOrNull { it.key != heldKey && canDropInto(heldKey, it.key) && it.holds(centre, reachBelow(it.key)) }?.key
+        val into = visible.firstOrNull { it.key != heldKey && canDropInto(heldKey, it.key) && it.holds(centre) }?.key
         aimAt(into)
         if (into != null) return
         val from = keys.indexOf(heldKey)
@@ -184,7 +182,7 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     fun hoverFromGroup(group: Any, album: Any, centre: Offset): Boolean {
         val visible = state.layoutInfo.visibleItemsInfo
         val isOutside = visible.firstOrNull { it.key == group }?.holds(centre) != true
-        aimAt(if (isOutside) visible.firstOrNull { it.key != group && canDropInto(album, it.key) && it.holds(centre, reachBelow(it.key)) }?.key else null)
+        aimAt(if (isOutside) visible.firstOrNull { it.key != group && canDropInto(album, it.key) && it.holds(centre) }?.key else null)
         return isOutside
     }
 
@@ -197,8 +195,8 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     }
 }
 
-private fun LazyGridItemInfo.holds(point: Offset, below: Float = 0f): Boolean =
-    point.x >= offset.x && point.x < offset.x + size.width && point.y >= offset.y && point.y < offset.y + size.height + below
+private fun LazyGridItemInfo.holds(point: Offset): Boolean =
+    point.x >= offset.x && point.x < offset.x + size.width && point.y >= offset.y && point.y < offset.y + size.height
 
 @Composable
 fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, to: Int) -> Unit): Reorder {
