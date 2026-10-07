@@ -133,6 +133,7 @@ private fun AlbumsSection(controller: LibraryController, content: LibraryContent
                     albums = content.arrangedAlbums,
                     isRearranging = selection.isRearranging,
                     onStartRearranging = controller::startRearranging,
+                    onStopRearranging = { selection.isRearranging = false },
                     onRegroup = { album, group -> controller.regroup(AlbumShelfKind.FOLDERS, album, group) },
                     onArrange = { AlbumArrangement.albumOrder.update(it) },
                     selectedPaths = selection.covers,
@@ -195,6 +196,7 @@ private fun AlbumsSection(controller: LibraryController, content: LibraryContent
                     groups = content.arrangedGroups,
                     isRearranging = selection.isRearranging,
                     onStartRearranging = controller::startRearranging,
+                    onStopRearranging = { selection.isRearranging = false },
                     selectedNames = selection.covers,
                     onToggle = { selection.toggleCovers(listOf(it.name)) },
                     onMove = { from, to ->
@@ -266,6 +268,7 @@ private fun FavoritesSection(controller: LibraryController, content: LibraryCont
                 },
                 isRearranging = selection.isRearranging,
                 onStartRearranging = controller::startRearranging,
+                onStopRearranging = { selection.isRearranging = false },
                 onRegroup = { album, group -> controller.regroup(AlbumShelfKind.FAVORITES, album, group) },
                 onArrange = { AlbumArrangement.favoriteAlbumOrder.update(it) },
                 selectedPaths = selection.covers,

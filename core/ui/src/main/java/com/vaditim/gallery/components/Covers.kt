@@ -89,15 +89,19 @@ private class CoverViewConfiguration(private val system: ViewConfiguration) : Vi
     override val longPressTimeoutMillis: Long get() = system.longPressTimeoutMillis + Motion.COVER_HOLD_EXTRA_MS
 }
 
+// The item kinds a cover grid lays out as covers; everything else in it (the title, the buttons) is background.
+private val COVER_TYPES = setOf("album", "stack", "group")
+
 // Albums, private groups and locations are one kind of screen: a grid of covers whose columns, list layout, shrinking names and pinch are the same everywhere. A new cover screen is built from these, not beside them.
-// `onBackgroundLongPress`, where covers can be arranged, turns rearranging on from a hold on the grid between them.
+// `onBackgroundLongPress`, where covers can be arranged, turns rearranging on from a hold on the grid between them; `onBackgroundTap` turns it off again from a tap anywhere that is not a cover or a group.
 @Composable
-fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, onBackgroundLongPress: (() -> Unit)? = null, content: LazyGridScope.() -> Unit) {
+fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, onBackgroundLongPress: (() -> Unit)? = null, onBackgroundTap: (() -> Unit)? = null, content: LazyGridScope.() -> Unit) {
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     val system = LocalViewConfiguration.current
     val viewConfiguration = remember(system) { CoverViewConfiguration(system) }
     val currentOnBackgroundLongPress by rememberUpdatedState(onBackgroundLongPress)
+    val currentOnBackgroundTap by rememberUpdatedState(onBackgroundTap)
     HoldUnderSheet(state)
     CompositionLocalProvider(LocalViewConfiguration provides viewConfiguration) {
     ProvideEntrance {
@@ -117,7 +121,14 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, onBackgroundL
             .pinchAlbumColumns(haptic)
             // A cover's press does not keep the touch from the grid, so a hold counts as the background's only where no cover lies under it.
             .pointerInput(Unit) {
-                detectTapGestures(onLongPress = { at ->
+                detectTapGestures(onTap = { at ->
+                    val stop = currentOnBackgroundTap ?: return@detectTapGestures
+                    // A group's heading closes it and a cover does nothing while rearranging; neither ends it.
+                    val isOnCover = state.layoutInfo.visibleItemsInfo.any { info ->
+                        info.contentType in COVER_TYPES && at.x >= info.offset.x && at.x < info.offset.x + info.size.width && at.y >= info.offset.y && at.y < info.offset.y + info.size.height
+                    }
+                    if (!isOnCover) stop()
+                }, onLongPress = { at ->
                     val start = currentOnBackgroundLongPress ?: return@detectTapGestures
                     val isOnItem = state.layoutInfo.visibleItemsInfo.any { info ->
                         at.x >= info.offset.x && at.x < info.offset.x + info.size.width && at.y >= info.offset.y && at.y < info.offset.y + info.size.height

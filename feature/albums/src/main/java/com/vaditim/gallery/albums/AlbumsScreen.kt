@@ -149,6 +149,7 @@ fun AlbumsScreen(
     isAccented: Boolean = false,
     // A cover held a moment and then dragged turns rearranging on with it.
     onStartRearranging: () -> Unit = {},
+    onStopRearranging: () -> Unit = {},
     // An album dropped onto a group while rearranging, or dragged out of its own group (group null).
     onRegroup: (album: Album, group: String?) -> Unit = { _, _ -> },
 ) = CompositionLocalProvider(LocalAccentedCoverNames provides isAccented) {
@@ -205,7 +206,7 @@ fun AlbumsScreen(
     // Every group is a row of its own, so the albums before it end their row early.
     val spans = coverColumns().let { columns -> remember(entries, columns) { spansOf(entries, columns) } }
 
-    CoverGrid(state, contentPadding, onBackgroundLongPress = if (isPicking || isRearranging) null else onStartRearranging) {
+    CoverGrid(state, contentPadding, onBackgroundLongPress = if (isPicking || isRearranging) null else onStartRearranging, onBackgroundTap = if (isRearranging) onStopRearranging else null) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText(title, style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
