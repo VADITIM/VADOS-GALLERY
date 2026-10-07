@@ -156,7 +156,10 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                         Settings.updateDefaultColumns(it)
                         onColumnsChanged(it)
                     }
-                    HeadersLayout(Settings.headersInView, Settings.dateGroupsInView)
+                    // An open album shows Recent's headers until it is given its own.
+                    val isAlbum = Settings.folder != null
+                    if (isAlbum) SettingsToggle("Own headers", Settings.hasOwnHeaders(Settings.folder)) { Settings.updateOwnHeaders(it) }
+                    HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = !isAlbum || Settings.hasOwnHeaders(Settings.folder))
                 }
                 if (Settings.view == SettingsView.PRIVATE) {
                     SettingsHeader("Private")
@@ -381,21 +384,22 @@ private val STEPS_HEIGHT = 36.dp
 // Days, weeks, months and years can be on together, at least one; the switch under them turns every cut off and greys them, keeping the pick for when it comes back.
 // An empty pick stored before it could not be emptied reads as off, and turning on from it starts at months.
 @Composable
-private fun HeadersLayout(isOn: Boolean, groups: Set<DateGroup>) {
+private fun HeadersLayout(isOn: Boolean, groups: Set<DateGroup>, isEnabled: Boolean = true) {
     val isActive = isOn && groups.isNotEmpty()
     Column(Modifier.fillMaxWidth().rowDivider()) {
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
             BasicText("Headers - Layout", style = Type.cardTitle)
             Row(Modifier.padding(top = 10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DateGroup.entries.forEach { group ->
-                    LayoutChip(group.label, isOn = group in groups, isGreyed = !isActive, modifier = Modifier.weight(1f)) {
+                    LayoutChip(group.label, isOn = group in groups, isGreyed = !isActive || !isEnabled, modifier = Modifier.weight(1f)) {
+                        if (!isEnabled) return@LayoutChip
                         val next = if (group in groups) groups - group else groups + group
                         if (next.isNotEmpty()) Settings.updateDateGroups(next)
                     }
                 }
             }
         }
-        SettingsToggle("Headers", isActive, isDivided = false) { isTurnedOn ->
+        SettingsToggle("Headers", isActive, isEnabled = isEnabled, isDivided = false) { isTurnedOn ->
             if (isTurnedOn && groups.isEmpty()) Settings.updateDateGroups(setOf(DateGroup.MONTHS))
             Settings.updateHeaders(isTurnedOn)
         }

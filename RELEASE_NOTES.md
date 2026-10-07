@@ -1,5 +1,4 @@
-# 1.1.48
+# 1.1.49
 
-- Private's groups are now called albums everywhere.
-- A long-pressed private album offers Unlock with the open lock.
-- Photos in Private's Recent can no longer be moved between private albums, only out of Private.
+- Set as cover has a new filled icon, sized like the others.
+- Albums follow Recent's headers; an album's settings can turn on Own headers to give it a layout of its own.

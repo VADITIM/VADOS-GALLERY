@@ -29,10 +29,10 @@ class GridMemories(
     private val favoriteAlbums = mutableMapOf<String, GridMemory>()
     private val privateFavoriteGroups = mutableMapOf<String, GridMemory>()
 
-    fun album(id: Long) = albums.getOrPut(id) { GridMemory(SettingsView.ALBUMS) }
+    fun album(id: Long) = albums.getOrPut(id) { GridMemory(SettingsView.ALBUMS, folder = ViewerSource.InAlbum(id).folderKey) }
     fun location(key: String) = locations.getOrPut(key) { GridMemory(SettingsView.LOCATIONS) }
-    fun privateGroup(name: String) = privateGroups.getOrPut(name) { GridMemory(SettingsView.PRIVATE) }
-    fun favoriteAlbum(name: String) = favoriteAlbums.getOrPut(name) { GridMemory(SettingsView.FAVORITES) }
+    fun privateGroup(name: String) = privateGroups.getOrPut(name) { GridMemory(SettingsView.PRIVATE, folder = ViewerSource.InPrivateGroup(name).folderKey) }
+    fun favoriteAlbum(name: String) = favoriteAlbums.getOrPut(name) { GridMemory(SettingsView.FAVORITES, folder = ViewerSource.InFavoriteAlbum(name).folderKey) }
     fun privateFavoriteGroup(name: String) = privateFavoriteGroups.getOrPut(name) { GridMemory(SettingsView.PRIVATE) }
 
     // Only the grids of the view whose setting changed take the new count.

@@ -2,6 +2,7 @@ package com.vaditim.gallery.settings
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -22,11 +23,19 @@ object Settings {
     private const val DEFAULT_ALBUM_COLUMNS = 3
     private const val DEFAULT_GROUND_BRIGHTNESS = 17.5f / MAX_GROUND_LEVEL
     private val DEFAULT_DATE_GROUPS = setOf(DateGroup.DAYS, DateGroup.MONTHS, DateGroup.YEARS)
+    private const val OWN_HEADERS = "ownHeaders."
+    private const val FOLDER_HEADERS = "folderHeaders."
+    private const val FOLDER_DATE_GROUPS = "folderDateGroups."
 
     private lateinit var store: PreferenceStore
 
     // The view on screen, whose own settings the sheet shows and changes; every view keeps its grid and album settings apart.
     var view by mutableStateOf(SettingsView.RECENT)
+    // The album open on screen, by its stable key; an album follows Recent's headers until it is given its own.
+    var folder by mutableStateOf<String?>(null)
+    private val ownHeaders = mutableStateMapOf<String, Boolean>()
+    private val folderHeaders = mutableStateMapOf<String, Boolean>()
+    private val folderDateGroups = mutableStateMapOf<String, Set<DateGroup>>()
 
     // Each view starts from what the single setting was before views kept their own.
     private val columns = PerViewSetting(
@@ -104,6 +113,13 @@ object Settings {
         todaysSelection = preferences.getBoolean("todaysSelection", true)
         favoritesAsAlbums = preferences.getBoolean("favoritesAsAlbums", false)
         privateFavoritesAsGroups = preferences.getBoolean("privateFavoritesAsGroups", false)
+        for ((key, value) in preferences.all) {
+            when {
+                key.startsWith(OWN_HEADERS) && value is Boolean -> ownHeaders[key.removePrefix(OWN_HEADERS)] = value
+                key.startsWith(FOLDER_HEADERS) && value is Boolean -> folderHeaders[key.removePrefix(FOLDER_HEADERS)] = value
+                key.startsWith(FOLDER_DATE_GROUPS) && value is String -> folderDateGroups[key.removePrefix(FOLDER_DATE_GROUPS)] = value.split(',').mapNotNull { name -> DateGroup.entries.firstOrNull { it.name == name } }.toSet()
+            }
+        }
     }
 
     // Before the groups could be combined, a view had months (with or without their headers) or weeks inside months.
@@ -128,6 +144,19 @@ object Settings {
     fun dateGroupsIn(view: SettingsView): Set<DateGroup> = dateGroups[view]
     fun headersIn(view: SettingsView): Boolean = headers[view]
     fun activeDateGroupsIn(view: SettingsView): Set<DateGroup> = if (headersIn(view)) dateGroupsIn(view) else emptySet()
+    fun hasOwnHeaders(folder: String?): Boolean = folder != null && ownHeaders[folder] == true
+    // An album without headers of its own takes Recent's; any other grid takes its view's.
+    fun dateGroupsFor(view: SettingsView, folder: String?): Set<DateGroup> = when {
+        folder == null -> dateGroupsIn(view)
+        hasOwnHeaders(folder) -> folderDateGroups[folder] ?: DEFAULT_DATE_GROUPS
+        else -> dateGroupsIn(SettingsView.RECENT)
+    }
+    fun headersFor(view: SettingsView, folder: String?): Boolean = when {
+        folder == null -> headersIn(view)
+        hasOwnHeaders(folder) -> folderHeaders[folder] ?: true
+        else -> headersIn(SettingsView.RECENT)
+    }
+    fun activeDateGroupsFor(view: SettingsView, folder: String?): Set<DateGroup> = if (headersFor(view, folder)) dateGroupsFor(view, folder) else emptySet()
     fun stackSimilarIn(view: SettingsView): Boolean = stackSimilar[view]
     fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbums[view]
     fun albumColumnsIn(view: SettingsView): Int = albumColumns[view]
@@ -135,16 +164,44 @@ object Settings {
     fun coverColumnsIn(view: SettingsView): Int = if (groupedAlbumsIn(view) && view.canGroup) 1 else albumColumnsIn(view)
 
     val defaultColumns: Int get() = columnsIn(view)
-    val dateGroupsInView: Set<DateGroup> get() = dateGroupsIn(view)
-    val headersInView: Boolean get() = headersIn(view)
+    val dateGroupsInView: Set<DateGroup> get() = dateGroupsFor(view, folder)
+    val headersInView: Boolean get() = headersFor(view, folder)
     val stackSimilarInView: Boolean get() = stackSimilarIn(view)
     val groupedAlbumsInView: Boolean get() = groupedAlbumsIn(view)
     val albumColumnsInView: Int get() = albumColumnsIn(view)
     val coverColumns: Int get() = coverColumnsIn(view)
 
     fun updateDefaultColumns(value: Int) = columns.set(store, view, value.coerceIn(MIN_COLUMNS, MAX_COLUMNS))
-    fun updateDateGroups(value: Set<DateGroup>) = dateGroups.set(store, view, value)
-    fun updateHeaders(value: Boolean) = headers.set(store, view, value)
+    fun updateDateGroups(value: Set<DateGroup>) {
+        val open = folder
+        if (open == null) return dateGroups.set(store, view, value)
+        folderDateGroups[open] = value
+        store.edit { putString(FOLDER_DATE_GROUPS + open, value.joinToString(",") { it.name }) }
+    }
+
+    fun updateHeaders(value: Boolean) {
+        val open = folder
+        if (open == null) return headers.set(store, view, value)
+        folderHeaders[open] = value
+        store.edit { putBoolean(FOLDER_HEADERS + open, value) }
+    }
+
+    // Turned on, the album starts from the headers it was showing, so nothing changes until they are changed.
+    fun updateOwnHeaders(value: Boolean) {
+        val open = folder ?: return
+        if (value && !hasOwnHeaders(open)) {
+            val shownGroups = dateGroupsFor(view, open)
+            val shownHeaders = headersFor(view, open)
+            folderDateGroups[open] = shownGroups
+            folderHeaders[open] = shownHeaders
+            store.edit {
+                putString(FOLDER_DATE_GROUPS + open, shownGroups.joinToString(",") { it.name })
+                putBoolean(FOLDER_HEADERS + open, shownHeaders)
+            }
+        }
+        ownHeaders[open] = value
+        store.edit { putBoolean(OWN_HEADERS + open, value) }
+    }
     fun updateStackSimilar(value: Boolean) = stackSimilar.set(store, view, value)
     fun updateGroupedAlbums(value: Boolean) = groupedAlbums.set(store, view, value)
     fun updateAlbumColumns(value: Int) = albumColumns.set(store, view, value.coerceIn(MIN_COLUMNS, MAX_ALBUM_COLUMNS))

@@ -252,7 +252,10 @@ private fun LibraryEffects(controller: LibraryController, content: LibraryConten
         onDispose { }
     }
 
-    SideEffect { Settings.view = screen.settingsView }
+    SideEffect {
+        Settings.view = screen.settingsView
+        Settings.folder = screen.gridSource.folderKey
+    }
 
     // An album emptied while open (its last photo unfavourited) closes itself.
     LaunchedEffect(screen.openFavorite == null) { if (screen.openFavorite == null) navigation.openFavoriteAlbum = null }

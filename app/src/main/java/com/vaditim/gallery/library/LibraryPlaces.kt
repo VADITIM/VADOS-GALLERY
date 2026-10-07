@@ -36,6 +36,13 @@ val ViewerSource.reviewKey: String
         is ViewerSource.InFavoriteAlbum -> "favorite-album:$name"
     }
 
+// Albums of any kind may keep settings of their own, under the same key as their review progress.
+val ViewerSource?.folderKey: String?
+    get() = when (this) {
+        is ViewerSource.InAlbum, is ViewerSource.InPrivateGroup, is ViewerSource.InFavoriteAlbum -> reviewKey
+        else -> null
+    }
+
 val ViewerSource?.isPrivate: Boolean
     get() = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites || this == ViewerSource.PrivateRecent || this is ViewerSource.InPrivateFavoriteGroup
 
