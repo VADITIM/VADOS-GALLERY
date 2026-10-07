@@ -2,6 +2,7 @@ package com.vaditim.gallery.settings
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -88,6 +89,9 @@ object Settings {
         private set
     var autoplayVideos by mutableStateOf(true)
         private set
+    // When the last backup was saved, 0 for never; shown under the backup buttons.
+    var lastBackupMillis by mutableLongStateOf(0L)
+        private set
     // The day pill at the top left of a day's first photo, everywhere at once.
     var dayStamps by mutableStateOf(false)
         private set
@@ -112,6 +116,7 @@ object Settings {
         groundBrightness = preferences.getFloat("groundBrightness", DEFAULT_GROUND_BRIGHTNESS)
         autoplayVideos = preferences.getBoolean("autoplay", true)
         dayStamps = preferences.getBoolean("dayStamps", false)
+        lastBackupMillis = preferences.getLong("lastBackup", 0L)
         folderLabel = preferences.getBoolean("folderLabel", false)
         todaysSelection = preferences.getBoolean("todaysSelection", true)
         favoritesAsAlbums = preferences.getBoolean("favoritesAsAlbums", false)
@@ -247,6 +252,11 @@ object Settings {
     fun updateAutoplayVideos(value: Boolean) {
         autoplayVideos = value
         store.edit { putBoolean("autoplay", value) }
+    }
+
+    fun updateLastBackup(millis: Long) {
+        lastBackupMillis = millis
+        store.edit { putLong("lastBackup", millis) }
     }
 
     fun updateDayStamps(value: Boolean) {

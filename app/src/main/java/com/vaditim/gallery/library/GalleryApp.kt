@@ -208,6 +208,7 @@ private fun Library(viewModel: GalleryViewModel) {
             SettingsSheet(
                 visible = sheets.isOpen(AppSheet.SETTINGS),
                 isCovers = screen.folderMemory == null,
+                placeName = screen.folderName,
                 // Sorting through the photos on screen; a place of covers has none to go through.
                 onReview = screen.reviewSource?.let { source -> { navigation.review = source } },
                 onDismiss = sheets::dismiss,

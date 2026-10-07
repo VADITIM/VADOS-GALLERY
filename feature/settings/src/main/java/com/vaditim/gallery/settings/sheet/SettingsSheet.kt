@@ -2,7 +2,6 @@ package com.vaditim.gallery.settings.sheet
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
@@ -10,8 +9,20 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import java.util.Locale
+import java.util.Date
+import java.text.SimpleDateFormat
+import com.vaditim.gallery.components.FadingOverflow
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import kotlin.math.abs
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.TextStyle
@@ -50,7 +61,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -85,16 +95,16 @@ private fun SettingsTab.label(): String = when (this) {
 
 private const val DISABLED_ALPHA = 0.38f
 
-// `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any.
+// `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any. `placeName`: the album, group or location open inside the view, named under the first tab.
 @Composable
-fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, onPull: (Float) -> Unit = {}) {
-    var tab by remember { mutableStateOf(SettingsTab.PLACE) }
+fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, onPull: (Float) -> Unit = {}) {
+    val pager = rememberPagerState { SettingsTab.entries.size }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // The launchers live here, not in the tab, which is also composed once more just to be measured.
     val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) scope.launch {
             val isSaved = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openOutputStream(uri)!!.use { Backup.write(context, it) } }.isSuccess }
+            if (isSaved) Settings.updateLastBackup(System.currentTimeMillis())
             onAnnounce(if (isSaved) "Backup saved" else "Backup failed")
         }
     }
@@ -106,47 +116,32 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
     }
     val onBackup = { saveBackup.launch("vados-gallery-backup.json") }
     val onRestore = { loadBackup.launch(arrayOf("*/*")) }
-    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isCentered = true, onPull = onPull) {
-        Box(Modifier.padding(start = SHEET_MARGIN, end = SHEET_MARGIN, top = 4.dp, bottom = CARD_GAP)) {
-            SettingsSegments(SettingsTab.entries.map { it.label() }, tab.ordinal, height = TABS_HEIGHT) { tab = SettingsTab.entries[it] }
-        }
-        // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height; a shorter tab sits in the middle of it.
-        SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
-            val loose = constraints.copy(minHeight = 0)
-            val height = SettingsTab.entries.maxOf { measured ->
-                subcompose("measure-$measured") { SettingsTabContent(measured, isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore, isFilling = false) }.maxOf { it.measure(loose).height }
+    // The view's own name is already the tab's, so only a place inside it gets the second line.
+    val caption = placeName?.takeUnless { it.equals(Settings.view.label, ignoreCase = true) }
+    OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isFullHeight = true, onPull = onPull) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.padding(start = SHEET_MARGIN, end = SHEET_MARGIN, top = 4.dp, bottom = CARD_GAP)) {
+                SettingsTabs(pager, SettingsTab.entries.map { it.label() }, caption)
             }
-            val fixed = constraints.copy(minHeight = height, maxHeight = height)
-            val shown = subcompose("shown") {
-                AnimatedContent(
-                    targetState = tab,
-                    transitionSpec = {
-                        fadeIn(tween(Motion.SECTION_ENTER_MS, Motion.SECTION_ENTER_DELAY_MS, Motion.powerTwoOut))
-                            .togetherWith(fadeOut(tween(Motion.SECTION_LEAVE_MS, easing = Motion.powerTwoIn)))
-                    },
-                    contentAlignment = Alignment.Center,
-                    label = "settings-tab",
-                ) { shown -> SettingsTabContent(shown, isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore) }
-            }.map { it.measure(fixed) }
-            layout(constraints.maxWidth, height) { shown.forEach { it.place(0, 0) } }
-        }
-        // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
-        val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
-        val footStyle = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f))
-        Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            BasicText("V/AS", style = footStyle, modifier = Modifier.align(Alignment.Center))
-            if (version != null) BasicText("V$version", style = footStyle, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp))
+            // The tabs lie side by side and the finger drags between them; the pill above follows the same position, so a swipe and a tap move both together.
+            HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth(), beyondViewportPageCount = SettingsTab.entries.size - 1, verticalAlignment = Alignment.Top) { page ->
+                SettingsTabContent(SettingsTab.entries[page], isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore)
+            }
+            // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
+            val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
+            val footStyle = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f))
+            Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                BasicText("V/AS", style = footStyle, modifier = Modifier.align(Alignment.Center))
+                if (version != null) BasicText("V$version", style = footStyle, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp))
+            }
         }
     }
 }
 
 @Composable
-// `isFilling`: the shown tab fills the sheet's fixed height and centres in it; measured, it takes only its own.
-private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onBackup: () -> Unit, onRestore: () -> Unit, isFilling: Boolean = true) {
-    Column(
-        Modifier.fillMaxWidth().then(if (isFilling) Modifier.fillMaxHeight() else Modifier).padding(horizontal = SHEET_MARGIN),
-        verticalArrangement = Arrangement.spacedBy(CARD_GAP, Alignment.CenterVertically),
-    ) {
+// Every tab starts at the top under the tabs, so the first thing on it is where the eye already is.
+private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onBackup: () -> Unit, onRestore: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = SHEET_MARGIN), verticalArrangement = Arrangement.spacedBy(CARD_GAP)) {
         when (shown) {
             SettingsTab.PLACE -> {
                 if (onReview != null) {
@@ -205,6 +200,13 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                     Row(Modifier.fillMaxWidth().padding(start = CARD_INSET, end = CARD_INSET, top = 6.dp, bottom = CARD_INSET), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsButton("Back up", Modifier.weight(1f), onClick = onBackup)
                         SettingsButton("Restore", Modifier.weight(1f), onClick = onRestore)
+                    }
+                    if (Settings.lastBackupMillis > 0L) {
+                        CardDivider()
+                        Row(Modifier.fillMaxWidth().padding(horizontal = CARD_INSET, vertical = ROW_PADDING), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            SettingName("Last backup")
+                            SettingValue(remember(Settings.lastBackupMillis) { SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault()).format(Date(Settings.lastBackupMillis)) })
+                        }
                     }
                 }
             }
@@ -291,7 +293,10 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
     val currentFraction by rememberUpdatedState(fraction)
     val currentOnChange by rememberUpdatedState(onChange)
     var isHeld by remember { mutableStateOf(false) }
-    val thumb by animateDpAsState(if (isHeld) 24.dp else 20.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "slider-thumb")
+    // A finger resting on the track thickens it, so what is about to be dragged is plain before it moves.
+    var isTouched by remember { mutableStateOf(false) }
+    val thumb by animateDpAsState(if (isHeld) 26.dp else if (isTouched) 24.dp else 20.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "slider-thumb")
+    val trackHeight by animateDpAsState(if (isTouched) 14.dp else 6.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "slider-track")
     Column(Modifier.fillMaxWidth().padding(horizontal = CARD_INSET, vertical = ROW_PADDING)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             SettingName(label)
@@ -307,6 +312,7 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val from = currentFraction
                         var isArmed = false
+                        isTouched = true
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Main)
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -325,15 +331,16 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
                             change.consume()
                         } while (event.changes.any { it.pressed })
                         isHeld = false
+                        isTouched = false
                     }
                 }
                 .drawBehind {
-                    val trackHeight = 6.dp.toPx()
-                    val top = (size.height - trackHeight) / 2f
+                    val track = trackHeight.toPx()
+                    val top = (size.height - track) / 2f
                     val radius = thumb.toPx() / 2f
                     val center = radius + (size.width - radius * 2f) * fraction.coerceIn(0f, 1f)
-                    drawRoundRect(Palette.borderStrong, Offset(0f, top), Size(size.width, trackHeight), CornerRadius(trackHeight / 2f))
-                    drawRoundRect(accent, Offset(0f, top), Size(center, trackHeight), CornerRadius(trackHeight / 2f))
+                    drawRoundRect(Palette.borderStrong, Offset(0f, top), Size(size.width, track), CornerRadius(track / 2f))
+                    drawRoundRect(accent, Offset(0f, top), Size(center, track), CornerRadius(track / 2f))
                     drawCircle(accent, radius, Offset(center, size.height / 2f))
                     drawCircle(Palette.sunkenDeep, radius - 3.dp.toPx(), Offset(center, size.height / 2f))
                 },
@@ -403,7 +410,7 @@ private fun SettingsChoice(label: String, options: List<String>, chosen: Int, on
     }
 }
 
-// One-of-many as a sunken track with every option as a stop; the accent pill under the chosen one follows the finger across them and settles on the nearest when let go, which is when the choice is made. The tabs are one too.
+// One-of-many as a sunken track with every option as a stop; the accent pill under the chosen one follows the finger across them and settles on the nearest when let go, which is when the choice is made.
 @Composable
 private fun SettingsSegments(options: List<String>, chosen: Int, isEnabled: Boolean = true, height: Dp = SEGMENTS_HEIGHT, style: TextStyle = Type.navigation, onChoose: (Int) -> Unit) {
     val count = options.size
@@ -477,6 +484,65 @@ private fun SettingsSegments(options: List<String>, chosen: Int, isEnabled: Bool
 
 private val SEGMENTS_HEIGHT = 38.dp
 private val TABS_HEIGHT = 42.dp
+private val TABS_CAPTIONED_HEIGHT = 52.dp
+
+// The tabs as the same sunken track as every pick, the accent pill riding the pager's own position: it slides with a tap and follows the finger through a swipe. The first tab can carry the place open inside the view on a second line.
+@Composable
+private fun SettingsTabs(pager: PagerState, labels: List<String>, caption: String?) {
+    val accent = LocalAccent.current
+    val scope = rememberCoroutineScope()
+    val count = labels.size
+    val height by animateDpAsState(if (caption != null) TABS_CAPTIONED_HEIGHT else TABS_HEIGHT, tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "tabs-height")
+    val nearest by remember { derivedStateOf { (pager.currentPage + pager.currentPageOffsetFraction).roundToInt().coerceIn(0, count - 1) } }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(Shapes.capsule)
+            .background(Palette.sunkenDeep)
+            .border(1.dp, Palette.borderStrong, Shapes.capsule)
+            .drawBehind {
+                val inset = SEGMENTS_INSET.toPx()
+                val width = (size.width - inset * 2f) / count
+                val position = (pager.currentPage + pager.currentPageOffsetFraction).coerceIn(0f, (count - 1).toFloat())
+                drawRoundRect(accent, Offset(inset + width * position, inset), Size(width, size.height - inset * 2f), CornerRadius((size.height - inset * 2f) / 2f))
+            }
+            .padding(horizontal = SEGMENTS_INSET),
+    ) {
+        Row(Modifier.fillMaxWidth().fillMaxHeight()) {
+            labels.forEachIndexed { index, label ->
+                val ink by animateColorAsState(if (index == nearest) Palette.sunkenDeep else Palette.textMuted, tween(Motion.PRESS_MS), label = "tab-ink")
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .pressable(onClick = { scope.launch { pager.animateScrollToPage(index, animationSpec = tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut)) } }, pressedScale = 0.96f)
+                        .padding(horizontal = 8.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    BasicText(label, style = Type.navigation.copy(color = ink), maxLines = 1)
+                    if (index == 0) {
+                        AnimatedVisibility(caption != null, enter = fadeIn(tween(Motion.STATE_MS)) + expandVertically(tween(Motion.STATE_MS)), exit = fadeOut(tween(Motion.STATE_MS)) + shrinkVertically(tween(Motion.STATE_MS))) {
+                            // Kept through its own exit, so the name fades out rather than blanking first.
+                            val shown = rememberLastCaption(caption)
+                            FadingOverflow(Modifier.padding(top = 2.dp)) {
+                                BasicText(shown.uppercase(), style = Type.microLabel.copy(fontSize = 8.sp, letterSpacing = 1.5.sp, color = ink.copy(alpha = 0.8f)), maxLines = 1, softWrap = false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberLastCaption(caption: String?): String {
+    var last by remember { mutableStateOf(caption.orEmpty()) }
+    if (caption != null) last = caption
+    return last
+}
 private val SEGMENTS_INSET = 3.dp
 
 // Days, weeks, months and years can be on together, at least one; the switch under them turns every cut off and greys them, keeping the pick for when it comes back.

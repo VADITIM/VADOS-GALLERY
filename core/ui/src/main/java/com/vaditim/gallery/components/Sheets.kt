@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -69,7 +70,7 @@ import kotlinx.coroutines.launch
 // A menu over content: a pane of glass that arrives from just below on the overshoot and leaves straight down and quicker (dna/05-motion.md §4). Tapping anywhere outside it closes it, so it never traps what is behind it.
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, isCentered: Boolean = false, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
+fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground: Color = Palette.ground, reveal: () -> Float = { 0f }, trailingLabel: String? = null, isFloating: Boolean = false, isCentered: Boolean = false, isFullHeight: Boolean = false, onPull: (Float) -> Unit = {}, content: @Composable () -> Unit) {
     // A gesture can raise the sheet before it is open: `reveal` 0 to 1 places it frame by frame, and the gesture opens it once it has carried it all the way.
     val isRevealing by remember { derivedStateOf { reveal() > 0f } }
     val isFollowing = { !visible && reveal() > 0f }
@@ -111,7 +112,7 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             // A floating sheet hangs from a fixed edge near the top, centred, so a change in its height only ever moves its bottom.
             // A centred sheet sits in the middle of the screen, between the status and navigation bars.
-            contentAlignment = if (isCentered) Alignment.Center else if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
+            contentAlignment = if (isFullHeight) Alignment.TopCenter else if (isCentered) Alignment.Center else if (isFloating) Alignment.TopCenter else Alignment.BottomCenter,
         ) {
             Column(
                 Modifier
@@ -127,8 +128,10 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                     )
                     .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull }
                     .onSizeChanged { sheetHeight = it.height.toFloat().coerceAtLeast(1f) }
-                    .then(if (isCentered) Modifier.statusBarsPadding().navigationBarsPadding() else if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
+                    .then(if (isCentered || isFullHeight) Modifier.statusBarsPadding().navigationBarsPadding() else if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
                     .padding(12.dp)
+                    // A full-height sheet runs from just under the status bar to just over the navigation bar, covering the top row and the nav.
+                    .then(if (isFullHeight) Modifier.fillMaxHeight() else Modifier)
                     .then(if (isFloating || isCentered) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
                     .fillMaxWidth()
                     .glass(Shapes.sheet, ground)

@@ -1,8 +1,7 @@
-# 1.1.58
+# 1.1.59
 
-- Settings are redesigned: every group sits in its own card, with clearer contrast and the same spacing everywhere.
-- Switches, column pickers and the tabs share one look; Folder label is now the same picker as the columns.
-- Stack similar shots moved to the place's own tab, Day stamps and Folder label to Interface.
-- Sliders only move when dragged sideways, so scrolling past them no longer changes them.
-- Review photos, Back up and Restore are buttons.
-- The app's version shows at the bottom right of Settings.
+- Settings fill the screen from top to bottom, covering the top row, with each tab's content starting at the top.
+- Swipe sideways to move between the settings tabs; the tab pill slides along with your finger.
+- Inside an album, the first tab names it under the view, such as FAVORITES / DESIGN.
+- Backup shows when the last backup was saved.
+- A slider's track thickens while your finger rests on it.
