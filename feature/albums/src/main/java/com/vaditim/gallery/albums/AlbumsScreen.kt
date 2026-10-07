@@ -9,9 +9,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +71,7 @@ import com.vaditim.gallery.components.currentSettingsView
 import com.vaditim.gallery.components.dragToArrange
 import com.vaditim.gallery.components.entrance
 import com.vaditim.gallery.components.jiggle
+import com.vaditim.gallery.components.liftedShadow
 import com.vaditim.gallery.components.rememberReorder
 import com.vaditim.gallery.components.reorderable
 import com.vaditim.gallery.components.stackScale
@@ -224,6 +224,7 @@ fun AlbumsScreen(
                             onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(listOf(album)) else onLongPress(album) } },
                             modifier = Modifier.jiggle(reorder, entry.key, isRearranging),
                             isSelected = album.relativePath in selectedPaths,
+                            isLifted = reorder.draggedKey == entry.key,
                         )
                     }
                 }
@@ -422,6 +423,8 @@ private fun GroupRow(
     val geometry = remember { GroupGeometry() }
     val currentAlbums by rememberUpdatedState(albums)
     val currentIsRearranging by rememberUpdatedState(isRearranging)
+    val currentIsOpen by rememberUpdatedState(isOpen)
+    val currentIsPicking by rememberUpdatedState(isPicking)
     val currentOnStartRearranging by rememberUpdatedState(onStartRearranging)
     val currentOnArrangeGroup by rememberUpdatedState(onArrangeGroup)
     var heldId by remember { mutableStateOf<Long?>(null) }
@@ -435,6 +438,8 @@ private fun GroupRow(
     val groupGap = with(LocalDensity.current) { GROUP_GAP.toPx() }
     val heldScale by animateFloatAsState(if (reorder.dropTargetKey != null && heldId != null) DROPPING_SCALE else HELD_SCALE, tween(Motion.STATE_MS, easing = Motion.backOut), label = "held")
     val haptic = LocalHapticFeedback.current
+    // The whole group carried, its name and count lift with it.
+    val headerShadow = liftedShadow(isHeld())
 
     // Card `index` of the albums: the deeper ones leave a little later and come back a little sooner, and opening overshoots slightly.
     fun progressOf(index: Int): Float {
@@ -455,98 +460,109 @@ private fun GroupRow(
     Layout(
         modifier = modifier
             .jiggle(stack.key, isMovable, pivot = LIST_COVER / 2, isHeld = isHeld)
+            // The group's own gestures stay attached whatever state it is in and each asks, as a finger lands, whether it applies: taking a gesture handler off while a finger is down cancels every gesture under it, so turning rearranging on would drop the album just being picked up.
             // Each card follows the swipe back toward the stack, the last ones pulled hardest, so they land under one another; let go far enough and the group lays itself down, otherwise the cards go back.
-            .then(
-                if (!isOpen || isRearranging) Modifier else Modifier.pointerInput(stack.name) {
-                    var pulled = 0f
-                    val home = {
-                        scope.launch {
-                            launch { arrow.animateTo(1f, tween((Motion.STATE_MS * (1f - arrow.value)).roundToInt(), easing = Motion.powerTwoOut)) }
-                            time.animateTo(1f, tween((Motion.STATE_MS * (1f - time.value)).roundToInt(), easing = Motion.powerTwoOut))
-                            isPulled = false
-                            onMotion(false)
-                        }
-                        Unit
+            .pointerInput(stack.name) {
+                var pulled = 0f
+                val home = {
+                    scope.launch {
+                        launch { arrow.animateTo(1f, tween((Motion.STATE_MS * (1f - arrow.value)).roundToInt(), easing = Motion.powerTwoOut)) }
+                        time.animateTo(1f, tween((Motion.STATE_MS * (1f - time.value)).roundToInt(), easing = Motion.powerTwoOut))
+                        isPulled = false
+                        onMotion(false)
                     }
-                    detectHorizontalDragGestures(
-                        onDragStart = {
-                            pulled = 0f
-                            isPulled = true
-                            onMotion(true)
-                        },
-                        onDragEnd = {
-                            if (1f - time.value > PULL_CLOSE) {
-                                Haptics.tick(context)
-                                currentOnOpenChange(false)
-                            } else {
-                                home()
-                            }
-                        },
-                        onDragCancel = { home() },
-                    ) { change, amount ->
+                    Unit
+                }
+                val pull = { amount: Float ->
+                    pulled = (pulled + amount).coerceAtMost(0f)
+                    val reach = size.width * PULL_REACH
+                    val shown = (1f + pulled / reach).coerceIn(0f, 1f)
+                    scope.launch {
+                        time.snapTo(shown)
+                        arrow.snapTo(shown)
+                    }
+                    Unit
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!currentIsOpen || currentIsRearranging) return@awaitEachGesture
+                    var overSlop = 0f
+                    val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
                         change.consume()
-                        pulled = (pulled + amount).coerceAtMost(0f)
-                        val reach = size.width * PULL_REACH
-                        val shown = (1f + pulled / reach).coerceIn(0f, 1f)
-                        scope.launch {
-                            time.snapTo(shown)
-                            arrow.snapTo(shown)
-                        }
+                        overSlop = over
+                    } ?: return@awaitEachGesture
+                    pulled = 0f
+                    isPulled = true
+                    onMotion(true)
+                    pull(overSlop)
+                    val isReleased = horizontalDrag(slop.id) { change ->
+                        change.consume()
+                        pull(change.positionChange().x)
                     }
-                },
-            )
+                    if (isReleased && 1f - time.value > PULL_CLOSE) {
+                        Haptics.tick(context)
+                        currentOnOpenChange(false)
+                    } else {
+                        home()
+                    }
+                }
+            }
             // Closed, a swipe right opens it by the finger the same way, the arrow going with it; letting go far enough carries it on, otherwise the cards go back.
-            .then(
-                if (isOpen || isRearranging || isPicking) Modifier else Modifier.pointerInput(stack.name) {
-                    var pushed = 0f
-                    val settle = {
-                        scope.launch {
-                            launch { arrow.animateTo(0f, tween((Motion.STATE_MS * arrow.value).roundToInt(), easing = Motion.powerTwoOut)) }
-                            time.animateTo(0f, tween((Motion.STATE_MS * time.value).roundToInt(), easing = Motion.powerTwoOut))
-                            onMotion(false)
-                        }
-                        Unit
+            .pointerInput(stack.name) {
+                var pushed = 0f
+                val settle = {
+                    scope.launch {
+                        launch { arrow.animateTo(0f, tween((Motion.STATE_MS * arrow.value).roundToInt(), easing = Motion.powerTwoOut)) }
+                        time.animateTo(0f, tween((Motion.STATE_MS * time.value).roundToInt(), easing = Motion.powerTwoOut))
+                        onMotion(false)
                     }
-                    val push = { amount: Float ->
-                        pushed = (pushed + amount).coerceAtLeast(0f)
-                        val shown = (pushed / (size.width * PULL_REACH)).coerceIn(0f, 1f)
-                        scope.launch {
-                            time.snapTo(shown)
-                            arrow.snapTo(shown)
-                        }
-                        Unit
+                    Unit
+                }
+                val push = { amount: Float ->
+                    pushed = (pushed + amount).coerceAtLeast(0f)
+                    val shown = (pushed / (size.width * PULL_REACH)).coerceIn(0f, 1f)
+                    scope.launch {
+                        time.snapTo(shown)
+                        arrow.snapTo(shown)
                     }
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        // On the stack's pictures a drag picks the group up instead, so the swipe stands aside there.
-                        if (currentOnStartRearranging != null && down.position.x < picturesWidth) return@awaitEachGesture
-                        var overSlop = 0f
-                        val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
-                            change.consume()
-                            overSlop = over
-                        } ?: return@awaitEachGesture
-                        pushed = 0f
-                        onMotion(true)
-                        push(overSlop)
-                        val isReleased = horizontalDrag(slop.id) { change ->
-                            change.consume()
-                            push(change.positionChange().x)
-                        }
-                        if (isReleased && time.value > PUSH_OPEN) {
-                            Haptics.tick(context)
-                            currentOnOpenChange(true)
-                        } else {
-                            settle()
-                        }
+                    Unit
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (currentIsOpen || currentIsRearranging || currentIsPicking) return@awaitEachGesture
+                    // On the stack's pictures a drag picks the group up instead, so the swipe stands aside there.
+                    if (currentOnStartRearranging != null && down.position.x < picturesWidth) return@awaitEachGesture
+                    var overSlop = 0f
+                    val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                        change.consume()
+                        overSlop = over
+                    } ?: return@awaitEachGesture
+                    pushed = 0f
+                    onMotion(true)
+                    push(overSlop)
+                    val isReleased = horizontalDrag(slop.id) { change ->
+                        change.consume()
+                        push(change.positionChange().x)
                     }
-                },
-            )
+                    if (isReleased && time.value > PUSH_OPEN) {
+                        Haptics.tick(context)
+                        currentOnOpenChange(true)
+                    } else {
+                        settle()
+                    }
+                }
+            }
             // A tap on the heading's line closes the group, not only on its arrow.
-            .then(
-                if (!isOpen || isRearranging) Modifier else Modifier.pointerInput(stack.name) {
-                    detectTapGestures { offset -> if (offset.y < geometry.headingHeight) currentOnOpenChange(false) }
-                },
-            ),
+            .pointerInput(stack.name) {
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    if (!currentIsOpen || currentIsRearranging || down.position.y >= geometry.headingHeight) return@awaitEachGesture
+                    waitForUpOrCancellation()?.let { up ->
+                        up.consume()
+                        currentOnOpenChange(false)
+                    }
+                }
+            },
         content = {
             // The name and count take the whole rest of the row, so a tap anywhere beside the stack opens it; opened, the area is gone from under the cards.
             Column(
@@ -557,14 +573,14 @@ private fun GroupRow(
                 LabelReveal(
                     stack.name,
                     isShown = true,
-                    style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current),
+                    style = Type.cardTitle.copy(fontSize = 20.sp, color = LocalAccent.current, shadow = headerShadow),
                     presence = { 1f - time.value },
                     isRevealedAtStart = true,
                     isCutFromStart = true,
                 )
                 BasicText(
                     albums.sumOf { it.items.size }.toString(),
-                    style = Type.value.copy(fontSize = 15.sp),
+                    style = Type.value.copy(fontSize = 15.sp, shadow = headerShadow),
                     modifier = Modifier.padding(top = 6.dp).graphicsLayer { alpha = (1f - Motion.powerThreeInOut.transform(time.value) * 2f).coerceIn(0f, 1f) },
                 )
             }
@@ -591,6 +607,7 @@ private fun GroupRow(
                         } },
                         isSelected = isSelected,
                         isList = false,
+                        isLifted = heldId == album.id,
                         // The name waits until the card is well clear of the stack, so names never print over each other.
                         labelAlpha = { ((progressOf(index) - 0.5f) * 2f).coerceIn(0f, 1f) },
                         modifier = Modifier

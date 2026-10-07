@@ -131,7 +131,8 @@ class MediaRepository(private val context: Context) {
                 val isVideo = cursor.getInt(typeColumn) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
                 val taken = cursor.getLong(takenColumn)
                 // Stored sizes are as the sensor wrote them; a photo turned a quarter is taller than wide, and the viewer frame must know before it decodes.
-                val isTurned = cursor.getInt(orientationColumn) % 180 == 90
+                val orientation = cursor.getInt(orientationColumn)
+                val isTurned = orientation % 180 == 90
                 items += MediaItem(
                     id = id,
                     uri = ContentUris.withAppendedId(if (isVideo) VIDEOS else IMAGES, id),
@@ -150,6 +151,7 @@ class MediaRepository(private val context: Context) {
                     sizeBytes = cursor.getLong(sizeColumn),
                     absolutePath = cursor.getString(pathOnDiskColumn) ?: "",
                     expiresMillis = if (isTrashed) cursor.getLong(expiresColumn) * 1000 else 0,
+                    orientation = orientation,
                 )
             }
         }

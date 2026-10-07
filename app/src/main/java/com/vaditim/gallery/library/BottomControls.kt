@@ -35,6 +35,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -308,7 +309,8 @@ private fun ViewerActions(controller: LibraryController, item: MediaItem, source
             IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
             return@Row
         }
-        IconButton(onClick = { actions.toggleFavorite(item) }) { FavoriteHeart(item.isFavorite, if (item.isFavorite) Palette.favorite else Palette.textBody) }
+        // One heart per photo, so swiping to another never plays a like or an unlike.
+        IconButton(onClick = { actions.toggleFavorite(item) }) { key(item.id) { FavoriteHeart(item.isFavorite, if (item.isFavorite) Palette.favorite else Palette.textBody) } }
         IconButton(onClick = { bar.onCrop() }) { CropIcon(Palette.textBody) }
         IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
         IconButton(onClick = { bar.onMore() }) { MoreIcon(Palette.textBody) }

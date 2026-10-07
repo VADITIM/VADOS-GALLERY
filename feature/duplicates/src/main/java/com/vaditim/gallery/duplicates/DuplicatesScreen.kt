@@ -216,7 +216,8 @@ private fun DuplicateTile(item: MediaItem, isMarked: Boolean, onToggle: () -> Un
     val markColor by animateColorAsState(if (isMarked) Palette.danger else accent, tween(Motion.STATE_MS), label = "duplicate-mark")
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).pressable(onClick = onToggle, pressedScale = 0.95f, onLongClick = onPeek).clip(Shapes.tile).background(Palette.surface)) {
-            AsyncImage(model = Thumbnail(item.uri, TILE_PIXELS), contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            // Private photos are not in MediaStore and have no cached thumbnail; they are decoded from the file at the tile's size.
+            AsyncImage(model = if (item.uri.scheme == "content") Thumbnail.of(item, TILE_PIXELS) else item.uri, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = shade }.background(Palette.viewerGround))
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).clip(Shapes.capsule).background(Palette.panelSolid).padding(horizontal = 8.dp, vertical = 5.dp)) {
                 if (isMarked) TrashIcon(markColor, size = 14.dp) else CheckIcon(markColor, size = 14.dp)

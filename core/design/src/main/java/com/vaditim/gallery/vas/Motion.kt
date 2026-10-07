@@ -28,6 +28,8 @@ object Motion {
 
     // The dots and sparkles flying off a heart as it turns favourite.
     const val BURST_MS = 520
+    // A heart's fill draining out of it as it stops being a favourite.
+    const val HEART_DRAIN_MS = 380
 
     // A sheet opening out of its button: the pane growing from the button to its own size, then what it holds rising in one after another, starting this far into the growth.
     // The growth starts while the button's icon is still leaving, so the pane is there in about a quarter second.
@@ -58,8 +60,10 @@ object Motion {
     const val ENTRANCE_STAGGER_MS = 12
     const val ENTRANCE_WINDOW_MS = 350
 
-    // The grid timeline: the bubble fading in when a finger takes hold of it, and the strip handed between finger and grid.
+    // The grid timeline: the strip growing when a finger takes hold of it, and the strip handed between finger and grid.
     const val TIMELINE_REVEAL_MS = 180
+    // The held month stepping out of the strip and widening into its full name, or going back as the finger moves on.
+    const val TIMELINE_LIFT_MS = 240
 
     // The bar-sweep reveal on a title: the bar grows, then retracts slower because that half is the one read; leaving is a quicker cut.
     const val SWEEP_GROW_MS = 420

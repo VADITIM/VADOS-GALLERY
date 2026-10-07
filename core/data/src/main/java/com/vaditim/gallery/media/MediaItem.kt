@@ -20,6 +20,8 @@ data class MediaItem(
     val absolutePath: String,
     // When Android empties a trashed item for good; 0 for anything not in the trash.
     val expiresMillis: Long = 0,
+    // The quarter turns MediaStore records for a photo, in degrees; `width` and `height` are already turned by it.
+    val orientation: Int = 0,
 )
 
 // An album is a folder, the way MediaStore buckets them. Items run oldest to newest, like every list in this app.

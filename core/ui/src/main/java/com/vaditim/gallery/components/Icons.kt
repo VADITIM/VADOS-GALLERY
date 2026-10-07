@@ -7,6 +7,8 @@ import kotlin.math.PI
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -72,10 +74,12 @@ private const val ALBUM_3 = "M6.87943 4.5C5.62786 4.5 4.60163 5.33974 4.25915 6.
 // Parsed once for the whole app: a grid draws a heart per favourite and parsing each one would cost the scroll.
 private val parsedPaths = HashMap<String, Path>()
 
+private fun parsedPath(path: String): Path = parsedPaths.getOrPut(path) { PathParser().parsePathString(path).toPath().apply { fillType = PathFillType.EvenOdd } }
+
 @Composable
 // `strokeWidth`, in viewBox units, draws the outlines instead of filling them. `viewBox` is the height and `viewBoxWidth` the width, which differ for a glyph that is not square; it sits centred in its box.
 private fun SvgGlyph(color: Color, size: Dp, viewBox: Float = 24f, strokeWidth: Float? = null, viewBoxWidth: Float = viewBox, vararg paths: String) {
-    val parsed = paths.map { parsedPaths.getOrPut(it) { PathParser().parsePathString(it).toPath().apply { fillType = PathFillType.EvenOdd } } }
+    val parsed = paths.map(::parsedPath)
     Canvas(Modifier.size(size)) {
         val scale = this.size.minDimension / maxOf(viewBox, viewBoxWidth)
         translate((this.size.width - viewBoxWidth * scale) / 2f, (this.size.height - viewBox * scale) / 2f) {
@@ -132,22 +136,45 @@ fun HeartIcon(isFilled: Boolean, color: Color, size: Dp = 24.dp) = SvgGlyph(colo
 
 private const val BURST_DOTS = 8
 private const val BURST_SPARKLES = 4
+// Where the solid heart's fill starts and ends, top to bottom, in its 24 units.
+private const val HEART_TOP = 2.5f
+private const val HEART_BOTTOM = 20.5f
+// How far a draining heart dips while it empties.
+private const val DRAIN_DIP = 0.1f
 
-// A heart that pops when it turns favourite while dots and four-point sparkles fly off it; it starts quiet, so a heart that is already on does nothing.
+// A heart that pops when it turns favourite while dots and four-point sparkles fly off it, and drains its fill out from the top when it stops being one; it starts quiet, so a heart that is already on or off does nothing.
 @Composable
 fun FavoriteHeart(isFavorite: Boolean, color: Color, size: Dp = 24.dp) {
     val progress = remember { Animatable(1f) }
+    // How much fill is left while the heart drains, 1 to 0.
+    val drain = remember { Animatable(0f) }
     var wasFavorite by remember { mutableStateOf(isFavorite) }
+    // The colour it was filled in, which drains out while the outline already takes the new one.
+    val filledColor = remember { mutableStateOf(color) }
+    SideEffect { if (isFavorite) filledColor.value = color }
     LaunchedEffect(isFavorite) {
-        if (isFavorite && !wasFavorite) {
+        // Settled before animating, so a tap back mid-way still reads the change.
+        val was = wasFavorite
+        wasFavorite = isFavorite
+        if (isFavorite && !was) {
+            drain.snapTo(0f)
             progress.snapTo(0f)
             progress.animateTo(1f, tween(Motion.BURST_MS, easing = LinearEasing))
+        } else if (!isFavorite && was) {
+            // A like taken back mid-burst stops its sparkles where they are.
+            progress.snapTo(1f)
+            drain.snapTo(1f)
+            drain.animateTo(0f, tween(Motion.HEART_DRAIN_MS, easing = Motion.powerThreeInOut))
         }
-        wasFavorite = isFavorite
     }
     val burst = progress.value
-    // The heart swells past its size and settles back, drawn at the real size rather than scaled.
-    val pop = if (burst < 1f) 1f + 0.35f * sin(PI.toFloat() * Motion.backOut.transform(burst)) else 1f
+    val left = drain.value
+    // The heart swells past its size and settles back, drawn at the real size rather than scaled; draining, it dips a little and comes back.
+    val pop = when {
+        burst < 1f -> 1f + 0.35f * sin(PI.toFloat() * Motion.backOut.transform(burst))
+        left > 0f -> 1f - DRAIN_DIP * sin(PI.toFloat() * left)
+        else -> 1f
+    }
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         if (burst < 1f) {
             Canvas(Modifier.size(size)) {
@@ -179,7 +206,22 @@ fun FavoriteHeart(isFavorite: Boolean, color: Color, size: Dp = 24.dp) {
             }
         }
         // Unbounded, or the box's fixed size would hold the swelling heart back.
-        Box(Modifier.wrapContentSize(unbounded = true)) { HeartIcon(isFilled = isFavorite, color = color, size = size * pop) }
+        Box(Modifier.wrapContentSize(unbounded = true)) {
+            if (!isFavorite && left > 0f) DrainingHeart(left, outline = color, fill = filledColor.value, size = size * pop) else HeartIcon(isFilled = isFavorite, color = color, size = size * pop)
+        }
+    }
+}
+
+// The outline with what is left of the fill under it, its surface sinking toward the tip as `left` runs down.
+@Composable
+private fun DrainingHeart(left: Float, outline: Color, fill: Color, size: Dp) {
+    val solid = parsedPath(HEART_SOLID)
+    val ring = parsedPath(HEART_OUTLINE)
+    Canvas(Modifier.size(size)) {
+        scale(this.size.minDimension / 24f, pivot = Offset.Zero) {
+            clipRect(left = 0f, top = HEART_BOTTOM - (HEART_BOTTOM - HEART_TOP) * left, right = 24f, bottom = 24f) { drawPath(solid, fill) }
+            drawPath(ring, outline)
+        }
     }
 }
 

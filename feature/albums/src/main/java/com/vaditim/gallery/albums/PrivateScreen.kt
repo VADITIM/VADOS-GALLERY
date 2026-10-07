@@ -115,6 +115,7 @@ fun PrivateGroupsScreen(
                 onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(group) else onLongPress(group) } },
                 modifier = reorderable(reorder, group.name, isEnabled = true).entrance().jiggle(reorder, group.name, isRearranging),
                 isSelected = group.name in selectedNames,
+                isLifted = reorder.draggedKey == group.name,
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New album", onClick = onNewGroup) } }

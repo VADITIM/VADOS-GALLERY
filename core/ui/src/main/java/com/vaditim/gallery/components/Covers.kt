@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -144,18 +145,29 @@ fun coverColumns(): Int = Settings.coverColumnsIn(currentSettingsView())
 // Whether cover names take the section colour, as the albums made inside Favorites do; real folders keep plain names.
 val LocalAccentedCoverNames = staticCompositionLocalOf { false }
 
-// A cover with its name and count: a card in a grid, a row when there is one column.
+// How dark the shadow under a carried cover's name and count gets: slight, it only lifts them off the grid.
+private const val LIFTED_SHADOW_ALPHA = 0.7f
+
+// A cover being carried while rearranging casts its name and count a slight shadow, lifted off the grid with its card; it fades in with the hold and out as the card settles.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = coverColumns() == 1) {
+fun liftedShadow(isLifted: Boolean): Shadow? {
+    val lift by animateFloatAsState(if (isLifted) 1f else 0f, tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "lifted-shadow")
+    return if (lift > 0f) Type.dropShadow.copy(color = Type.dropShadow.color.copy(alpha = LIFTED_SHADOW_ALPHA * lift)) else null
+}
+
+// A cover with its name and count: a card in a grid, a row when there is one column. `isLifted` while it is the one being carried.
+@Composable
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = coverColumns() == 1, isLifted: Boolean = false) {
     val request = rememberCoverRequest(cover)
     val sharpRequest = rememberSharpCoverRequest(cover)
     val nameColor = if (LocalAccentedCoverNames.current) LocalAccent.current else Palette.textBright
+    val shadow = liftedShadow(isLifted)
     if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {
             CoverImage(request, sharpRequest, name, Modifier.size(LIST_COVER), isSelected)
             Column(Modifier.padding(start = 18.dp).weight(1f).graphicsLayer { alpha = labelAlpha() }) {
-                BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = nameColor), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp), modifier = Modifier.padding(top = 6.dp))
+                BasicText(name, style = Type.cardTitle.copy(fontSize = 20.sp, color = nameColor, shadow = shadow), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BasicText(count.toString(), style = Type.value.copy(fontSize = 15.sp, shadow = shadow), modifier = Modifier.padding(top = 6.dp))
             }
         }
     } else {
@@ -164,7 +176,7 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
             // Narrow cards shrink the name until it fits, down to a size that still reads; only past that is it cut.
             BasicText(
                 name,
-                style = Type.cardTitle.copy(color = nameColor),
+                style = Type.cardTitle.copy(color = nameColor, shadow = shadow),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.cardTitle.fontSize, stepSize = 0.5.sp),
@@ -172,7 +184,7 @@ fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, 
             )
             BasicText(
                 count.toString(),
-                style = Type.value,
+                style = Type.value.copy(shadow = shadow),
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = Type.value.fontSize, stepSize = 0.5.sp),
                 modifier = Modifier.padding(start = 4.dp, top = 2.dp).graphicsLayer { alpha = labelAlpha() },
@@ -187,7 +199,7 @@ private fun rememberCoverRequest(cover: MediaItem?): ImageRequest? {
     return remember(cover?.uri) {
         cover?.let {
             // Private covers live outside MediaStore and have no cached thumbnail, so they are decoded from the file.
-            val data: Any = if (it.uri.scheme == "content") Thumbnail(it.uri, COVER_PIXELS) else it.uri
+            val data: Any = if (it.uri.scheme == "content") Thumbnail.of(it, COVER_PIXELS) else it.uri
             ImageRequest.Builder(context).data(data).size(COVER_PIXELS).build()
         }
     }

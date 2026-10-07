@@ -34,6 +34,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -45,9 +51,12 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
@@ -76,8 +85,11 @@ private const val END_REACH = 0.02f
 private val STRIP_WIDTH = 24.dp
 // How much bigger the labels are while the strip is held, growing to the left from the screen edge.
 private const val HELD_GROWTH = 1.5f
-// How far the held month moves left to stay clear of the grown labels.
-private val BUBBLE_GROWN_SHIFT = 24.dp
+// How far the held month steps out of the strip to the left, clear of the grown labels.
+private val LIFTED_SHIFT = 72.dp
+// The fade over the end of the held month's name while it is still widening.
+private val WIDENING_FADE = 12.dp
+private val WIDENING_RANGE = 0.001f..0.999f
 // Room around a label that still counts as taking hold of it.
 private val LABEL_GRAB_SLACK = 6.dp
 // Each label's full height on the strip, a year's being the larger.
@@ -95,7 +107,8 @@ private const val YEAR_SMALLEST = 0.7f
 private const val MONTH_GONE = 0.14f
 private const val MONTH_FADE = 0.2f
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
-private val BUBBLE_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+// The held month's full name, which its short one widens into; the short one is where it starts.
+private val FULL_FORMAT = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
 // Where a month starts in the grid: the index of its first header when there is one, so a jump lands with the header in view.
 private data class TimelineMark(val index: Int, val month: YearMonth)
@@ -169,6 +182,25 @@ fun Modifier.timelineGrab(grab: TimelineGrab): Modifier =
             grab.release()
         }
     }
+
+// Text shown at `shortWidth` while `widening` is 0, opening to its own width as it reaches 1; the end it has not reached yet fades rather than being cut.
+private fun Modifier.widening(shortWidth: Int, widening: () -> Float): Modifier =
+    clipToBounds()
+        // Its own layer only while it widens, so the labels at rest cost nothing extra.
+        .graphicsLayer { compositingStrategy = if (widening() in WIDENING_RANGE) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
+        .drawWithContent {
+            drawContent()
+            if (widening() in WIDENING_RANGE) {
+                val fade = WIDENING_FADE.toPx()
+                drawRect(Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = size.width - fade, endX = size.width), blendMode = BlendMode.DstIn)
+            }
+        }
+        .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+            val progress = widening()
+            val width = if (progress <= 0f) placeable.width else (shortWidth + (placeable.width - shortWidth) * progress).roundToInt()
+            layout(width.coerceIn(constraints.minWidth, constraints.maxWidth), placeable.height) { placeable.place(0, 0) }
+        }
 
 // Every year with all its months, oldest at the top like the grid, fitted whole into a short window along the grid's right edge and taken hold of from either edge. Labels swell around the marker and shrink away from it, so the marker runs down the window as the grid scrolls. Held at either edge, the marker is the finger and the label under it is where the grid goes.
 @Composable
@@ -250,7 +282,6 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val track = height * TRACK_SHARE * grown()
         val top = (height - track) / 2f
         val density = LocalDensity.current
-        val labelHalf = with(density) { MONTH_HEIGHT.toPx() } / 2f
         val monthHeight = with(density) { MONTH_HEIGHT.toPx() }
         val yearHeight = with(density) { YEAR_HEIGHT.toPx() }
         val thumbHalf = with(density) { THUMB_HEIGHT.toPx() } / 2f
@@ -295,8 +326,9 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
         val placement by remember(labels, top, track) { derivedStateOf { placementAt(position()) } }
         fun markerY(at: Float): Float = placementAt(at).marker
 
-        // Only the labels that show are composed; the set changes a label at a time, never per frame.
-        val shownSlots by remember(labels, top, track) { derivedStateOf { labels.indices.filter { placement.presence[it] > 0f } } }
+        // Only the labels that show are composed, and the held month; the set changes a label at a time, never per frame.
+        val shownSlots by remember(labels, top, track) { derivedStateOf { labels.indices.filter { placement.presence[it] > 0f || (heldMark != null && labels[it].month == heldMark) } } }
+        val textMeasurer = rememberTextMeasurer()
         run {
             val side = Alignment.TopEnd
             shownSlots.forEach { slot ->
@@ -306,33 +338,43 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                     DisposableEffect(grabKey) { onDispose { grab.labels.remove(grabKey) } }
                     val isMonth = label.month != null
                     val isCurrent = if (isMonth) label.month == shownMark else label.year == shownMark?.month?.year
+                    // Held, the month under the finger steps out of the strip to the left, beside the finger, and widens into its full name; moving on to another month hands that over, and letting go puts it back.
+                    val lift by animateFloatAsState(if (isMonth && heldMark != null && label.month == heldMark) 1f else 0f, tween(Motion.TIMELINE_LIFT_MS, easing = Motion.powerThreeInOut), label = "timeline-lift")
+                    val style = Type.value.copy(
+                        fontSize = if (isMonth) 10.sp else 13.sp,
+                        color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
+                    )
+                    val shortText = if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString()
+                    // The full name starts with the short one, so it is shown cut to the short one's width and opened from there.
+                    val shortWidth = remember(shortText, style) { textMeasurer.measure(shortText, style).size.width }
                     BasicText(
-                        if (isMonth) MONTH_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else label.year.toString(),
-                        style = Type.value.copy(
-                            fontSize = if (isMonth) 10.sp else 13.sp,
-                            color = if (isCurrent) accent else if (isMonth) Palette.textMuted else Palette.textBright,
-                        ),
+                        if (lift > 0f) FULL_FORMAT.format(label.month!!.month).uppercase(Locale.ENGLISH) else shortText,
+                        style = style,
                         maxLines = 1,
                         modifier = Modifier
                             .align(side)
-                            // Centred on its place whatever its height, so a year and a month never sit off their marks.
+                            .zIndex(lift)
+                            // Centred on its place whatever its height, so a year and a month never sit off their marks; the held month goes to the finger.
                             .layout { measurable, constraints ->
                                 val placeable = measurable.measure(constraints)
-                                layout(placeable.width, placeable.height) { placeable.place(0, (placement.places[slot] - placeable.height / 2f).roundToInt()) }
+                                val y = placement.places[slot] + (placement.marker - placement.places[slot]) * lift
+                                layout(placeable.width, placeable.height) { placeable.place(0, (y - placeable.height / 2f).roundToInt()) }
                             }
                             .padding(end = STRIP_WIDTH - 4.dp)
                             // The label itself can be taken hold of, not only the strip beside it.
                             .onGloballyPositioned { grab.labels[grabKey] = it }
                             .graphicsLayer {
-                                alpha = placement.presence.getOrElse(slot) { 0f }
-                                // Shrinks toward the edge of the screen, so every label keeps its right side on the line.
+                                alpha = placement.presence.getOrElse(slot) { 0f }.let { it + (1f - it) * lift }
+                                translationX = -LIFTED_SHIFT.toPx() * lift
+                                // Shrinks toward the edge of the screen, so every label keeps its right side on the line; the held month comes to full size.
                                 transformOrigin = TransformOrigin(1f, 0.5f)
-                                scaleX = placement.sizes.getOrElse(slot) { 0f } * grown()
+                                scaleX = placement.sizes.getOrElse(slot) { 0f }.let { it + (1f - it) * lift } * grown()
                                 scaleY = scaleX
                             }
                             .clip(Shapes.capsule)
                             .background(Palette.panel)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .widening(shortWidth) { lift },
                     )
                 }
             }
@@ -346,25 +388,6 @@ fun GridTimeline(entries: List<GridEntry>, state: LazyGridState, contentPadding:
                     .size(width = 4.dp, height = THUMB_HEIGHT)
                     .clip(Shapes.capsule)
                     .background(if (isHeld) accent else Palette.textMuted),
-            )
-        }
-
-        heldMark?.let { mark ->
-            BasicText(
-                BUBBLE_FORMAT.format(mark.month).uppercase(Locale.ENGLISH),
-                // Straight on the photos with a shadow, no pill behind it.
-                style = Type.microLabel.copy(color = Palette.textBright, shadow = Type.dropShadow),
-                maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset { IntOffset(0, (placement.marker - labelHalf * 1.6f).roundToInt()) }
-                    .padding(end = 76.dp)
-                    // Kept clear of the labels as they grow toward it.
-                    .graphicsLayer {
-                        alpha = reveal
-                        translationX = -BUBBLE_GROWN_SHIFT.toPx() * reveal
-                    }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
 

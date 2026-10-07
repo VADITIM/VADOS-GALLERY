@@ -2,11 +2,12 @@
 
 What changed in each feature version. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
 
-## 1.3: duplicates and Private's trash (1.3.0 – 1.3.2)
+## 1.3: duplicates and Private's trash (1.3.0 – 1.3.3)
 
 - **Duplicates:** Settings → General → Find duplicates scans every photo and groups copies of the same picture by their pixels, whatever their names, sizes, dates or compression. Exact, Close and Loose set how alike they must be; the best copy of each set is kept and the rest are marked, deleted to the trash after Confirm. Its own feature module (`feature/duplicates`); the matching (`ImagePrint.kt`) is plain Kotlin, tested on a desktop against real photos.
 - **Private:** Find duplicates inside Private searches only the private photos, with its prints kept in the private folder.
 - **Private's trash:** private photos deleted anywhere (viewer, selection, review, duplicates, a whole album) go to a trash of Private's own for 30 days, with undo, restore (to their album or another) and delete forever, like the ordinary trash.
+- **Polish:** the held timeline month steps out and widens into its full name; unliking drains the heart; review's Done in the accent; no turned thumbnails while scrolling; an album in an open group is carried at once by a drag; carried covers' labels cast a shadow.
 
 ## 1.2: drawing, dragging and a new settings panel (1.2.0 – 1.2.4)
 
@@ -47,6 +48,12 @@ Everything up to 1.0 is the basic feature set of a gallery app, built natively i
 
 ## Planned
 
-### 1.4.0: search (planned)
+Future minor releases, not yet assigned a version.
+
+### Search
 
 - **Search:** find photos by describing them. Samsung only for now: Galaxy AI ships Gemini built in, and this feature may fork that to power the search here. Other phones do not get it yet.
+
+### Customization
+
+- **Customization:** change values, UI components, general interactions and how long UI elements are displayed, among other things.

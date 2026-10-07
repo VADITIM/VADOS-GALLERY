@@ -283,7 +283,7 @@ fun ReviewScreen(items: List<MediaItem>, progressKey: String, onDelete: (List<Me
             }
             Spacer(Modifier.weight(1f))
 
-            // Done moves everything marked so far to the trash in one go, or with nothing marked simply ends the sitting.
+            // Done moves everything marked so far to the trash in one go, or with nothing marked simply ends the sitting. Filled with the accent, white on it, so it is found at a glance.
             run {
                 Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
                     Row(
@@ -294,13 +294,13 @@ fun ReviewScreen(items: List<MediaItem>, progressKey: String, onDelete: (List<Me
                                 onClose()
                             })
                             .clip(Shapes.capsule)
-                            .background(Palette.panelSolid)
+                            .background(LocalAccent.current)
                             .padding(horizontal = 18.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        if (marked.isEmpty()) CheckIcon(LocalAccent.current, size = 18.dp) else TrashIcon(Palette.danger, size = 18.dp)
-                        BasicText(if (marked.isEmpty()) "DONE" else "DONE · ${marked.size}", style = Type.action.copy(color = Palette.textBright))
+                        if (marked.isEmpty()) CheckIcon(Color.White, size = 18.dp) else TrashIcon(Color.White, size = 18.dp)
+                        BasicText(if (marked.isEmpty()) "DONE" else "DONE · ${marked.size}", style = Type.action.copy(color = Color.White))
                     }
                 }
             }

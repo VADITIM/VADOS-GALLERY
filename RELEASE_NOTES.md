@@ -1,5 +1,9 @@
-# 1.3.2
+# 1.3.3
 
-- Private has its own trash: a Trash tile at the foot of Private's albums.
-- Deleting private photos no longer removes them at once: from the viewer, a selection, review, Find duplicates or a whole album, they go to Private's trash, with undo.
-- Restore puts a photo back in the album it came from (or one you pick); delete forever and Delete now empty it. Photos stay 30 days.
+- Timeline: the month you hold steps out beside your finger and widens into its full name, instead of a separate bubble.
+- Unliking a photo drains the heart's fill instead of swapping icons.
+- Review's Done button is filled with the accent colour.
+- Grid thumbnails no longer show turned sideways or upside down while scrolling.
+- An album inside an open group moves with your finger right away when dragged, instead of only turning rearranging on.
+- The name and count of a cover being moved cast a slight shadow.
+- Find duplicates inside Private shows its photos again.

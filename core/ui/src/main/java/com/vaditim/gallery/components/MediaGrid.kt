@@ -582,11 +582,11 @@ private fun Tile(
     val context = LocalContext.current
     val request = remember(item.uri, sizePixels) {
         // Private photos live outside MediaStore and have no cached thumbnail, so they are decoded from the file, sampled down.
-        val data: Any = if (item.uri.scheme == "content") Thumbnail(item.uri, sizePixels) else item.uri
+        val data: Any = if (item.uri.scheme == "content") Thumbnail.of(item, sizePixels) else item.uri
         // A file without an extension gives the loader no type, so a video says so itself.
         ImageRequest.Builder(context).data(data).size(sizePixels).apply { if (item.isVideo && item.uri.scheme != "content") decoderFactory(VideoFrameDecoder.Factory()) }.build()
     }
-    // The system's cached thumbnail is small, and for some photos stale: pixelated, or turned the wrong way. So every tile gets the photo itself on top (decoded sampled and upright) once it has stood on screen a moment; scrolling shows the thumbnails. Tiles off screen are not composed at all, so nothing far away is ever decoded.
+    // The system's cached thumbnail is small, and for some photos stale: pixelated (one turned the wrong way is caught by the fetcher). So every tile gets the photo itself on top (decoded sampled and upright) once it has stood on screen a moment; scrolling shows the thumbnails. Tiles off screen are not composed at all, so nothing far away is ever decoded.
     // A video's own decode picks another frame than its system thumbnail, so the tile would change picture once it settles; it keeps the thumbnail.
     val needsSharp = item.uri.scheme == "content" && !item.isVideo
     var isSharpWanted by remember(item.id, sizePixels) { mutableStateOf(needsSharp && isSettled) }
