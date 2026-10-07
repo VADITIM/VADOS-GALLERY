@@ -103,6 +103,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
     val onBackup = { saveBackup.launch("vados-gallery-backup.json") }
     val onRestore = { loadBackup.launch(arrayOf("*/*")) }
     OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isCentered = true, onPull = onPull) {
+        SettingsTabs(tab, onSelect = { tab = it })
         // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height; a shorter tab sits in the middle of it.
         SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
             val loose = constraints.copy(minHeight = 0)
@@ -123,7 +124,6 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
             }.map { it.measure(fixed) }
             layout(constraints.maxWidth, height) { shown.forEach { it.place(0, 0) } }
         }
-        SettingsTabs(tab, onSelect = { tab = it })
         Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
             BasicText("V/AS", style = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f)))
         }
@@ -151,19 +151,24 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                         Settings.updateAlbumColumns(it)
                     }
                 } else {
+                    // An open album shows Recent's settings, greyed, until it is given its own.
+                    val isEditable = Settings.folder == null || Settings.hasOwnSettings(Settings.folder)
                     SettingsHeader("Photos")
-                    SettingsSteps("Image columns", Settings.MIN_COLUMNS..Settings.MAX_COLUMNS, Settings.defaultColumns) {
+                    SettingsSteps("Image columns", Settings.MIN_COLUMNS..Settings.MAX_COLUMNS, Settings.defaultColumns, isEnabled = isEditable) {
                         Settings.updateDefaultColumns(it)
                         onColumnsChanged(it)
                     }
-                    // An open album shows Recent's headers until it is given its own.
-                    val isAlbum = Settings.folder != null
-                    if (isAlbum) SettingsToggle("Own headers", Settings.hasOwnHeaders(Settings.folder)) { Settings.updateOwnHeaders(it) }
-                    HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = !isAlbum || Settings.hasOwnHeaders(Settings.folder))
+                    HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = isEditable)
                 }
                 if (Settings.view == SettingsView.PRIVATE) {
                     SettingsHeader("Private")
                     SettingsToggle("Today's selection", Settings.todaysSelection) { Settings.updateTodaysSelection(it) }
+                }
+                if (!isCovers && Settings.folder != null) {
+                    SettingsToggle("Own settings", Settings.hasOwnSettings(Settings.folder), isDivided = false) {
+                        Settings.updateOwnSettings(it)
+                        onColumnsChanged(Settings.defaultColumns)
+                    }
                 }
             }
             SettingsTab.GENERAL -> {
@@ -188,14 +193,14 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
     }
 }
 
-// The tabs as one capsule at the foot of the sheet; the accent fill slides under the chosen one.
+// The tabs as one capsule at the head of the sheet; the accent fill slides under the chosen one.
 @Composable
 private fun SettingsTabs(active: SettingsTab, onSelect: (SettingsTab) -> Unit) {
     val accent = LocalAccent.current
     val position by animateFloatAsState(active.ordinal.toFloat(), tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "settings-tabs")
     Box(
         Modifier
-            .padding(start = 20.dp, end = 20.dp, top = 14.dp)
+            .padding(start = 20.dp, end = 20.dp, bottom = 14.dp)
             .fillMaxWidth()
             .clip(Shapes.capsule)
             .background(Palette.sunkenDeep)

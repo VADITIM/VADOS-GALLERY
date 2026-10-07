@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import com.vaditim.gallery.components.GridMemory
+import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.settings.SettingsView
 
 // Every grid and list the user can come back to keeps its scroll and columns here, above the screens that come and go.
@@ -35,10 +36,16 @@ class GridMemories(
     fun favoriteAlbum(name: String) = favoriteAlbums.getOrPut(name) { GridMemory(SettingsView.FAVORITES, folder = ViewerSource.InFavoriteAlbum(name).folderKey) }
     fun privateFavoriteGroup(name: String) = privateFavoriteGroups.getOrPut(name) { GridMemory(SettingsView.PRIVATE) }
 
-    // Only the grids of the view whose setting changed take the new count.
-    fun setColumns(view: SettingsView, columns: Int) {
+    // Only the grids whose setting changed take the new count: the open album's alone, or the view's, and with Recent's every album that follows it.
+    fun setColumns(view: SettingsView, folder: String?, columns: Int) {
         (listOf(recent, favorites, privateFavorites, privateRecent, trash) + albums.values + privateGroups.values + favoriteAlbums.values + privateFavoriteGroups.values + locations.values)
-            .filter { it.view == view }
+            .filter { memory ->
+                when {
+                    folder != null -> memory.folder == folder
+                    memory.folder == null -> memory.view == view
+                    else -> view == SettingsView.RECENT && !Settings.hasOwnSettings(memory.folder)
+                }
+            }
             .forEach { it.columns = columns }
     }
 }

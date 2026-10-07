@@ -213,7 +213,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 onDismiss = sheets::dismiss,
                 onPull = { settingsPull = it },
                 onAnnounce = controller.actions::announce,
-                onColumnsChanged = { columns -> controller.memories.setColumns(screen.settingsView, columns) },
+                onColumnsChanged = { columns -> controller.memories.setColumns(screen.settingsView, screen.gridSource.folderKey, columns) },
             )
             CrashSheet(context)
 

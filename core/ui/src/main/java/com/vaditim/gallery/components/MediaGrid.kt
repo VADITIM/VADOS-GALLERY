@@ -159,7 +159,7 @@ class GridMemory(val view: SettingsView = Settings.view, private val isStacking:
     val state = LazyGridState()
     var isPositioned = false
     var knownCount = 0
-    var columns by mutableIntStateOf(Settings.columnsIn(view))
+    var columns by mutableIntStateOf(Settings.columnsFor(view, folder))
     // Stacks of similar shots opened out in this grid, by the id of their cover.
     var openStacks by mutableStateOf<Set<Long>>(emptySet())
 

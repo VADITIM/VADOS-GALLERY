@@ -1,4 +1,4 @@
-# 1.1.49
+# 1.1.50
 
-- Set as cover has a new filled icon, sized like the others.
-- Albums follow Recent's headers; an album's settings can turn on Own headers to give it a layout of its own.
+- Own settings, at the bottom of an album's settings tab, gives that album its own image columns and headers; off, it follows Recent's.
+- The settings tabs now sit at the top of the sheet.
