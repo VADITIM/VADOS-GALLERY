@@ -7,6 +7,15 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import kotlin.math.roundToInt
+import kotlin.math.ceil
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
@@ -237,15 +246,8 @@ fun BoxScope.ViewerScreen(
                 horizontalArrangement = Arrangement.End,
             ) {
                 // The date stays through a swipe up: the details rise below it and it is still there once they are open.
-                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, pull = { pull }) {
-                    Row(
-                        Modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (isCurrentMotion) MotionIcon(Palette.textBright, size = 14.dp)
-                        MicroLabel(formatStamp(current))
-                    }
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, pull = { pull }, isPoppedWhole = false) {
+                    TypedDatePill(formatStamp(current), isCurrentMotion)
                 }
             }
 
@@ -662,6 +664,57 @@ private fun ChromePiece(isAllowed: Boolean, isShown: Boolean, isFromTop: Boolean
         ) {
             if (isPoppedWhole) Box(with(opening) { Modifier.animateEnterExit(enter = POP_IN, exit = POP_OUT) }) { opening.content() } else opening.content()
         }
+    }
+}
+
+// Opening, the date's pill widens from its centre to both sides and then the date types itself in; closing, it types itself out as the pill narrows to nothing.
+@Composable
+private fun AnimatedVisibilityScope.TypedDatePill(text: String, isMotion: Boolean) {
+    val isArriving = { state: EnterExitState -> state == EnterExitState.Visible }
+    val width by transition.animateFloat(
+        transitionSpec = { tween(Motion.STATE_MS, if (isArriving(targetState)) Motion.STATE_MS else 0, Motion.powerThreeInOut) },
+        label = "date-width",
+    ) { if (isArriving(it)) 1f else 0f }
+    val typed by transition.animateFloat(
+        transitionSpec = {
+            if (isArriving(targetState)) tween((Motion.TYPE_MS * text.length).toInt(), Motion.STATE_MS * 2, LinearEasing)
+            else tween(Motion.STATE_MS, easing = LinearEasing)
+        },
+        label = "date-typed",
+    ) { if (isArriving(it)) 1f else 0f }
+    val shown = text.take(ceil(text.length * typed).toInt())
+    // The full pill, unseen, holds the room; the glass narrows inside it about its centre, so the text never moves while it is cut.
+    Box(contentAlignment = Alignment.Center) {
+        DateRow(text, isMotion, Modifier.alpha(0f))
+        Box(
+            Modifier
+                .matchParentSize()
+                .layout { measurable, constraints ->
+                    val shownWidth = (constraints.maxWidth * width).roundToInt()
+                    val placeable = measurable.measure(Constraints.fixed(shownWidth, constraints.maxHeight))
+                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place((constraints.maxWidth - shownWidth) / 2, 0) }
+                }
+                .glass(Shapes.capsule, Palette.viewerGround),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            // As wide as the full date and centred, so the typing starts where the date will stand.
+            Box(Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true)) {
+                DateRow(text, isMotion, Modifier.alpha(0f))
+                DateRow(shown, isMotion && typed > 0f, Modifier)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DateRow(text: String, isMotion: Boolean, modifier: Modifier) {
+    Row(
+        modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (isMotion) MotionIcon(Palette.textBright, size = 14.dp)
+        MicroLabel(text)
     }
 }
 

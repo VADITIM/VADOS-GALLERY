@@ -1,6 +1,3 @@
-# 1.1.52
+# 1.1.53
 
-- In the trash, the days left show at a photo's top left, smaller and in red.
-- A video's length is centred at the bottom of its tile, a little smaller at five or more columns.
-- A favourite's heart now sits at the top right of its tile.
-- A short divider separates groups from the albums beside them.
+- Opening a photo, the date pill at the top widens from its centre and the date types itself in; closing, it types out as the pill narrows away.
