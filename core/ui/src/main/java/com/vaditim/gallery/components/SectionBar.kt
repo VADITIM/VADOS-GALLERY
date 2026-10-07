@@ -11,13 +11,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
@@ -49,7 +44,6 @@ import com.vaditim.gallery.vas.pressable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.min
 
 // What the Albums button shows: the place the user is in, since Locations, the trash and Private are reached from Albums.
 enum class PlaceGlyph { ALBUMS, LOCATIONS, TRASH, PRIVATE }
@@ -107,63 +101,55 @@ private val MARK_GAP = 4.dp
 private val MARK_THICKNESS = 2.dp
 
 // Prime component (VAS components/19-pop-bar.md): change the entry there first, then this.
-// The nav's pill, for any row of choices: glass, a wash that slides to the chosen one, its label grown a little. `scroll` lets a row wider than the screen slide inside the pill. `isVertical` stacks the choices in a column, the first at the top, and the wash slides up and down.
+// The nav's pill, for any row of choices: glass, a wash that slides to the chosen one, its label grown a little. `scroll` lets a row wider than the screen slide inside the pill.
 @Composable
 // Inside a glass shared with other bars it leaves the glass out; each option takes itemModifier, and the wash fades with washAlpha, so a bar swap can pop them.
-fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier, scroll: ScrollState? = null, hasGlass: Boolean = true, itemModifier: Modifier = Modifier, washAlpha: () -> Float = { 1f }, isVertical: Boolean = false, label: @Composable (T) -> Unit) {
-    // Where each option's pill sits along the bar, its near edge and its far edge, so the highlight knows where to slide.
+fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier, scroll: ScrollState? = null, hasGlass: Boolean = true, itemModifier: Modifier = Modifier, washAlpha: () -> Float = { 1f }, label: @Composable (T) -> Unit) {
+    // Where each option's pill sits in the bar, left edge and right edge, so the highlight knows where to slide.
     val spans = remember { mutableStateMapOf<T, Pair<Float, Float>>() }
-    val start = remember { Animatable(Float.NaN) }
-    val end = remember { Animatable(Float.NaN) }
+    val left = remember { Animatable(Float.NaN) }
+    val right = remember { Animatable(Float.NaN) }
     val target = spans[active]
     // The option the wash has already started towards; the bar settling into its place afterwards moves the wash at once, where it is still hidden, instead of sliding it.
     val slidTo = remember { arrayOfNulls<Any>(1) }
     LaunchedEffect(active, target) {
-        val (toStart, toEnd) = target ?: return@LaunchedEffect
-        if (start.value.isNaN() || slidTo[0] == active) {
+        val (toLeft, toRight) = target ?: return@LaunchedEffect
+        if (left.value.isNaN() || slidTo[0] == active) {
             slidTo[0] = active
-            start.snapTo(toStart)
-            end.snapTo(toEnd)
+            left.snapTo(toLeft)
+            right.snapTo(toRight)
             return@LaunchedEffect
         }
         slidTo[0] = active
         // The edge on the side it is heading leaves first and the other follows, so the highlight stretches across and then gathers itself.
-        val isMovingOn = toEnd > end.value
+        val isMovingRight = toRight > right.value
         val lead = tween<Float>(Motion.NAV_SLIDE_MS, easing = Motion.powerTwoOut)
         val trail = tween<Float>(Motion.NAV_SLIDE_MS, Motion.NAV_TRAIL_MS, Motion.powerTwoOut)
         coroutineScope {
-            launch { start.animateTo(toStart, if (isMovingOn) trail else lead) }
-            launch { end.animateTo(toEnd, if (isMovingOn) lead else trail) }
+            launch { left.animateTo(toLeft, if (isMovingRight) trail else lead) }
+            launch { right.animateTo(toRight, if (isMovingRight) lead else trail) }
         }
     }
     val wash = Palette.pressedWash
-    val barModifier = modifier
-        .then(if (hasGlass) Modifier.glass(Shapes.capsule) else Modifier)
-        .then(if (scroll == null) Modifier else if (isVertical) Modifier.verticalScroll(scroll) else Modifier.horizontalScroll(scroll))
-        .padding(5.dp)
-        .drawBehind {
-            if (start.value.isNaN()) return@drawBehind
-            val length = end.value - start.value
-            if (isVertical) {
-                drawRoundRect(wash, Offset(0f, start.value), Size(size.width, length), CornerRadius(min(size.width, length) / 2f), alpha = washAlpha())
-            } else {
-                drawRoundRect(wash, Offset(start.value, 0f), Size(length, size.height), CornerRadius(size.height / 2f), alpha = washAlpha())
-            }
-        }
-    val choices: @Composable () -> Unit = {
+    Row(
+        modifier
+            .then(if (hasGlass) Modifier.glass(Shapes.capsule) else Modifier)
+            .then(if (scroll != null) Modifier.horizontalScroll(scroll) else Modifier)
+            .padding(5.dp)
+            .drawBehind {
+                if (left.value.isNaN()) return@drawBehind
+                drawRoundRect(wash, Offset(left.value, 0f), Size(right.value - left.value, size.height), CornerRadius(size.height / 2f), alpha = washAlpha())
+            },
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         options.forEach { option ->
             val isActive = option == active
             val labelScale by animateFloatAsState(if (isActive) ACTIVE_LABEL_SCALE else 1f, tween(Motion.NAV_SLIDE_MS, easing = Motion.backOut), label = "section-scale")
             Box(
                 itemModifier
-                    .then(if (isVertical) Modifier.fillMaxWidth() else Modifier)
-                    .onPlaced { placed ->
-                        val at = placed.positionInParent()
-                        spans[option] = if (isVertical) at.y to at.y + placed.size.height else at.x to at.x + placed.size.width
-                    }
+                    .onPlaced { placed -> spans[option] = placed.positionInParent().x.let { it to it + placed.size.width } }
                     .pressable(onClick = { onSelect(option) })
-                    .padding(horizontal = 18.dp, vertical = if (isVertical) VERTICAL_OPTION_PADDING else 13.dp),
-                contentAlignment = Alignment.Center,
+                    .padding(horizontal = 18.dp, vertical = 13.dp),
             ) {
                 Box(
                     Modifier.graphicsLayer {
@@ -174,15 +160,6 @@ fun <T> NavBar(options: List<T>, active: T, onSelect: (T) -> Unit, modifier: Mod
             }
         }
     }
-    // Standing, every option is as wide as the widest, so the wash is one width all the way up.
-    if (isVertical) {
-        Column(barModifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(2.dp)) { choices() }
-    } else {
-        Row(barModifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) { choices() }
-    }
 }
-
-// A standing bar's options sit closer together, so a long list still fits beside the picture.
-private val VERTICAL_OPTION_PADDING = 9.dp
 
 private val SECTION_ICON = 22.dp

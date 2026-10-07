@@ -523,17 +523,23 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                 label = "edit-mode",
             ) { shownMode ->
                 when (shownMode) {
-                    EditMode.CROP -> NavBar(
-                        Aspect.entries.reversed(),
-                        aspect,
-                        onSelect = { option ->
-                            aspect = option
-                            crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
-                        },
-                        isVertical = true,
-                    ) { option ->
-                        val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
-                        BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                    // Bare labels standing on the picture, read by their shadow alone.
+                    EditMode.CROP -> Column {
+                        Aspect.entries.reversed().forEach { option ->
+                            val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textBright, tween(Motion.STATE_MS), label = "aspect-ink")
+                            BasicText(
+                                option.label.uppercase(),
+                                style = Type.microLabel.copy(color = ink, shadow = Type.dropShadow),
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier
+                                    .pressable(onClick = {
+                                        aspect = option
+                                        crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
+                                    })
+                                    .padding(vertical = 9.dp, horizontal = 4.dp),
+                            )
+                        }
                     }
                     EditMode.DRAW -> PencilColumn(
                         color = Settings.pencilColor,
