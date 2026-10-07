@@ -23,9 +23,11 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,7 +41,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -58,7 +59,6 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -139,8 +139,8 @@ private const val UNAVAILABLE_ALPHA = 0.38f
 private val PENCIL_THINNEST = 2.dp
 private val PENCIL_THICKEST = 28.dp
 private val SWATCH = 20.dp
-// The pencil's row stands as tall as the ratios' nav it replaces, so switching never moves the picture.
-private val OPTIONS_HEIGHT = 54.dp
+// The ratios' column and the pencil's both fit in this height and stand on its foot, so switching modes never moves the picture.
+private val OPTIONS_HEIGHT = 260.dp
 
 // What the editor's nav switches between: cutting the frame, or drawing on the photo.
 private enum class EditMode { CROP, DRAW }
@@ -150,14 +150,15 @@ private data class CropEdit(val crop: Rect, val aspect: Aspect, val zoom: Float,
 
 // A glass capsule around one accent icon; it fades while there is nothing for it to do.
 @Composable
-private fun CropAction(onClick: () -> Unit, isEnabled: Boolean, onLongClick: (() -> Unit)? = null, icon: @Composable (Color) -> Unit) {
+private fun CropAction(onClick: () -> Unit, isEnabled: Boolean, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, icon: @Composable (Color) -> Unit) {
     val shade by animateFloatAsState(if (isEnabled) 1f else UNAVAILABLE_ALPHA, tween(Motion.STATE_MS), label = "crop-action")
     Box(
-        Modifier
+        modifier
             .pressable(onClick = onClick, onLongClick = onLongClick)
             .glass(Shapes.capsule, Palette.viewerGround)
             .padding(horizontal = 20.dp, vertical = 10.dp)
             .graphicsLayer { alpha = shade },
+        contentAlignment = Alignment.Center,
     ) { icon(LocalAccent.current) }
 }
 private const val MAX_CROP_ZOOM = 8f
@@ -387,7 +388,11 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                 }
             }
 
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp).hazeSource(hazeState), contentAlignment = Alignment.Center) {
+            // A zoomed picture spills out of its frame, veiled, as far as the room between the controls; on its way in or out the picture's own rounded clip holds it instead.
+            BoxWithConstraints(
+                Modifier.weight(1f).fillMaxWidth().graphicsLayer { clip = arrival.value == 1f }.padding(horizontal = 28.dp, vertical = 20.dp).hazeSource(hazeState),
+                contentAlignment = Alignment.Center,
+            ) {
                 // The frame holds the picture at its present angle: mid-turn it is the box around the leaning picture, so the picture always fits the room while it swings round.
                 val radians = Math.toRadians(angle.toDouble())
                 val cosine = abs(cos(radians)).toFloat()
@@ -416,7 +421,16 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                             }
                         },
                 ) {
-                    Box(Modifier.fillMaxSize().clipToBounds()) {
+                    Box(
+                        Modifier.fillMaxSize().graphicsLayer {
+                            // The viewer's rounded corners run down to square ones as the picture travels into the frame, and back as it leaves; the frame's own scale is taken off so the rounding on screen matches the viewer's.
+                            val away = 1f - arrival.value
+                            val viewerSpot = fitInside(shownRatio, screen.width, screen.height)
+                            val travel = if (frame.width > 0f && viewerSpot.width > 0f) 1f + (viewerSpot.width / frame.width - 1f) * away else 1f
+                            clip = away > 0f
+                            shape = RoundedCornerShape(Shapes.viewerPhotoCorner.toPx() * away / travel)
+                        },
+                    ) {
                         // The zoom works on the picture as the frame shows it, turned; the turn works on the picture and its lines together.
                         Box(
                             Modifier.fillMaxSize().graphicsLayer {
@@ -469,6 +483,7 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                             onChange = { crop = it },
                             onTap = { video?.let { if (it.player.isPlaying) it.player.pause() else it.player.play() } },
                             onZoom = zoomBy,
+                            isZoomed = zoom > 1f,
                             modifier = Modifier.graphicsLayer { alpha = frameAlpha() },
                         )
                     } else {
@@ -515,46 +530,53 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                     )
                 }
 
-                // Each mode brings its own row: the ratios for cutting, the pencil for drawing; one pops away and the other pops in.
-                AnimatedContent(
-                    targetState = mode,
-                    transitionSpec = {
-                        scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
-                            .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f))
-                            .using(SizeTransform(clip = false))
-                    },
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.padding(top = 14.dp).height(OPTIONS_HEIGHT),
-                    label = "edit-mode",
-                ) { shownMode ->
-                    when (shownMode) {
-                        EditMode.CROP -> NavBar(
-                            Aspect.entries,
-                            aspect,
-                            onSelect = { option ->
-                                aspect = option
-                                crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            scroll = rememberScrollState(),
-                        ) { option ->
-                            val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
-                            BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                // Bottom left: undo and redo at the far left with the tick under them, and beside them the mode's own column, the ratios for cutting or the pencil for drawing, its first choice at the bottom; one column pops away and the other pops in.
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = if (video == null) 0.dp else 14.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CropAction(onClick = undo, isEnabled = canUndo, onLongClick = revert) { UndoIcon(it) }
+                            CropAction(onClick = redo, isEnabled = canRedo) { RedoIcon(it) }
                         }
-                        EditMode.DRAW -> PencilRow(
-                            color = Settings.pencilColor,
-                            thickness = Settings.pencilThickness,
-                            onColor = Settings::updatePencilColor,
-                            onThickness = Settings::updatePencilThickness,
-                            modifier = Modifier.padding(horizontal = 16.dp).fillMaxHeight(),
-                        )
+                        CropAction(onClick = save, isEnabled = isChanged, modifier = Modifier.fillMaxWidth()) { CheckIcon(it) }
                     }
-                }
-
-                Row(Modifier.padding(top = 12.dp, bottom = if (video == null) 0.dp else 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CropAction(onClick = undo, isEnabled = canUndo, onLongClick = revert) { UndoIcon(it) }
-                    CropAction(onClick = redo, isEnabled = canRedo) { RedoIcon(it) }
-                    CropAction(onClick = save, isEnabled = isChanged) { CheckIcon(it) }
+                    AnimatedContent(
+                        targetState = mode,
+                        transitionSpec = {
+                            scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+                                .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f))
+                                .using(SizeTransform(clip = false))
+                        },
+                        contentAlignment = Alignment.BottomStart,
+                        modifier = Modifier.height(OPTIONS_HEIGHT),
+                        label = "edit-mode",
+                    ) { shownMode ->
+                        Box(Modifier.fillMaxHeight(), contentAlignment = Alignment.BottomStart) {
+                            when (shownMode) {
+                                EditMode.CROP -> NavBar(
+                                    Aspect.entries.reversed(),
+                                    aspect,
+                                    onSelect = { option ->
+                                        aspect = option
+                                        crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
+                                    },
+                                    isVertical = true,
+                                ) { option ->
+                                    val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
+                                    BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                                }
+                                EditMode.DRAW -> PencilColumn(
+                                    color = Settings.pencilColor,
+                                    thickness = Settings.pencilThickness,
+                                    onColor = Settings::updatePencilColor,
+                                    onThickness = Settings::updatePencilThickness,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // Drawing is for photos, so a video keeps to cutting and has no nav.
@@ -610,9 +632,9 @@ private fun fitted(target: Float?, pictureRatio: Float): Rect? {
     }
 }
 
-// The crop rectangle over the picture: corners and edges resize it, the inside moves it, the rest is veiled. Two fingers zoom and pan the picture under it; so does one finger outside it once zoomed, and a mouse wheel.
+// The crop rectangle over the picture: corners and edges resize it, the inside moves it, the rest is veiled. Two fingers zoom and pan the picture under it, and a mouse wheel zooms; once zoomed, one finger anywhere but on an edge or corner swipes the picture.
 @Composable
-private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit, onTap: () -> Unit, onZoom: ((factor: Float, shift: Offset, focus: Offset) -> Unit)?, modifier: Modifier = Modifier) {
+private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit, onTap: () -> Unit, onZoom: ((factor: Float, shift: Offset, focus: Offset) -> Unit)?, isZoomed: Boolean, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val reach = with(density) { HANDLE_REACH.toPx() }
     val minimum = with(density) { MIN_CROP.toPx() }
@@ -622,6 +644,7 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
     val change by rememberUpdatedState(onChange)
     val tap by rememberUpdatedState(onTap)
     val zoom by rememberUpdatedState(onZoom)
+    val zoomed by rememberUpdatedState(isZoomed)
     var handle by remember { mutableStateOf<Handle?>(null) }
     Canvas(
         modifier
@@ -671,7 +694,8 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
                             travelled += amount
                             if (travelled.getDistance() <= viewConfiguration.touchSlop) continue
                             isDragging = true
-                            held = hit(down.position, current.scaledTo(width, height), reach)
+                            // Zoomed in, a drag inside the frame swipes the picture under it; the frame then moves only by its edges and corners.
+                            held = hit(down.position, current.scaledTo(width, height), reach).takeUnless { it == Handle.MOVE && zoomed && zoom != null }
                             handle = held
                         }
                         val grip = held
@@ -689,11 +713,7 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
             },
     ) {
         val r = crop.scaledTo(size.width, size.height)
-        val veil = Color.Black.copy(alpha = 0.6f)
-        drawRect(veil, Offset.Zero, Size(size.width, r.top))
-        drawRect(veil, Offset(0f, r.bottom), Size(size.width, size.height - r.bottom))
-        drawRect(veil, Offset(0f, r.top), Size(r.left, r.height))
-        drawRect(veil, Offset(r.right, r.top), Size(size.width - r.right, r.height))
+        veilOutside(r)
         // Thirds, only while it is being moved: a guide for placing, not decoration.
         if (handle != null) {
             val line = Palette.textBright.copy(alpha = 0.35f)
@@ -715,6 +735,16 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
 }
 
 private fun Rect.scaledTo(width: Float, height: Float) = Rect(left * width, top * height, right * width, bottom * height)
+
+// Everything outside the frame is veiled, reaching well past the picture's box, so the part of a zoomed picture spilling out of it shows darkened, plainly not kept.
+private fun DrawScope.veilOutside(r: Rect) {
+    val veil = Color.Black.copy(alpha = 0.6f)
+    val far = max(size.width, size.height) * MAX_CROP_ZOOM
+    drawRect(veil, Offset(-far, -far), Size(size.width + far * 2f, r.top + far))
+    drawRect(veil, Offset(-far, r.bottom), Size(size.width + far * 2f, size.height - r.bottom + far))
+    drawRect(veil, Offset(-far, r.top), Size(r.left + far, r.height))
+    drawRect(veil, Offset(r.right, r.top), Size(size.width - r.right + far, r.height))
+}
 
 // One line, drawn into a box the size of the upright picture.
 private fun DrawScope.drawStroke(stroke: DrawnStroke) {
@@ -789,40 +819,37 @@ private fun DrawLayer(
             },
     ) {
         val r = crop.scaledTo(size.width, size.height)
-        val veil = Color.Black.copy(alpha = 0.6f)
-        drawRect(veil, Offset.Zero, Size(size.width, r.top))
-        drawRect(veil, Offset(0f, r.bottom), Size(size.width, size.height - r.bottom))
-        drawRect(veil, Offset(0f, r.top), Size(r.left, r.height))
-        drawRect(veil, Offset(r.right, r.top), Size(size.width - r.right, r.height))
+        veilOutside(r)
         drawRect(Palette.textBright.copy(alpha = 0.5f), r.topLeft, r.size, style = Stroke(1.dp.toPx()))
     }
 }
 
-// The pencil: its colours as dots, the chosen one ringed, and how thick it draws on a drag-only slider whose knob is the line itself.
+// The pencil, standing at the bottom left: its colours as dots from the bottom up, the chosen one ringed, and beside them how thick it draws on a standing drag-only slider whose knob is the line itself.
 @Composable
-private fun PencilRow(color: Int, thickness: Float, onColor: (Int) -> Unit, onThickness: (Float) -> Unit, modifier: Modifier = Modifier) {
+private fun PencilColumn(color: Int, thickness: Float, onColor: (Int) -> Unit, onThickness: (Float) -> Unit, modifier: Modifier = Modifier) {
     val accent = LocalAccent.current
     Row(
-        modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 12.dp, vertical = 16.dp).height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Palette.pencil.forEach { swatch ->
-            val argb = swatch.toArgb()
-            val ring by animateFloatAsState(if (argb == color) 1f else 0f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "swatch")
-            Canvas(Modifier.size(SWATCH).pressable(onClick = { onColor(argb) }, pressedScale = 0.85f)) {
-                val radius = size.minDimension / 2f
-                drawCircle(swatch, radius * (1f - 0.3f * ring))
-                // Black would vanish on the black behind it, so every dot carries a faint edge.
-                drawCircle(Palette.borderControl, radius * (1f - 0.3f * ring), style = Stroke(1.dp.toPx()))
-                if (ring > 0f) drawCircle(accent, radius - 1.dp.toPx(), style = Stroke(2.dp.toPx()), alpha = ring.coerceIn(0f, 1f))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Palette.pencil.reversed().forEach { swatch ->
+                val argb = swatch.toArgb()
+                val ring by animateFloatAsState(if (argb == color) 1f else 0f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "swatch")
+                Canvas(Modifier.size(SWATCH).pressable(onClick = { onColor(argb) }, pressedScale = 0.85f)) {
+                    val radius = size.minDimension / 2f
+                    drawCircle(swatch, radius * (1f - 0.3f * ring))
+                    // Black would vanish on the black behind it, so every dot carries a faint edge.
+                    drawCircle(Palette.borderControl, radius * (1f - 0.3f * ring), style = Stroke(1.dp.toPx()))
+                    if (ring > 0f) drawCircle(accent, radius - 1.dp.toPx(), style = Stroke(2.dp.toPx()), alpha = ring.coerceIn(0f, 1f))
+                }
             }
         }
-        ThicknessSlider(thickness, Color(color), onThickness, Modifier.weight(1f).padding(start = 4.dp))
+        ThicknessSlider(thickness, Color(color), onThickness, Modifier.fillMaxHeight().width(PENCIL_THICKEST))
     }
 }
 
-// A drag-only slider, as in the settings (VAS components/03-panel-and-field.md §3): the value moves by how far the finger travels sideways from where it went down, and a tap changes nothing.
+// A standing drag-only slider, as in the settings (VAS components/03-panel-and-field.md §3) but upright: the value moves by how far the finger travels up from where it went down, and a tap changes nothing.
 @Composable
 private fun ThicknessSlider(fraction: Float, ink: Color, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
     val haptic = LocalHapticFeedback.current
@@ -833,7 +860,6 @@ private fun ThicknessSlider(fraction: Float, ink: Color, onChange: (Float) -> Un
     val track by animateDpAsState(if (isTouched) 10.dp else 4.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "pencil-track")
     Box(
         modifier
-            .height(32.dp)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -843,12 +869,12 @@ private fun ThicknessSlider(fraction: Float, ink: Color, onChange: (Float) -> Un
                     do {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        val travelled = change.position.x - down.position.x
+                        val travelled = down.position.y - change.position.y
                         if (!isArmed) {
                             if (abs(travelled) < viewConfiguration.touchSlop) continue
                             isArmed = true
                         }
-                        val next = (from + travelled / size.width).coerceIn(0f, 1f)
+                        val next = (from + travelled / size.height).coerceIn(0f, 1f)
                         // A tick every tenth of the track, so dragging it feels stepped.
                         if ((next * 10).toInt() != (currentFraction * 10).toInt()) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                         currentOnChange(next)
@@ -858,15 +884,16 @@ private fun ThicknessSlider(fraction: Float, ink: Color, onChange: (Float) -> Un
                 }
             }
             .drawBehind {
-                val thickest = PENCIL_THICKEST.toPx().coerceAtMost(size.height)
+                val thickest = PENCIL_THICKEST.toPx().coerceAtMost(size.width)
                 val radius = (PENCIL_THINNEST.toPx() + (thickest - PENCIL_THINNEST.toPx()) * fraction.coerceIn(0f, 1f)) / 2f
-                val trackHeight = track.toPx()
-                val top = (size.height - trackHeight) / 2f
-                val centre = thickest / 2f + (size.width - thickest) * fraction.coerceIn(0f, 1f)
-                drawRoundRect(Palette.borderStrong, Offset(0f, top), Size(size.width, trackHeight), CornerRadius(trackHeight / 2f))
-                drawRoundRect(accent, Offset(0f, top), Size(centre, trackHeight), CornerRadius(trackHeight / 2f))
-                drawCircle(ink, radius, Offset(centre, size.height / 2f))
-                drawCircle(Palette.borderControl, radius, Offset(centre, size.height / 2f), style = Stroke(1.dp.toPx()))
+                val trackWidth = track.toPx()
+                val left = (size.width - trackWidth) / 2f
+                // Thin at the foot, thick at the top.
+                val centre = size.height - thickest / 2f - (size.height - thickest) * fraction.coerceIn(0f, 1f)
+                drawRoundRect(Palette.borderStrong, Offset(left, 0f), Size(trackWidth, size.height), CornerRadius(trackWidth / 2f))
+                drawRoundRect(accent, Offset(left, centre), Size(trackWidth, size.height - centre), CornerRadius(trackWidth / 2f))
+                drawCircle(ink, radius, Offset(size.width / 2f, centre))
+                drawCircle(Palette.borderControl, radius, Offset(size.width / 2f, centre), style = Stroke(1.dp.toPx()))
             },
     )
 }

@@ -1,7 +1,6 @@
-# 1.3.9
+# 1.4.0
 
-- The back gesture now lets go of a selection first, instead of closing groups or leaving the screen.
-- An album let go over a shut group only goes in once the group has opened under it, so passing over a group never drops it in by accident.
-- Every undo pill now stays as long as the delete one does.
-- With Grouped albums on, the albums outside the groups can sit 1 to 3 in a row, set in Settings or by pinching.
-- Settings has a Done pill at the foot, above V/AS.
+- Crop: zoomed in, dragging inside the frame now moves the picture instead of the frame; the frame still resizes by its edges and corners.
+- Crop: the parts of a zoomed picture outside the frame stay visible around it, darkened.
+- Crop: the ratios and the pencil's colours stand in a column at the bottom left, from the bottom up; undo and redo sit at the far left with the tick under them.
+- Crop: the picture's rounded corners turn square as it moves into the crop screen, and round again as it leaves.
