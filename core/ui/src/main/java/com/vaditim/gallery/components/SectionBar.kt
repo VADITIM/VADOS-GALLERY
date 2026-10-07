@@ -58,6 +58,55 @@ enum class PlaceGlyph { ALBUMS, LOCATIONS, TRASH, PRIVATE }
 private const val ACTIVE_LABEL_SCALE = 1.06f
 
 // Prime component (VAS components/19-pop-bar.md): change the entry there first, then this.
+// Navigation is the bar and only the bar: a horizontal swipe belongs to the viewer's pager, so sections are never swiped between (dna/06-interaction.md, gesture ownership).
+@Composable
+fun SectionBar(active: Section, onSelect: (Section) -> Unit, modifier: Modifier = Modifier, accentOf: (Section) -> Color = { it.accent }, albumsGlyph: PlaceGlyph = PlaceGlyph.ALBUMS, isMarked: (Section) -> Boolean = { false }, hasGlass: Boolean = true, itemModifier: Modifier = Modifier, washAlpha: () -> Float = { 1f }) {
+    // The new section's label takes its colour on the cut, once the outgoing section has left, as every other accent does.
+    var inkActive by remember { mutableStateOf(active) }
+    LaunchedEffect(active) {
+        delay(Motion.SECTION_LEAVE_MS.toLong())
+        inkActive = active
+    }
+    NavBar(Section.entries, active, onSelect, modifier, hasGlass = hasGlass, itemModifier = itemModifier, washAlpha = washAlpha) { section ->
+        val ink by animateColorAsState(if (section == inkActive) accentOf(section) else Palette.textMuted, tween(Motion.STATE_MS), label = "section-ink")
+        val markAlpha by animateFloatAsState(if (isMarked(section)) 1f else 0f, tween(Motion.STATE_MS), label = "section-mark")
+        val mark = accentOf(section)
+        // A section that works its own way here is underlined in the accent, just below its icon.
+        Box(Modifier.drawBehind {
+            if (markAlpha == 0f) return@drawBehind
+            val thickness = MARK_THICKNESS.toPx()
+            drawRoundRect(mark, Offset(size.width * 0.2f, size.height + MARK_GAP.toPx()), Size(size.width * 0.6f, thickness), CornerRadius(thickness / 2f), alpha = markAlpha)
+        }) {
+        when (section) {
+            Section.RECENT -> ClockIcon(ink, SECTION_ICON)
+            // A new place pops the old icon away to nothing, then pops its own in past full size, so the change is seen.
+            Section.ALBUMS -> AnimatedContent(
+                targetState = albumsGlyph,
+                transitionSpec = {
+                    scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+                        .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f))
+                        .using(SizeTransform(clip = false))
+                },
+                contentAlignment = Alignment.Center,
+                label = "albums-glyph",
+            ) { glyph ->
+                when (glyph) {
+                    PlaceGlyph.ALBUMS -> AlbumsIcon(ink, SECTION_ICON)
+                    PlaceGlyph.LOCATIONS -> PinIcon(ink, SECTION_ICON)
+                    PlaceGlyph.TRASH -> TrashIcon(ink, SECTION_ICON)
+                    PlaceGlyph.PRIVATE -> LockIcon(ink, size = SECTION_ICON)
+                }
+            }
+            Section.FAVORITES -> HeartIcon(isFilled = true, color = ink, size = SECTION_ICON)
+        }
+        }
+    }
+}
+
+private val MARK_GAP = 4.dp
+private val MARK_THICKNESS = 2.dp
+
+// Prime component (VAS components/19-pop-bar.md): change the entry there first, then this.
 // The nav's pill, for any row of choices: glass, a wash that slides to the chosen one, its label grown a little. `scroll` lets a row wider than the screen slide inside the pill. `isVertical` stacks the choices in a column, the first at the top, and the wash slides up and down.
 @Composable
 // Inside a glass shared with other bars it leaves the glass out; each option takes itemModifier, and the wash fades with washAlpha, so a bar swap can pop them.
