@@ -386,13 +386,10 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             return@Row
         }
         IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
-        // Favourites every selected photo, or takes them all out once all of them are favourites.
+        // Favourites every selected photo, or takes them all out once all of them are favourites; the selection stays, so it can be undone with another tap.
         // An emptied selection counts as none, or the heart flashes red while the bar leaves.
         val isAllFavorite = selectedItems.isNotEmpty() && selectedItems.all { it.isFavorite }
-        IconButton(onClick = {
-            actions.setFavorite(selectedItems, !isAllFavorite)
-            controller.clearSelection()
-        }) { FavoriteHeart(isAllFavorite, if (isAllFavorite) Palette.favorite else Palette.textBody, size = 22.dp) }
+        IconButton(onClick = { actions.setFavorite(selectedItems, !isAllFavorite) }) { FavoriteHeart(isAllFavorite, if (isAllFavorite) Palette.favorite else Palette.textBody, size = 22.dp) }
         val coverSource = screen.gridSource?.takeIf { it is ViewerSource.InAlbum || it is ViewerSource.InPrivateGroup || it is ViewerSource.InFavoriteAlbum }
         if (coverSource != null) {
             OptionalButton(selectedItems.size == 1) {
