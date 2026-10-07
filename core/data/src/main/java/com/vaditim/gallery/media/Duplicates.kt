@@ -2,6 +2,7 @@ package com.vaditim.gallery.media
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.util.Size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -22,8 +23,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-// Finds the same picture saved more than once, by its pixels alone (ImagePrint.kt). Every photo's print is read once from its thumbnail and kept on disk; only pictures the prints pair up are looked at closely, from a larger thumbnail held in memory for the session.
-class DuplicateFinder(private val context: Context) {
+// Finds the same picture saved more than once, by its pixels alone (ImagePrint.kt). Every photo's print is read once from its thumbnail and kept in `indexFile`; only pictures the prints pair up are looked at closely, from a larger thumbnail held in memory for the session.
+// The library and Private each have their own finder: Private's prints live in the private folder itself, beside the photos they were read from, and its photos are decoded in memory since MediaStore never sees them.
+class DuplicateFinder(private val context: Context, private val indexFile: File) {
     enum class Stage { READING, COMPARING, DONE }
 
     var stage by mutableStateOf(Stage.DONE)
@@ -42,7 +44,6 @@ class DuplicateFinder(private val context: Context) {
     var groups by mutableStateOf<List<List<MediaItem>>?>(null)
         private set
 
-    private val file = File(context.filesDir, "duplicates.bin")
     private val prints = ConcurrentHashMap<Long, StoredPrint>()
     private val fines = ConcurrentHashMap<Long, ByteArray>()
     private var isLoaded = false
@@ -51,7 +52,7 @@ class DuplicateFinder(private val context: Context) {
     private class StoredPrint(val sizeBytes: Long, val print: ImagePrint)
 
     suspend fun find(library: List<MediaItem>, strictness: Strictness): Unit = lock.withLock {
-        val photos = library.filter { !it.isVideo && it.uri.scheme == "content" }
+        val photos = library.filter { !it.isVideo }
         withContext(Dispatchers.IO) {
             load()
             // A file whose size changed was edited in place, so its old print no longer says what it shows.
@@ -100,9 +101,17 @@ class DuplicateFinder(private val context: Context) {
     private fun fineOf(item: MediaItem): ByteArray? =
         fines[item.id] ?: pixelsOf(item, FINE_PIXELS)?.let { (pixels, width, height) -> ImagePrints.fineOf(pixels, width, height) }?.also { fines[item.id] = it }
 
-    // The system's thumbnail, which MediaProvider keeps cached, read into plain pixels.
+    // The system's thumbnail, which MediaProvider keeps cached, read into plain pixels; a private photo has none, so it is decoded sampled down to the same size.
     private fun pixelsOf(item: MediaItem, box: Int): Triple<IntArray, Int, Int>? = try {
-        val thumbnail = context.contentResolver.loadThumbnail(item.uri, Size(box, box), null)
+        val thumbnail = if (item.uri.scheme == "content") {
+            context.contentResolver.loadThumbnail(item.uri, Size(box, box), null)
+        } else {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(item.absolutePath))) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                val scale = minOf(1f, box.toFloat() / maxOf(info.size.width, info.size.height))
+                decoder.setTargetSize(maxOf(1, (info.size.width * scale).toInt()), maxOf(1, (info.size.height * scale).toInt()))
+            }
+        }
         // The system may hand back a hardware bitmap, whose pixels cannot be read.
         val readable = if (thumbnail.config == Bitmap.Config.HARDWARE) thumbnail.copy(Bitmap.Config.ARGB_8888, false) else thumbnail
         val pixels = IntArray(readable.width * readable.height)
@@ -118,9 +127,9 @@ class DuplicateFinder(private val context: Context) {
     private fun load() {
         if (isLoaded) return
         isLoaded = true
-        if (!file.exists()) return
+        if (!indexFile.exists()) return
         runCatching {
-            DataInputStream(file.inputStream().buffered()).use { input ->
+            DataInputStream(indexFile.inputStream().buffered()).use { input ->
                 if (input.readInt() != FORMAT) return
                 repeat(input.readInt()) {
                     val id = input.readLong()
@@ -136,9 +145,9 @@ class DuplicateFinder(private val context: Context) {
     }
 
     // Only photos still in the library are written back, so deleted ones drop out of the file.
-    private fun save(photos: List<MediaItem>) {
+    private fun save(photos: List<MediaItem>) = runCatching {
         val kept = photos.mapNotNull { item -> prints[item.id]?.let { item.id to it } }
-        val temporary = File(file.path + ".new")
+        val temporary = File(indexFile.path + ".new")
         DataOutputStream(temporary.outputStream().buffered()).use { output ->
             output.writeInt(FORMAT)
             output.writeInt(kept.size)
@@ -153,7 +162,7 @@ class DuplicateFinder(private val context: Context) {
                 output.writeFloat(stored.print.ratio)
             }
         }
-        temporary.renameTo(file)
+        temporary.renameTo(indexFile)
     }
 
     companion object {

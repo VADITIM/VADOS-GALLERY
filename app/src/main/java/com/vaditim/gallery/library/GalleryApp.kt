@@ -217,7 +217,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 origin = settingsBounds,
                 // Sorting through the photos on screen; a place of covers has none to go through.
                 onReview = screen.reviewSource?.let { source -> { navigation.review = source } },
-                onFindDuplicates = { navigation.isFindingDuplicates = true },
+                onFindDuplicates = navigation::findDuplicates,
                 onDismiss = sheets::dismiss,
                 onPull = { settingsPull = it },
                 onAnnounce = controller.actions::announce,

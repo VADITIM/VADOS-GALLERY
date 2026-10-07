@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.vaditim.gallery.components.Section
 
+enum class DuplicatesScope { LIBRARY, PRIVATE }
+
 // Where the user stands: the section, the place inside Albums, Private, and the overlays opened over them.
 @Stable
 class LibraryNavigation {
@@ -24,8 +26,8 @@ class LibraryNavigation {
     // The folder being reviewed one photo at a time, and where the photo picker puts what is picked.
     var review by mutableStateOf<ViewerSource?>(null)
     var picker by mutableStateOf<PickerTarget?>(null)
-    // The duplicates found across the whole library, over everything but the viewer.
-    var isFindingDuplicates by mutableStateOf(false)
+    // The duplicates being looked through, over everything but the viewer: the whole library's, or inside Private only Private's.
+    var duplicates by mutableStateOf<DuplicatesScope?>(null)
     // Tapping the section already shown asks its grid to scroll back to the newest photo.
     var scrollToNewestRequest by mutableIntStateOf(0)
         private set
@@ -58,6 +60,12 @@ class LibraryNavigation {
         openPrivateFavoriteGroup = null
         if (albumsPlace.isPrivate) albumsPlace = AlbumsPlace.Folders
         if (review.isPrivate) review = null
+        if (duplicates == DuplicatesScope.PRIVATE) duplicates = null
+    }
+
+    // Opened inside Private, duplicates are looked for among the private photos alone; anywhere else, across the whole library.
+    fun findDuplicates() {
+        duplicates = if (isPrivateMode) DuplicatesScope.PRIVATE else DuplicatesScope.LIBRARY
     }
 
     // Inside Private, back from its Recent or Favorites goes to its groups, and from a group opened in its Favorites back to those.

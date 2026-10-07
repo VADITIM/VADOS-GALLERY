@@ -99,12 +99,11 @@ internal fun ReviewOverlay(controller: LibraryController, content: LibraryConten
     }
 }
 
-// Duplicates rises in and sinks out the way review does. What it deletes goes to the trash with the pill's undo, and it closes, since the sets it showed are gone.
+// Duplicates rises in and sinks out the way review does. The library's deletes go to the trash with the pill's undo, Private's are final once confirmed; either way it closes, since the sets it showed are gone.
 @Composable
 internal fun DuplicatesOverlay(controller: LibraryController, content: LibraryContent) {
-    val finder = controller.viewModel.duplicates
     AnimatedContent(
-        targetState = controller.navigation.isFindingDuplicates,
+        targetState = controller.navigation.duplicates,
         transitionSpec = {
             (fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)) +
                 scaleIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), initialScale = 0.94f) +
@@ -112,18 +111,20 @@ internal fun DuplicatesOverlay(controller: LibraryController, content: LibraryCo
                 .togetherWith(fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.96f))
         },
         label = "duplicates",
-    ) { isShown ->
-        if (isShown) {
+    ) { scope ->
+        if (scope != null) {
+            val isPrivate = scope == DuplicatesScope.PRIVATE
+            val finder = if (isPrivate) controller.viewModel.privateDuplicates else controller.viewModel.duplicates
             DuplicatesScreen(
                 finder = finder,
-                library = content.recent,
+                library = if (isPrivate) content.privateRecent else content.recent,
                 strictness = finder.strictness,
                 onStrictness = { finder.strictness = it },
                 onDelete = { picked ->
-                    controller.actions.trash(picked)
-                    controller.navigation.isFindingDuplicates = false
+                    if (isPrivate) controller.actions.deletePrivate(picked) else controller.actions.trash(picked)
+                    controller.navigation.duplicates = null
                 },
-                onClose = { controller.navigation.isFindingDuplicates = false },
+                onClose = { controller.navigation.duplicates = null },
             )
         }
     }

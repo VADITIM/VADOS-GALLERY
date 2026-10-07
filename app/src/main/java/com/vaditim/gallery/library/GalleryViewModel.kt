@@ -21,6 +21,7 @@ import com.vaditim.gallery.media.groupByCity
 import com.vaditim.gallery.media.groupIntoAlbums
 import com.vaditim.gallery.vault.PrivateContents
 import com.vaditim.gallery.vault.PrivateVault
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,7 +99,9 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
 
     private val similarIndex = SimilarIndex(application)
 
-    val duplicates = DuplicateFinder(application)
+    // Private's duplicates are searched apart from the library's, among its own photos only, with its prints kept in its own folder.
+    val duplicates = DuplicateFinder(application, File(application.filesDir, "duplicates.bin"))
+    val privateDuplicates = DuplicateFinder(application, File(PrivateVault.ROOT, ".duplicates"))
 
     init {
         // Hashes only what is new since the last run; the rest is read back from disk.

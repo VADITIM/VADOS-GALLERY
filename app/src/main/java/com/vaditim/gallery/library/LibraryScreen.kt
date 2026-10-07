@@ -176,7 +176,7 @@ class LibraryScreen(
     }
 
     // Anything showing private photos stays out of screenshots and the recent-apps preview.
-    val isShowingPrivate: Boolean = isPrivateMode || navigation.review.isPrivate
+    val isShowingPrivate: Boolean = isPrivateMode || navigation.review.isPrivate || navigation.duplicates == DuplicatesScope.PRIVATE
 }
 
 // What the bottom bar is showing: the sections, a selection's actions, the end of rearranging, or nothing while a photo is open.
