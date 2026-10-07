@@ -90,7 +90,7 @@ fun PrivateGroupsScreen(
     reorder.onStartRearranging = if (isPicking) null else onStartRearranging
     // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
     val selectionSeed = remember { Random.nextInt(Int.MAX_VALUE) }
-    CoverGrid(state, contentPadding) {
+    CoverGrid(state, contentPadding, onBackgroundLongPress = if (isPicking || isRearranging) null else onStartRearranging) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText("Private", style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }

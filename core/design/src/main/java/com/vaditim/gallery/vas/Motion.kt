@@ -70,6 +70,8 @@ object Motion {
     const val SELECT_HOLD_ACTIVE_MS = 150L
     // A finger resting this long on a cover before it moves is picking the cover up, not scrolling; moving before the long press would fire turns rearranging on.
     const val DRAG_REST_MS = 150L
+    // A cover's long press waits this much past the system's, so there is more time to start a drag before its menu opens.
+    const val COVER_HOLD_EXTRA_MS = 150L
     // A finger that lands while the grid moves faster than this (pixels per second) is stopping a scroll, not starting a selection; slower, it is a slight drift and selects.
     const val SELECT_FAST_SCROLL_PX_PER_S = 400f
 

@@ -179,7 +179,7 @@ fun AlbumsScreen(
     // Every group is a row of its own, so the albums before it end their row early.
     val spans = coverColumns().let { columns -> remember(entries, columns) { spansOf(entries, columns) } }
 
-    CoverGrid(state, contentPadding) {
+    CoverGrid(state, contentPadding, onBackgroundLongPress = if (isPicking || isRearranging) null else onStartRearranging) {
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "title") {
             BasicText(title, style = Type.title, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }

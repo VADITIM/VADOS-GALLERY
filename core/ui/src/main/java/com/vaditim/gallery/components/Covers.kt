@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,11 +27,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -46,6 +49,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -58,6 +63,7 @@ import com.vaditim.gallery.media.Thumbnail
 import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.settings.SettingsView
+import com.vaditim.gallery.vas.Haptics
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.Motion
 import com.vaditim.gallery.vas.Palette
@@ -77,11 +83,22 @@ val COVER_GAP = 14.dp
 @Composable
 fun coverRowGap(): Dp = if (coverColumns() == 1) 12.dp else 20.dp
 
+// A cover's long press, every one in the grid, waits a little past the system's; the drag that starts rearranging reads the same clock, so it gets the extra time too.
+private class CoverViewConfiguration(private val system: ViewConfiguration) : ViewConfiguration by system {
+    override val longPressTimeoutMillis: Long get() = system.longPressTimeoutMillis + Motion.COVER_HOLD_EXTRA_MS
+}
+
 // Albums, private groups and locations are one kind of screen: a grid of covers whose columns, list layout, shrinking names and pinch are the same everywhere. A new cover screen is built from these, not beside them.
+// `onBackgroundLongPress`, where covers can be arranged, turns rearranging on from a hold on the grid between them.
 @Composable
-fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: LazyGridScope.() -> Unit) {
+fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, onBackgroundLongPress: (() -> Unit)? = null, content: LazyGridScope.() -> Unit) {
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val system = LocalViewConfiguration.current
+    val viewConfiguration = remember(system) { CoverViewConfiguration(system) }
+    val currentOnBackgroundLongPress by rememberUpdatedState(onBackgroundLongPress)
     HoldUnderSheet(state)
+    CompositionLocalProvider(LocalViewConfiguration provides viewConfiguration) {
     ProvideEntrance {
     LazyVerticalGrid(
         columns = GridCells.Fixed(coverColumns()),
@@ -94,9 +111,21 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
         ),
         horizontalArrangement = Arrangement.spacedBy(COVER_GAP),
         verticalArrangement = Arrangement.spacedBy(coverRowGap()),
-        modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
+        modifier = Modifier
+            .fillMaxSize()
+            .pinchAlbumColumns(haptic)
+            // A cover takes its own presses, so only a hold on the grid between covers reaches this.
+            .pointerInput(Unit) {
+                detectTapGestures(onLongPress = {
+                    currentOnBackgroundLongPress?.let { start ->
+                        Haptics.tick(context)
+                        start()
+                    }
+                })
+            },
         content = content,
     )
+    }
     }
 }
 
