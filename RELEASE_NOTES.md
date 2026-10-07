@@ -1,3 +1,3 @@
-# 1.1.60
+# 1.1.61
 
-- Swiping between settings tabs fades the content out at the sheet's sides instead of cutting it off.
+- The settings panel reaches a little further up.

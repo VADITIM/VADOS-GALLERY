@@ -129,7 +129,7 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
                     .graphicsLayer { translationY = if (isFollowing()) (1f - reveal()) * (size.height + 12.dp.toPx()) else pull }
                     .onSizeChanged { sheetHeight = it.height.toFloat().coerceAtLeast(1f) }
                     .then(if (isCentered || isFullHeight) Modifier.statusBarsPadding().navigationBarsPadding() else if (isFloating) Modifier.statusBarsPadding().padding(top = FLOATING_TOP) else Modifier.navigationBarsPadding())
-                    .padding(12.dp)
+                    .then(if (isFullHeight) Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp, top = FULL_HEIGHT_TOP) else Modifier.padding(12.dp))
                     // A full-height sheet runs from just under the status bar to just over the navigation bar, covering the top row and the nav.
                     .then(if (isFullHeight) Modifier.fillMaxHeight() else Modifier)
                     .then(if (isFloating || isCentered) Modifier.widthIn(max = FLOATING_WIDTH) else Modifier)
@@ -156,6 +156,8 @@ private const val PULL_FLING = 1200f
 // Where a floating sheet hangs: this far under the status bar, no wider than this.
 private val FLOATING_TOP = 72.dp
 private val FLOATING_WIDTH = 420.dp
+// A full-height sheet rises closer to the status bar than the 12dp margin its sides and foot keep.
+private val FULL_HEIGHT_TOP = 4.dp
 
 // A hairline under a row of a sheet, inset to the row's text, so rows read as separate lines.
 fun Modifier.rowDivider(): Modifier = drawBehind {
