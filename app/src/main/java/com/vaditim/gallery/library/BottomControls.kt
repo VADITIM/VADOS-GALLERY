@@ -59,6 +59,7 @@ import com.vaditim.gallery.components.CropIcon
 import com.vaditim.gallery.components.MoreIcon
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.components.ConfirmPill
+import com.vaditim.gallery.components.FavoriteHeart
 import com.vaditim.gallery.components.HeartIcon
 import com.vaditim.gallery.components.IconButton
 import com.vaditim.gallery.components.ImageIcon
@@ -307,7 +308,7 @@ private fun ViewerActions(controller: LibraryController, item: MediaItem, source
             IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
             return@Row
         }
-        IconButton(onClick = { actions.toggleFavorite(item) }) { HeartIcon(item.isFavorite, if (item.isFavorite) Palette.favorite else Palette.textBody) }
+        IconButton(onClick = { actions.toggleFavorite(item) }) { FavoriteHeart(item.isFavorite, if (item.isFavorite) Palette.favorite else Palette.textBody) }
         IconButton(onClick = { bar.onCrop() }) { CropIcon(Palette.textBody) }
         IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
         IconButton(onClick = { bar.onMore() }) { MoreIcon(Palette.textBody) }
@@ -389,7 +390,7 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
         IconButton(onClick = {
             actions.setFavorite(selectedItems, !isAllFavorite)
             controller.clearSelection()
-        }) { HeartIcon(isFilled = isAllFavorite, color = if (isAllFavorite) Palette.favorite else Palette.textBody, size = 22.dp) }
+        }) { FavoriteHeart(isAllFavorite, if (isAllFavorite) Palette.favorite else Palette.textBody, size = 22.dp) }
         val coverSource = screen.gridSource?.takeIf { it is ViewerSource.InAlbum || it is ViewerSource.InPrivateGroup || it is ViewerSource.InFavoriteAlbum }
         if (coverSource != null) {
             OptionalButton(selectedItems.size == 1) {

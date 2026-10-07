@@ -1,3 +1,3 @@
-# 1.1.56
+# 1.1.57
 
-- An open photo has a back button at the top left.
+- The favourite heart pops and throws off dots and sparkles when you favourite a photo.

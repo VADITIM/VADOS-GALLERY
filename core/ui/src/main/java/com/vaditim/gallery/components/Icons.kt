@@ -1,6 +1,14 @@
 package com.vaditim.gallery.components
 
 import androidx.compose.ui.Alignment
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.PI
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.scaleIn
@@ -10,6 +18,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -120,6 +129,59 @@ fun PlayPauseIcon(isPlaying: Boolean, color: Color, size: Dp = 24.dp) {
 
 @Composable
 fun HeartIcon(isFilled: Boolean, color: Color, size: Dp = 24.dp) = SvgGlyph(color, size, paths = arrayOf(if (isFilled) HEART_SOLID else HEART_OUTLINE))
+
+private const val BURST_DOTS = 8
+private const val BURST_SPARKLES = 4
+
+// A heart that pops when it turns favourite while dots and four-point sparkles fly off it; it starts quiet, so a heart that is already on does nothing.
+@Composable
+fun FavoriteHeart(isFavorite: Boolean, color: Color, size: Dp = 24.dp) {
+    val progress = remember { Animatable(1f) }
+    var wasFavorite by remember { mutableStateOf(isFavorite) }
+    LaunchedEffect(isFavorite) {
+        if (isFavorite && !wasFavorite) {
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(Motion.BURST_MS, easing = LinearEasing))
+        }
+        wasFavorite = isFavorite
+    }
+    val burst = progress.value
+    // The heart swells past its size and settles back, drawn at the real size rather than scaled.
+    val pop = if (burst < 1f) 1f + 0.35f * sin(PI.toFloat() * Motion.backOut.transform(burst)) else 1f
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        if (burst < 1f) {
+            Canvas(Modifier.size(size)) {
+                val center = Offset(this.size.width / 2f, this.size.height / 2f)
+                val reach = Motion.powerTwoOut.transform(burst)
+                val fade = 1f - Motion.powerTwoIn.transform(burst)
+                for (index in 0 until BURST_DOTS) {
+                    val angle = 2.0 * PI * index / BURST_DOTS
+                    val distance = this.size.width * (0.55f + 0.45f * reach)
+                    val dot = Offset(center.x + (cos(angle) * distance).toFloat(), center.y + (sin(angle) * distance).toFloat())
+                    drawCircle(color.copy(alpha = fade), radius = this.size.width * 0.07f * (1f - burst), center = dot)
+                }
+                for (index in 0 until BURST_SPARKLES) {
+                    // Offset half a step from the dots so the two rings interleave.
+                    val angle = 2.0 * PI * (index + 0.5) / BURST_SPARKLES
+                    val distance = this.size.width * (0.45f + 0.5f * reach)
+                    val sparkle = Offset(center.x + (cos(angle) * distance).toFloat(), center.y + (sin(angle) * distance).toFloat())
+                    val arm = this.size.width * 0.2f * sin(PI.toFloat() * burst)
+                    val star = Path().apply {
+                        moveTo(sparkle.x, sparkle.y - arm)
+                        quadraticBezierTo(sparkle.x, sparkle.y, sparkle.x + arm, sparkle.y)
+                        quadraticBezierTo(sparkle.x, sparkle.y, sparkle.x, sparkle.y + arm)
+                        quadraticBezierTo(sparkle.x, sparkle.y, sparkle.x - arm, sparkle.y)
+                        quadraticBezierTo(sparkle.x, sparkle.y, sparkle.x, sparkle.y - arm)
+                        close()
+                    }
+                    drawPath(star, Color.White.copy(alpha = fade))
+                }
+            }
+        }
+        // Unbounded, or the box's fixed size would hold the swelling heart back.
+        Box(Modifier.wrapContentSize(unbounded = true)) { HeartIcon(isFilled = isFavorite, color = color, size = size * pop) }
+    }
+}
 
 // A speaker with its sound waves; muting draws a stroke across it while the waves fade and shrink away, and unmuting runs it back.
 @Composable

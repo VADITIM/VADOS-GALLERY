@@ -126,7 +126,7 @@ Four actions, always visible while the chrome is shown:
 | Action | What it does |
 |---|---|
 | **SHARE** | The system share sheet |
-| **FAVORITE** | Toggles favourite, lit in the section accent when on |
+| **FAVORITE** | Toggles favourite, lit in the section accent when on; turning it on pops the heart and throws dots and sparkles off it, like a like button |
 | **DELETE** | Moves to the trash (recoverable for 30 days, the system's own trash) |
 | **•••** | The menu below |
 

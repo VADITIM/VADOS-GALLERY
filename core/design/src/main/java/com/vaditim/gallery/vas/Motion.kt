@@ -26,6 +26,9 @@ object Motion {
     const val RELEASE_MS = 220
     const val STATE_MS = 220
 
+    // The dots and sparkles flying off a heart as it turns favourite.
+    const val BURST_MS = 520
+
     // An album group opening into its row, or folding back onto its top card.
     const val STACK_MS = 360
 
