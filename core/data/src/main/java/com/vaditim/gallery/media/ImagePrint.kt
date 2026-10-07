@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 // What a picture looks like, boiled down from its pixels alone, so two copies of one picture are found whatever their names, sizes, dates or compression. Kept free of Android so the matching can be tried on a desktop against real photos.
@@ -21,10 +22,22 @@ class ImagePrint(
 
 // How alike two pictures must be to count as the same: an exact copy at any size or compression, a copy slightly edited, or merely the same scene.
 // `maxFineDifference` is the most any patch of the two close looks may differ, on the 0–255 grey scale: two screenshots of one form with other numbers in it differ only in a few patches, and a lot there.
-enum class Strictness(val maxShapeBits: Int, val maxColourDifference: Int, val minDetailMatch: Float, val maxRatioDifference: Float, val maxFineDifference: Float) {
-    EXACT(6, 6, 0.95f, 0.02f, 12f),
+// `maxSharpPatch` and `maxSharpMean` are the sharp look only an exact copy gets (see sharpDifference): two shots of the same clouds a moment apart pass every other test.
+enum class Strictness(
+    val maxShapeBits: Int,
+    val maxColourDifference: Int,
+    val minDetailMatch: Float,
+    val maxRatioDifference: Float,
+    val maxFineDifference: Float,
+    val maxSharpPatch: Float = Float.POSITIVE_INFINITY,
+    val maxSharpMean: Float = Float.POSITIVE_INFINITY,
+) {
+    EXACT(4, 4, 0.97f, 0.02f, 8f, 6f, 2f),
     CLOSE(10, 18, 0.90f, 0.03f, 20f),
     LOOSE(14, 28, 0.80f, 0.06f, 32f),
+    ;
+
+    val looksSharp: Boolean get() = maxSharpPatch.isFinite()
 }
 
 object ImagePrints {
@@ -188,59 +201,89 @@ object ImagePrints {
         return turns.takeIf { detailMatch(first, second, turns) >= strictness.minDetailMatch }
     }
 
-    // The close look: the picture in 128×128 greys, read from a larger thumbnail only for pictures the prints already pair up.
+    // The close look: the picture in 128×128 greys, softened once here rather than on every comparison, read from a larger thumbnail only for pictures the prints already pair up.
     fun fineOf(pixels: IntArray, width: Int, height: Int): ByteArray {
-        val greys = ByteArray(FINE_SIDE * FINE_SIDE)
-        for (cellY in 0 until FINE_SIDE) {
-            val top = cellY * height / FINE_SIDE
-            val bottom = min(height, max(top + 1, (cellY + 1) * height / FINE_SIDE))
-            for (cellX in 0 until FINE_SIDE) {
-                val left = cellX * width / FINE_SIDE
-                val right = min(width, max(left + 1, (cellX + 1) * width / FINE_SIDE))
+        val softGreys = softened(greysOf(pixels, width, height, FINE_SIDE), FINE_SIDE)
+        return ByteArray(softGreys.size) { softGreys[it].roundToInt().coerceIn(0, 255).toByte() }
+    }
+
+    // The sharp look, for an exact copy only: the picture in 256×256 greys as they are, read only for pictures the close look already pairs up.
+    fun sharpOf(pixels: IntArray, width: Int, height: Int): ByteArray {
+        val greys = greysOf(pixels, width, height, SHARP_SIDE)
+        return ByteArray(greys.size) { greys[it].roundToInt().coerceIn(0, 255).toByte() }
+    }
+
+    // The picture averaged down to `side`×`side` greys.
+    private fun greysOf(pixels: IntArray, width: Int, height: Int, side: Int): FloatArray {
+        val greys = FloatArray(side * side)
+        for (cellY in 0 until side) {
+            val top = cellY * height / side
+            val bottom = min(height, max(top + 1, (cellY + 1) * height / side))
+            for (cellX in 0 until side) {
+                val left = cellX * width / side
+                val right = min(width, max(left + 1, (cellX + 1) * width / side))
                 var sum = 0f
                 for (y in top until bottom) for (x in left until right) {
                     val pixel = pixels[y * width + x]
                     sum += 0.299f * (pixel shr 16 and 0xFF) + 0.587f * (pixel shr 8 and 0xFF) + 0.114f * (pixel and 0xFF)
                 }
-                greys[cellY * FINE_SIDE + cellX] = (sum / ((bottom - top) * (right - left)).coerceAtLeast(1)).toInt().coerceIn(0, 255).toByte()
+                greys[cellY * side + cellX] = sum / ((bottom - top) * (right - left)).coerceAtLeast(1)
             }
         }
         return greys
     }
 
     // The largest mean difference of any 4×4 patch once the second is turned and brought to the first's brightness and contrast. A copy differs a little everywhere; a different picture of the same layout differs a lot somewhere.
-    fun fineDifference(first: ByteArray, second: ByteArray, turns: Int): Float = patchDifferences(first, second, turns).max()
-
-    private fun patchDifferences(first: ByteArray, second: ByteArray, turns: Int): FloatArray {
-        val count = first.size
-        val turnedSecond = softened(FloatArray(count) { (second[sourceOf(it % FINE_SIDE, it / FINE_SIDE, FINE_SIDE, turns)].toInt() and 0xFF).toFloat() })
-        val firstValues = softened(FloatArray(count) { (first[it].toInt() and 0xFF).toFloat() })
-        val firstMean = firstValues.average().toFloat()
-        val secondMean = turnedSecond.average().toFloat()
-        val firstSpread = sqrt(firstValues.fold(0f) { sum, value -> sum + (value - firstMean) * (value - firstMean) } / count)
-        val secondSpread = sqrt(turnedSecond.fold(0f) { sum, value -> sum + (value - secondMean) * (value - secondMean) } / count)
+    fun fineDifference(first: ByteArray, second: ByteArray, turns: Int): Float {
+        val (firstMean, firstSpread) = toneOf(first)
+        val (secondMean, secondSpread) = toneOf(second)
         val gain = if (firstSpread >= FLAT_SPREAD && secondSpread >= FLAT_SPREAD) firstSpread / secondSpread else 1f
-        val patches = FINE_SIDE / FINE_PATCH
-        return FloatArray(patches * patches) { patch ->
-            val patchX = patch % patches
-            val patchY = patch / patches
-            var sum = 0f
-            for (y in patchY * FINE_PATCH until (patchY + 1) * FINE_PATCH) for (x in patchX * FINE_PATCH until (patchX + 1) * FINE_PATCH) {
-                val index = y * FINE_SIDE + x
-                sum += abs(firstValues[index] - firstMean - (turnedSecond[index] - secondMean) * gain)
-            }
-            sum / (FINE_PATCH * FINE_PATCH)
+        return differences(first, second, FINE_SIDE, FINE_PATCH, turns, firstMean, secondMean, gain).first
+    }
+
+    // How far apart two sharp looks are: the largest mean difference of any 8×8 patch, and the mean over the whole picture. Only the overall brightness is evened out, for a copy saved in another colour space; nothing is softened and contrast is kept, so a second shot a moment later, its clouds moved a pixel, shows at their edges.
+    fun sharpDifference(first: ByteArray, second: ByteArray, turns: Int): Pair<Float, Float> =
+        differences(first, second, SHARP_SIDE, SHARP_PATCH, turns, toneOf(first).first, toneOf(second).first, 1f)
+
+    // The mean and spread of a look's greys.
+    private fun toneOf(look: ByteArray): Pair<Float, Float> {
+        var sum = 0f
+        for (value in look) sum += value.toInt() and 0xFF
+        val mean = sum / look.size
+        var squares = 0f
+        for (value in look) {
+            val offset = (value.toInt() and 0xFF) - mean
+            squares += offset * offset
         }
+        return mean to sqrt(squares / look.size)
+    }
+
+    // The largest patch difference and the mean difference of two looks, the second turned and evened by `gain`; nothing is allocated, since it runs for every candidate pair.
+    private fun differences(first: ByteArray, second: ByteArray, side: Int, patch: Int, turns: Int, firstMean: Float, secondMean: Float, gain: Float): Pair<Float, Float> {
+        val patches = side / patch
+        var largest = 0f
+        var total = 0f
+        for (patchY in 0 until patches) for (patchX in 0 until patches) {
+            var sum = 0f
+            for (y in patchY * patch until (patchY + 1) * patch) for (x in patchX * patch until (patchX + 1) * patch) {
+                val one = (first[y * side + x].toInt() and 0xFF) - firstMean
+                val other = (second[sourceOf(x, y, side, turns)].toInt() and 0xFF) - secondMean
+                sum += abs(one - other * gain)
+            }
+            total += sum
+            largest = max(largest, sum / (patch * patch))
+        }
+        return largest to total / (side * side)
     }
 
     // A 3×3 average, so a copy saved small (its edges gone soft) and its sharp original agree, while text that changed still changes a patch's tone.
-    private fun softened(values: FloatArray): FloatArray = FloatArray(values.size) { index ->
-        val x = index % FINE_SIDE
-        val y = index / FINE_SIDE
+    private fun softened(values: FloatArray, side: Int): FloatArray = FloatArray(values.size) { index ->
+        val x = index % side
+        val y = index / side
         var sum = 0f
         var count = 0
-        for (nearY in max(0, y - 1)..min(FINE_SIDE - 1, y + 1)) for (nearX in max(0, x - 1)..min(FINE_SIDE - 1, x + 1)) {
-            sum += values[nearY * FINE_SIDE + nearX]
+        for (nearY in max(0, y - 1)..min(side - 1, y + 1)) for (nearX in max(0, x - 1)..min(side - 1, x + 1)) {
+            sum += values[nearY * side + nearX]
             count++
         }
         sum / count
@@ -249,9 +292,12 @@ object ImagePrints {
     private const val FINE_SIDE = 128
     // Small patches, so a changed number or word fills most of one instead of fading into its surroundings.
     private const val FINE_PATCH = 4
+    private const val SHARP_SIDE = 256
+    // The same share of the picture as a fine patch.
+    private const val SHARP_PATCH = 8
 
-    // Every set of at least two pictures that are the same at this strictness, each set in the order given. Only pictures of about the same shape are compared, which keeps a large library to a fraction of every pair; `fineOf` is asked only for pictures the prints pair up, and a picture without one pairs with nothing.
-    fun <T> groupsOfSame(items: List<T>, printOf: (T) -> ImagePrint?, ratioOf: (T) -> Float?, fineOf: (T) -> ByteArray?, strictness: Strictness): List<List<T>> {
+    // Every set of at least two pictures that are the same at this strictness, each set in the order given. Only pictures of about the same shape are compared, which keeps a large library to a fraction of every pair; `fineOf` is asked only for pictures the prints pair up, `sharpOf` only for an exact search and pictures the close look pairs up, and a picture without one pairs with nothing. `onStep` runs between pictures, so a search no longer wanted can stop there.
+    fun <T> groupsOfSame(items: List<T>, printOf: (T) -> ImagePrint?, ratioOf: (T) -> Float?, fineOf: (T) -> ByteArray?, sharpOf: (T) -> ByteArray?, strictness: Strictness, onStep: () -> Unit = {}): List<List<T>> {
         val indices = items.indices.filter { printOf(items[it]) != null }
         val prints = arrayOfNulls<ImagePrint>(items.size)
         val ratios = FloatArray(items.size)
@@ -275,6 +321,7 @@ object ImagePrints {
         indices.forEach { index -> for (turns in 0 until 4) turnedShapes[turns][index] = prints[index]!!.shapes[turns] }
         val shapes = turnedShapes[0]
         for (position in byRatio.indices) {
+            onStep()
             val first = byRatio[position]
             val widest = ratios[first] * (1f + strictness.maxRatioDifference)
             var next = position + 1
@@ -290,7 +337,14 @@ object ImagePrints {
                 val turns = sameTurn(prints[first]!!, prints[second]!!, strictness) ?: continue
                 val firstFine = fineOf(items[first]) ?: continue
                 val secondFine = fineOf(items[second]) ?: continue
-                if (fineDifference(firstFine, secondFine, turns) <= strictness.maxFineDifference) parent[root(first)] = root(second)
+                if (fineDifference(firstFine, secondFine, turns) > strictness.maxFineDifference) continue
+                if (strictness.looksSharp) {
+                    val firstSharp = sharpOf(items[first]) ?: continue
+                    val secondSharp = sharpOf(items[second]) ?: continue
+                    val (patch, mean) = sharpDifference(firstSharp, secondSharp, turns)
+                    if (patch > strictness.maxSharpPatch || mean > strictness.maxSharpMean) continue
+                }
+                parent[root(first)] = root(second)
             }
         }
         return indices.groupBy { root(it) }.values.filter { it.size >= 2 }.map { it.sorted() }.sortedBy { it.first() }.map { group -> group.map { items[it] } }

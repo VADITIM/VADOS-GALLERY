@@ -3,6 +3,7 @@ package com.vaditim.gallery.media
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.os.Process
 import android.util.Size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -13,8 +14,9 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -46,6 +48,8 @@ class DuplicateFinder(private val context: Context, private val indexFile: File)
 
     private val prints = ConcurrentHashMap<Long, StoredPrint>()
     private val fines = ConcurrentHashMap<Long, ByteArray>()
+    // Only an exact search reads these, for the few pictures the close look pairs up; they are dropped when it ends, being four times the size.
+    private val sharps = ConcurrentHashMap<Long, ByteArray>()
     private var isLoaded = false
     private val lock = Mutex()
 
@@ -53,7 +57,7 @@ class DuplicateFinder(private val context: Context, private val indexFile: File)
 
     suspend fun find(library: List<MediaItem>, strictness: Strictness): Unit = lock.withLock {
         val photos = library.filter { !it.isVideo }
-        withContext(Dispatchers.IO) {
+        withContext(SEARCH) {
             load()
             // A file whose size changed was edited in place, so its old print no longer says what it shows.
             val unread = photos.filter { prints[it.id]?.sizeBytes != it.sizeBytes }
@@ -84,11 +88,15 @@ class DuplicateFinder(private val context: Context, private val indexFile: File)
             progress = 1f
         }
         stage = Stage.COMPARING
-        groups = withContext(Dispatchers.Default) {
-            ImagePrints.groupsOfSame(photos, { prints[it.id]?.print }, { item -> ratioOf(item) }, { fineOf(it) }, strictness)
-                .map { group -> group.sortedWith(BEST_FIRST) }
-                // The sets with the most to free come first.
-                .sortedByDescending { group -> group.drop(1).sumOf { it.sizeBytes } }
+        groups = try {
+            withContext(SEARCH) {
+                ImagePrints.groupsOfSame(photos, { prints[it.id]?.print }, { item -> ratioOf(item) }, { fineOf(it) }, { sharpOf(it) }, strictness, onStep = { ensureActive() })
+                    .map { group -> group.sortedWith(BEST_FIRST) }
+                    // The sets with the most to free come first.
+                    .sortedByDescending { group -> group.drop(1).sumOf { it.sizeBytes } }
+            }
+        } finally {
+            sharps.clear()
         }
         stage = Stage.DONE
     }
@@ -100,6 +108,9 @@ class DuplicateFinder(private val context: Context, private val indexFile: File)
 
     private fun fineOf(item: MediaItem): ByteArray? =
         fines[item.id] ?: pixelsOf(item, FINE_PIXELS)?.let { (pixels, width, height) -> ImagePrints.fineOf(pixels, width, height) }?.also { fines[item.id] = it }
+
+    private fun sharpOf(item: MediaItem): ByteArray? =
+        sharps[item.id] ?: pixelsOf(item, FINE_PIXELS)?.let { (pixels, width, height) -> ImagePrints.sharpOf(pixels, width, height) }?.also { sharps[item.id] = it }
 
     // The system's thumbnail, which MediaProvider keeps cached, read into plain pixels; a private photo has none, so it is decoded sampled down to the same size.
     private fun pixelsOf(item: MediaItem, box: Int): Triple<IntArray, Int, Int>? = try {
@@ -173,6 +184,13 @@ class DuplicateFinder(private val context: Context, private val indexFile: File)
         private const val WORKERS = 4
         private const val SAVE_EVERY = 400
         private const val PROGRESS_STEP = 20
+        // The search runs below the screen's priority, so whatever moves on screen while it reads and compares (the strictness pill, the progress) keeps its frames.
+        private val SEARCH = Executors.newFixedThreadPool(WORKERS) { task ->
+            Thread({
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+                task.run()
+            }, "duplicates").apply { isDaemon = true }
+        }.asCoroutineDispatcher()
 
         // The copy to keep: the most pixels, then the largest file (the least compressed), then one from the camera, then the oldest, which is most likely the original.
         val BEST_FIRST: Comparator<MediaItem> = compareByDescending<MediaItem> { it.width.toLong() * it.height }

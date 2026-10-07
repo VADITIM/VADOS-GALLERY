@@ -1,9 +1,5 @@
-# 1.3.3
+# 1.3.4
 
-- Timeline: the month you hold steps out beside your finger and widens into its full name, instead of a separate bubble.
-- Unliking a photo drains the heart's fill instead of swapping icons.
-- Review's Done button is filled with the accent colour.
-- Grid thumbnails no longer show turned sideways or upside down while scrolling.
-- An album inside an open group moves with your finger right away when dragged, instead of only turning rearranging on.
-- The name and count of a cover being moved cast a slight shadow.
-- Find duplicates inside Private shows its photos again.
+- Find duplicates on Exact no longer pairs photos that are only nearly the same, like two shots of the same clouds.
+- The Exact / Close / Loose track in Find duplicates slides smoothly instead of jumping.
+- Private's Trash tile sits in the middle of its row.

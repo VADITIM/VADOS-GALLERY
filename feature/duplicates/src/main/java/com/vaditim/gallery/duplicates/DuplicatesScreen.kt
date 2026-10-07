@@ -64,6 +64,7 @@ import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.vas.Shapes
 import com.vaditim.gallery.vas.Type
 import com.vaditim.gallery.vas.pressable
+import kotlinx.coroutines.delay
 
 private const val TILES_PER_ROW = 3
 private const val TILE_PIXELS = 384
@@ -81,9 +82,12 @@ fun DuplicatesScreen(
     onDelete: (List<MediaItem>) -> Unit,
     onClose: () -> Unit,
 ) {
-    // The library is read as it is when a search starts, so a photo arriving mid-search does not start it over.
+    // The library is read as it is when a search starts, so a photo arriving mid-search does not start it over. It starts once the strictness pill has settled, so the swap to the progress never lands mid-slide.
     val libraryNow by rememberUpdatedState(library)
-    LaunchedEffect(strictness) { finder.find(libraryNow, strictness) }
+    LaunchedEffect(strictness) {
+        delay(Motion.STATE_MS.toLong())
+        finder.find(libraryNow, strictness)
+    }
 
     // A copy deleted elsewhere since the search leaves its set, and a set down to one picture is no longer a set.
     val present = remember(library) { library.mapTo(HashSet()) { it.id } }

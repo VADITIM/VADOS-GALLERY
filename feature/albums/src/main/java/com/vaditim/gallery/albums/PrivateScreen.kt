@@ -119,13 +119,13 @@ fun PrivateGroupsScreen(
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New album", onClick = onNewGroup) } }
-        // Private's own trash at the foot, as the system's sits at the foot of Albums, a tile as big as theirs.
+        // Private's own trash at the foot, as the system's sits at the foot of Albums, a tile as big as theirs, alone in the middle of its row.
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "trash") {
             Column(Modifier.entrance().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FolderDivider()
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COVER_GAP)) {
-                    FolderEntry("Trash", Palette.trashGray, icon = { TrashIcon(it, size = FOLDER_ICON) }, onClick = onTrash, modifier = Modifier.weight(1f), count = trashCount)
                     Spacer(Modifier.weight(1f))
+                    FolderEntry("Trash", Palette.trashGray, icon = { TrashIcon(it, size = FOLDER_ICON) }, onClick = onTrash, modifier = Modifier.weight(1f), count = trashCount)
                     Spacer(Modifier.weight(1f))
                 }
             }
