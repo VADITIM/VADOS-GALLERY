@@ -246,8 +246,9 @@ fun BoxScope.ViewerScreen(
                 horizontalArrangement = Arrangement.End,
             ) {
                 // The date stays through a swipe up: the details rise below it and it is still there once they are open.
-                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, pull = { pull }, isPoppedWhole = false) {
-                    TypedDatePill(formatStamp(current), isCurrentMotion)
+                // The pill takes the pull itself, running its arrival back, rather than shrinking as the other pieces do.
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, isPoppedWhole = false) {
+                    TypedDatePill(formatStamp(current), isCurrentMotion, pull = { pull })
                 }
             }
 
@@ -667,22 +668,28 @@ private fun ChromePiece(isAllowed: Boolean, isShown: Boolean, isFromTop: Boolean
     }
 }
 
-// Opening, the date's pill widens from its centre to both sides and then the date types itself in; closing, it types itself out as the pill narrows to nothing.
+// Opening, the date's pill pops in as a circle, widens from its centre to both sides, and then the date types itself in; closing runs it back, and a pull down runs it back with the finger.
 @Composable
-private fun AnimatedVisibilityScope.TypedDatePill(text: String, isMotion: Boolean) {
+private fun AnimatedVisibilityScope.TypedDatePill(text: String, isMotion: Boolean, pull: () -> Float) {
     val isArriving = { state: EnterExitState -> state == EnterExitState.Visible }
+    // Leaving, the three steps share the viewer's close, so the pill is gone by the time the photo is back in its tile.
+    val leaveStep = Motion.VIEWER_CLOSE_MS / 3
+    val circle by transition.animateFloat(
+        transitionSpec = { if (isArriving(targetState)) tween(Motion.STATE_MS, Motion.STATE_MS, Motion.backOut) else tween(leaveStep, leaveStep * 2, Motion.backIn) },
+        label = "date-circle",
+    ) { if (isArriving(it)) 1f else 0f }
     val width by transition.animateFloat(
-        transitionSpec = { tween(Motion.STATE_MS, if (isArriving(targetState)) Motion.STATE_MS else 0, Motion.powerThreeInOut) },
+        transitionSpec = { if (isArriving(targetState)) tween(Motion.STATE_MS, Motion.STATE_MS * 2, Motion.powerThreeInOut) else tween(leaveStep, leaveStep, Motion.powerThreeInOut) },
         label = "date-width",
     ) { if (isArriving(it)) 1f else 0f }
     val typed by transition.animateFloat(
-        transitionSpec = {
-            if (isArriving(targetState)) tween((Motion.TYPE_MS * text.length).toInt(), Motion.STATE_MS * 2, LinearEasing)
-            else tween(Motion.STATE_MS, easing = LinearEasing)
-        },
+        transitionSpec = { if (isArriving(targetState)) tween((Motion.TYPE_MS * text.length).toInt(), Motion.STATE_MS * 3, LinearEasing) else tween(leaveStep, easing = LinearEasing) },
         label = "date-typed",
     ) { if (isArriving(it)) 1f else 0f }
-    val shown = text.take(ceil(text.length * typed).toInt())
+    // A pull takes the steps back in reverse, each over its own third of the way: the date types out, the pill narrows to a circle, the circle shrinks away.
+    fun pulled(step: Int): Float = 1f - ((pull() / CHROME_PULL_SHARE).coerceIn(0f, 1f) * 3f - step).coerceIn(0f, 1f)
+    val shownTyped = typed * pulled(0)
+    val shown = text.take(ceil(text.length * shownTyped).toInt())
     // The full pill, unseen, holds the room; the glass narrows inside it about its centre, so the text never moves while it is cut.
     Box(contentAlignment = Alignment.Center) {
         DateRow(text, isMotion, Modifier.alpha(0f))
@@ -690,9 +697,15 @@ private fun AnimatedVisibilityScope.TypedDatePill(text: String, isMotion: Boolea
             Modifier
                 .matchParentSize()
                 .layout { measurable, constraints ->
-                    val shownWidth = (constraints.maxWidth * width).roundToInt()
-                    val placeable = measurable.measure(Constraints.fixed(shownWidth, constraints.maxHeight))
-                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place((constraints.maxWidth - shownWidth) / 2, 0) }
+                    val height = constraints.maxHeight
+                    val shownWidth = (height + (constraints.maxWidth - height) * width * pulled(1)).roundToInt().coerceAtMost(constraints.maxWidth)
+                    val placeable = measurable.measure(Constraints.fixed(shownWidth, height))
+                    layout(constraints.maxWidth, height) { placeable.place((constraints.maxWidth - shownWidth) / 2, 0) }
+                }
+                .graphicsLayer {
+                    val scale = circle * pulled(2)
+                    scaleX = scale
+                    scaleY = scale
                 }
                 .glass(Shapes.capsule, Palette.viewerGround),
             contentAlignment = Alignment.CenterStart,
@@ -700,7 +713,7 @@ private fun AnimatedVisibilityScope.TypedDatePill(text: String, isMotion: Boolea
             // As wide as the full date and centred, so the typing starts where the date will stand.
             Box(Modifier.wrapContentWidth(Alignment.CenterHorizontally, unbounded = true)) {
                 DateRow(text, isMotion, Modifier.alpha(0f))
-                DateRow(shown, isMotion && typed > 0f, Modifier)
+                DateRow(shown, isMotion && shownTyped > 0f, Modifier)
             }
         }
     }

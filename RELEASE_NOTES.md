@@ -1,3 +1,4 @@
-# 1.1.53
+# 1.1.54
 
-- Opening a photo, the date pill at the top widens from its centre and the date types itself in; closing, it types out as the pill narrows away.
+- The photo's date pill now pops in as a circle, widens, then types the date; closing and pulling a photo down run it back.
+- The divider between groups and albums sits in the middle of the gap.

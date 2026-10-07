@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vaditim.gallery.vas.Palette
@@ -56,6 +57,7 @@ import com.vaditim.gallery.components.MediaGrid
 import com.vaditim.gallery.components.Selection
 import com.vaditim.gallery.components.SpanCell
 import com.vaditim.gallery.components.coverColumns
+import com.vaditim.gallery.components.coverRowGap
 import com.vaditim.gallery.components.currentSettingsView
 import com.vaditim.gallery.components.entrance
 import com.vaditim.gallery.components.jiggle
@@ -200,7 +202,7 @@ fun AlbumsScreen(
                         onArrangeGroup = { reordered -> arrange(entries, entry.name, reordered) },
                         modifier = (if (isMovable) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide))
                             .entrance()
-                            .albumDividers(hasAlbumBefore, hasAlbumAfter)
+                            .albumDividers(hasAlbumBefore, hasAlbumAfter, coverRowGap())
                             .padding(vertical = GROUP_GAP),
                     )
                 }
@@ -216,11 +218,11 @@ fun AlbumsScreen(
     }
 }
 
-// A short hairline, centred, in the room between a group and the albums beside it, so the two kinds read apart.
-private fun Modifier.albumDividers(isAbove: Boolean, isBelow: Boolean): Modifier = if (!isAbove && !isBelow) this else drawBehind {
+// A short hairline, centred, in the middle of the room between a group and the albums beside it (the grid's row gap and the group's own gap), so the two kinds read apart.
+private fun Modifier.albumDividers(isAbove: Boolean, isBelow: Boolean, rowGap: Dp): Modifier = if (!isAbove && !isBelow) this else drawBehind {
     val width = size.width * ALBUM_DIVIDER_SHARE
     val left = (size.width - width) / 2f
-    val inset = GROUP_GAP.toPx() / 2f
+    val inset = (GROUP_GAP.toPx() - rowGap.toPx()) / 2f
     val thickness = 1.dp.toPx()
     if (isAbove) drawRect(Palette.border, Offset(left, inset - thickness / 2f), Size(width, thickness))
     if (isBelow) drawRect(Palette.border, Offset(left, size.height - inset - thickness / 2f), Size(width, thickness))

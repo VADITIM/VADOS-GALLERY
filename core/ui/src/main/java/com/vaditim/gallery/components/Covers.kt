@@ -73,6 +73,10 @@ private const val PINCH_STEP = 1.28f
 val LIST_COVER = 84.dp
 val COVER_GAP = 14.dp
 
+// The room between rows of covers; rows of one column lie closer.
+@Composable
+fun coverRowGap(): Dp = if (coverColumns() == 1) 12.dp else 20.dp
+
 // Albums, private groups and locations are one kind of screen: a grid of covers whose columns, list layout, shrinking names and pinch are the same everywhere. A new cover screen is built from these, not beside them.
 @Composable
 fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: LazyGridScope.() -> Unit) {
@@ -89,7 +93,7 @@ fun CoverGrid(state: LazyGridState, contentPadding: PaddingValues, content: Lazy
             bottom = contentPadding.calculateBottomPadding() + 12.dp,
         ),
         horizontalArrangement = Arrangement.spacedBy(COVER_GAP),
-        verticalArrangement = Arrangement.spacedBy(if (coverColumns() == 1) 12.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(coverRowGap()),
         modifier = Modifier.fillMaxSize().pinchAlbumColumns(haptic),
         content = content,
     )
