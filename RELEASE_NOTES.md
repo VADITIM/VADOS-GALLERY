@@ -1,3 +1,3 @@
-# 1.3.11
+# 1.3.12
 
-- The crop ratios are plain labels over the photo's bottom left, left-aligned with a drop shadow, with no pill behind them.
+- With the folder label at the top, the back button now pops in and out as fast as the add button: the month slides while it pops, not before or after.
