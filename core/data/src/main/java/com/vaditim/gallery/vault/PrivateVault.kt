@@ -179,7 +179,7 @@ class PrivateVault(private val context: Context) {
                 file.delete()
                 null
             } else {
-                itemOf(file, entry.group, stableId(TRASH), isFavorite = false)?.copy(expiresMillis = expires)
+                itemOf(file, entry.group, stableId(TRASH), isFavorite = false)?.copy(expiresMillis = expires, trashedMillis = entry.trashedMillis)
             }
         }
         val kept = entries.filterKeys { name -> items.any { File(it.absolutePath).name == name } }

@@ -151,6 +151,8 @@ class MediaRepository(private val context: Context) {
                     sizeBytes = cursor.getLong(sizeColumn),
                     absolutePath = cursor.getString(pathOnDiskColumn) ?: "",
                     expiresMillis = if (isTrashed) cursor.getLong(expiresColumn) * 1000 else 0,
+                    // Android sets the expiry a fixed 30 days after the move, so the move is that far back.
+                    trashedMillis = if (isTrashed) cursor.getLong(expiresColumn) * 1000 - TRASH_KEEP_MS else 0,
                     orientation = orientation,
                 )
             }
@@ -160,6 +162,7 @@ class MediaRepository(private val context: Context) {
     }
 
     private companion object {
+        const val TRASH_KEEP_MS = 30L * 24 * 60 * 60 * 1000
         val FILES: Uri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val IMAGES: Uri = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         val VIDEOS: Uri = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)

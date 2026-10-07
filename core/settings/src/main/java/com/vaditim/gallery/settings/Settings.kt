@@ -97,6 +97,11 @@ object Settings {
     // The day pill at the top left of a day's first photo, everywhere at once.
     var dayStamps by mutableStateOf(false)
         private set
+    // Both trashes lie by the day each photo was moved there, oldest first, with only that day as a header; off, they lie by the photo's own date.
+    var trashByDeletion by mutableStateOf(false)
+        private set
+    // Whether the screen on show is a trash, which the sheet's Photos card reads.
+    var isInTrash by mutableStateOf(false)
     // The open folder's name above the nav; off, it takes the month's place in the top pill.
     var folderLabel by mutableStateOf(false)
         private set
@@ -125,6 +130,7 @@ object Settings {
         dayStamps = preferences.getBoolean("dayStamps", false)
         lastBackupMillis = preferences.getLong("lastBackup", 0L)
         folderLabel = preferences.getBoolean("folderLabel", false)
+        trashByDeletion = preferences.getBoolean("trashByDeletion", false)
         todaysSelection = preferences.getBoolean("todaysSelection", true)
         favoritesAsAlbums = preferences.getBoolean("favoritesAsAlbums", false)
         privateFavoritesAsGroups = preferences.getBoolean("privateFavoritesAsGroups", false)
@@ -271,6 +277,11 @@ object Settings {
     fun updateDayStamps(value: Boolean) {
         dayStamps = value
         store.edit { putBoolean("dayStamps", value) }
+    }
+
+    fun updateTrashByDeletion(value: Boolean) {
+        trashByDeletion = value
+        store.edit { putBoolean("trashByDeletion", value) }
     }
 
     fun updateFolderLabel(value: Boolean) {

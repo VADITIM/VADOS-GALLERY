@@ -1,5 +1,3 @@
-# 1.3.4
+# 1.3.5
 
-- Find duplicates on Exact no longer pairs photos that are only nearly the same, like two shots of the same clouds.
-- The Exact / Close / Loose track in Find duplicates slides smoothly instead of jumping.
-- Private's Trash tile sits in the middle of its row.
+- New setting in both trashes, Order by deletion: photos lie oldest to newest by the day they were moved to the trash, under that day alone as the header.

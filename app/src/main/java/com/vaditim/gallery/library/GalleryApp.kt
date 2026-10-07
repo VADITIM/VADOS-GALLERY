@@ -264,6 +264,7 @@ private fun LibraryEffects(controller: LibraryController, content: LibraryConten
     SideEffect {
         Settings.view = screen.settingsView
         Settings.folder = screen.gridSource.folderKey
+        Settings.isInTrash = screen.isInTrash
     }
 
     // An album emptied while open (its last photo unfavourited) closes itself.

@@ -155,7 +155,7 @@ fun HoldUnderSheet(state: LazyGridState) {
 }
 
 // `folder` is the album's stable key, which may keep headers of its own.
-class GridMemory(val view: SettingsView = Settings.view, private val isStacking: Boolean = true, val folder: String? = null) {
+class GridMemory(val view: SettingsView = Settings.view, private val isStacking: Boolean = true, val folder: String? = null, private val isTrash: Boolean = false) {
     val state = LazyGridState()
     var isPositioned = false
     var knownCount = 0
@@ -164,7 +164,7 @@ class GridMemory(val view: SettingsView = Settings.view, private val isStacking:
     var openStacks by mutableStateOf<Set<Long>>(emptySet())
 
     // Every reader of this grid's entries builds them the same way, so an entry index means the same tile everywhere.
-    fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilarIn(view), view, folder)
+    fun entriesOf(items: List<MediaItem>): List<GridEntry> = buildEntries(items, openStacks, isStacking && Settings.stackSimilarIn(view), view, folder, isByDeletion = isTrash && Settings.trashByDeletion)
 }
 
 // A grid is photos with a header in front of the first photo of each year, month, week and day it is cut into. `index` is the photo's place in the original list, which is what the viewer opens at.
@@ -177,9 +177,10 @@ sealed interface GridEntry {
     }
 }
 
-fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false, view: SettingsView = Settings.view, folder: String? = null): List<GridEntry> {
+// `isByDeletion` is a trash lying by the day its photos were moved there, which is the only header it has.
+fun buildEntries(items: List<MediaItem>, openStacks: Set<Long> = emptySet(), isStacking: Boolean = false, view: SettingsView = Settings.view, folder: String? = null, isByDeletion: Boolean = false): List<GridEntry> {
     val entries = ArrayList<GridEntry>(items.size + 24)
-    val groups = Settings.activeDateGroupsFor(view, folder)
+    val groups = if (isByDeletion) setOf(DateGroup.DAYS) else Settings.activeDateGroupsFor(view, folder)
     val isWeeks = DateGroup.WEEKS in groups
     val isDays = DateGroup.DAYS in groups
     var currentYear: Int? = null
@@ -253,7 +254,7 @@ fun MediaGrid(
     // Narrowed to favourites by the corner toggle; a tap still opens the photo by its place among all of them.
     val isFavoritesOnly = LocalFavoritesOnly.current
     val shownItems = remember(items, isFavoritesOnly) { if (isFavoritesOnly) items.filter { it.isFavorite } else items }
-    val entries = remember(shownItems, Settings.activeDateGroupsFor(memory.view, memory.folder), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
+    val entries = remember(shownItems, Settings.activeDateGroupsFor(memory.view, memory.folder), Settings.stackSimilarIn(memory.view), Settings.trashByDeletion, SimilarShots.hashes, memory.openStacks) { memory.entriesOf(shownItems) }
     val columns = memory.columns
 
     LaunchedEffect(entries.size) {
@@ -531,7 +532,7 @@ private fun Modifier.dragSelect(
 // The month of the top visible row, for the chip that floats over the grid.
 @Composable
 fun rememberVisibleMonth(items: List<MediaItem>, memory: GridMemory): State<VisibleMonth> {
-    val entries = remember(items, Settings.activeDateGroupsFor(memory.view, memory.folder), Settings.stackSimilarIn(memory.view), SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
+    val entries = remember(items, Settings.activeDateGroupsFor(memory.view, memory.folder), Settings.stackSimilarIn(memory.view), Settings.trashByDeletion, SimilarShots.hashes, memory.openStacks) { memory.entriesOf(items) }
     val countByMonth = remember(items) { items.groupingBy { YearMonth.from(Instant.ofEpochMilli(it.timestampMillis).atZone(ZoneId.systemDefault())) }.eachCount() }
     return remember(entries, memory, countByMonth) {
         derivedStateOf {

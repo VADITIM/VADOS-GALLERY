@@ -20,6 +20,8 @@ data class MediaItem(
     val absolutePath: String,
     // When Android empties a trashed item for good; 0 for anything not in the trash.
     val expiresMillis: Long = 0,
+    // When it was moved to the trash; 0 for anything not in the trash.
+    val trashedMillis: Long = 0,
     // The quarter turns MediaStore records for a photo, in degrees; `width` and `height` are already turned by it.
     val orientation: Int = 0,
 )

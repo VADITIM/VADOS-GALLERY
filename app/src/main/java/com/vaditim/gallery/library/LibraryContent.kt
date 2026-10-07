@@ -10,6 +10,7 @@ import com.vaditim.gallery.media.LocationGroup
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.Place
 import com.vaditim.gallery.settings.AlbumArrangement
+import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vault.PrivateContents
 import com.vaditim.gallery.vault.PrivateGroup
 
@@ -67,6 +68,7 @@ fun rememberLibraryContent(viewModel: GalleryViewModel): LibraryContent {
     val locations by viewModel.locations.collectAsStateWithLifecycle()
     val trash by viewModel.trash.collectAsStateWithLifecycle()
     val covers by viewModel.covers.collectAsStateWithLifecycle()
+    val isByDeletion = Settings.trashByDeletion
 
     val names = AlbumArrangement.albumNames.byPath
     val albums = remember(folderAlbums, names) {
@@ -98,21 +100,27 @@ fun rememberLibraryContent(viewModel: GalleryViewModel): LibraryContent {
         val favoriteIds = privateContents.favorites.map { it.id }.toSet()
         arrangedGroups.mapNotNull { group -> group.items.filter { it.id in favoriteIds }.takeIf { it.isNotEmpty() }?.let { group.copy(items = it) } }
     }
-    return remember(library, albums, arrangedAlbums, favorites, favoriteAlbums, privateContents, arrangedGroups, privateRecent, privateFavoriteGroups, isPrivateUnlocked, locations, places, trash) {
+    // Ordered by deletion, a trash takes the day each photo was moved there as its date, so its order, its headers and its timeline all follow it.
+    val shownTrash = remember(trash, isByDeletion) { if (isByDeletion) trash.byDeletion() else trash }
+    val shownPrivate = remember(privateContents, isByDeletion) { if (isByDeletion) privateContents.copy(trash = privateContents.trash.byDeletion()) else privateContents }
+    return remember(library, albums, arrangedAlbums, favorites, favoriteAlbums, shownPrivate, arrangedGroups, privateRecent, privateFavoriteGroups, isPrivateUnlocked, locations, places, shownTrash) {
         LibraryContent(
             recent = library,
             albums = albums,
             arrangedAlbums = arrangedAlbums,
             favorites = favorites,
             favoriteAlbums = favoriteAlbums,
-            privateContents = privateContents,
+            privateContents = shownPrivate,
             arrangedGroups = arrangedGroups,
             privateRecent = privateRecent,
             privateFavoriteGroups = privateFavoriteGroups,
             isPrivateUnlocked = isPrivateUnlocked,
             locations = locations,
             places = places,
-            trash = trash,
+            trash = shownTrash,
         )
     }
 }
+
+private fun List<MediaItem>.byDeletion(): List<MediaItem> =
+    map { if (it.trashedMillis > 0) it.copy(timestampMillis = it.trashedMillis) else it }.sortedWith(compareBy<MediaItem> { it.timestampMillis }.thenBy { it.id })

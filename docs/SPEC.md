@@ -220,6 +220,7 @@ review, which is not a goal.
 - **Album names fit:** at three or four per row the name and count shrink until they fit (down to 9sp), then cut. One per row is a list: small cover at the start, large name and count beside it.
 - **Month chip** reads "September 25" (two-digit year) and never wraps.
 - **One cover grid.** Albums, private groups and locations share `CoverGrid`/`CoverCard`: the same columns (pinch or Settings), list layout at one column, shrinking names. Albums and private groups can be rearranged (long-press → Rearrange), by dragging a card onto another.
+- **Order by deletion.** In either trash (the system's and Private's) the Photos card of the settings sheet has Order by deletion, off to start with. On, the photos lie oldest to newest by the day they were moved to the trash, with that day as their only header (no year, month or week); the timeline and top pill follow the same day, and the headers layout is greyed out meanwhile. Off, they lie by their own date as in every grid. One setting for both trashes. The system trash's day is its 30-day expiry less 30 days; Samsung's trash has no readable move time, so its files' own time stands in.
 - **Trash photos open** in the viewer on a tap (long press selects); the viewer there offers share, restore and delete forever (after Confirm).
 
 - Nothing blurs the top edge of the screen: the grid runs plainly under the clock.

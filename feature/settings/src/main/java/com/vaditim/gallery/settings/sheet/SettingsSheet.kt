@@ -178,8 +178,11 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                     val isEditable = Settings.folder == null || Settings.hasOwnSettings(Settings.folder)
                     SettingsCard("Photos", order = 3) {
                         // Stacking is the view's, not the album's, so it stays live while the rest is greyed; the trash never stacks.
-                        if (Settings.view != SettingsView.TRASH) {
+                        if (!Settings.isInTrash) {
                             SettingsToggle("Stack similar shots", Settings.stackSimilarInView) { Settings.updateStackSimilar(it) }
+                            CardDivider()
+                        } else {
+                            SettingsToggle("Order by deletion", Settings.trashByDeletion) { Settings.updateTrashByDeletion(it) }
                             CardDivider()
                         }
                         SettingsSteps("Image columns", Settings.MIN_COLUMNS..Settings.MAX_COLUMNS, Settings.defaultColumns, isEnabled = isEditable) {
@@ -187,7 +190,8 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                             onColumnsChanged(it)
                         }
                         CardDivider()
-                        HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = isEditable)
+                        // Ordered by deletion, the trash has the day alone as its header, whatever the layout says.
+                        HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = isEditable && !(Settings.isInTrash && Settings.trashByDeletion))
                         if (Settings.folder != null) {
                             CardDivider()
                             SettingsToggle("Own settings", Settings.hasOwnSettings(Settings.folder)) {

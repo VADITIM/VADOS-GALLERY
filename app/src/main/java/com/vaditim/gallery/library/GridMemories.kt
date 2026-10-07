@@ -23,8 +23,8 @@ class GridMemories(
     val privateFavorites = GridMemory(SettingsView.PRIVATE)
     val privateRecent = GridMemory(SettingsView.PRIVATE)
     // The trash keeps every shot on its own, since each one there is about to go.
-    val trash = GridMemory(SettingsView.TRASH, isStacking = false)
-    val privateTrash = GridMemory(SettingsView.PRIVATE, isStacking = false)
+    val trash = GridMemory(SettingsView.TRASH, isStacking = false, isTrash = true)
+    val privateTrash = GridMemory(SettingsView.PRIVATE, isStacking = false, isTrash = true)
     private val albums = mutableMapOf<Long, GridMemory>()
     private val locations = mutableMapOf<String, GridMemory>()
     private val privateGroups = mutableMapOf<String, GridMemory>()

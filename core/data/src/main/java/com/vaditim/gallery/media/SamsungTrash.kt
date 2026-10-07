@@ -43,6 +43,8 @@ class SamsungTrash(private val context: Context) {
         mimeType = mimeType,
         name = file.name,
         timestampMillis = file.lastModified(),
+        // Samsung records no move time that is readable here, so the file's own time stands in.
+        trashedMillis = file.lastModified(),
         bucketId = 0,
         bucketName = "",
         relativePath = "",
