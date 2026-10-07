@@ -68,6 +68,8 @@ object Motion {
     const val SELECT_HOLD_EXTRA_MS = 120L
     // Once a selection is open the long press has already been made, so a brief rest is enough to tell a swipe-select from a scroll.
     const val SELECT_HOLD_ACTIVE_MS = 150L
+    // A finger resting this long on a cover before it moves is picking the cover up, not scrolling; moving before the long press would fire turns rearranging on.
+    const val DRAG_REST_MS = 150L
     // A finger that lands while the grid moves faster than this (pixels per second) is stopping a scroll, not starting a selection; slower, it is a slight drift and selects.
     const val SELECT_FAST_SCROLL_PX_PER_S = 400f
 

@@ -79,11 +79,15 @@ fun PrivateGroupsScreen(
     onMove: (from: Int, to: Int) -> Unit = { _, _ -> },
     selectedNames: Set<String> = emptySet(),
     onToggle: (PrivateGroup) -> Unit = {},
+    // A cover held a moment and then dragged turns rearranging on with it.
+    onStartRearranging: () -> Unit = {},
 ) {
     val isPicking = selectedNames.isNotEmpty()
     // While picking, back clears the pick first (the app root handles that), so this one stands aside.
     BackHandler(enabled = !isPicking, onBack = onBack)
     val reorder = rememberReorder(state, groups.map { it.name }, onMove)
+    reorder.isRearranging = { isRearranging }
+    reorder.onStartRearranging = if (isPicking) null else onStartRearranging
     // Drawn once per entry into Private and kept while scrolling, so the pick does not reshuffle when the card scrolls out of view.
     val selectionSeed = remember { Random.nextInt(Int.MAX_VALUE) }
     CoverGrid(state, contentPadding) {
@@ -104,7 +108,7 @@ fun PrivateGroupsScreen(
                 onClick = { if (isPicking) onToggle(group) else if (!isRearranging) onOpen(group) },
                 // While rearranging a held card has no long press: one that fired would keep the finger to itself and the drag would never start.
                 onLongClick = if (isRearranging) null else { { if (isPicking) onToggle(group) else onLongPress(group) } },
-                modifier = reorderable(reorder, group.name, isRearranging).entrance().jiggle(reorder, group.name, isRearranging),
+                modifier = reorderable(reorder, group.name, isEnabled = true).entrance().jiggle(reorder, group.name, isRearranging),
                 isSelected = group.name in selectedNames,
             )
         }

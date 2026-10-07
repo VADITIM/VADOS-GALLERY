@@ -40,6 +40,8 @@ object Palette {
     val trashGray = Color(0xFF9A9A9A)
     // Cropping and trimming wear their own accent, photo or video, so the editor reads as a mode of its own.
     val cropViolet = Color(0xFF7E55DD)
+    // The pencil's colours in the editor: white and black, then the app's own accents.
+    val pencil = listOf(Color.White, Color.Black, privateRed, amber, terminalGreen, locationBlue, hotPink, cropViolet)
 
     // Photos are the only colour that matters in the viewer, so it stands on black rather than the ground: a grey frame around a picture shifts how its own blacks read.
     val viewerGround = Color(0xFF000000)

@@ -132,6 +132,8 @@ private fun AlbumsSection(controller: LibraryController, content: LibraryContent
                     },
                     albums = content.arrangedAlbums,
                     isRearranging = selection.isRearranging,
+                    onStartRearranging = controller::startRearranging,
+                    onDropIntoGroup = { album, group -> controller.dropIntoGroup(AlbumShelfKind.FOLDERS, album, group) },
                     onArrange = { AlbumArrangement.albumOrder.update(it) },
                     selectedPaths = selection.covers,
                     onToggle = { picked -> selection.toggleCovers(picked.map { it.relativePath }) },
@@ -192,6 +194,7 @@ private fun AlbumsSection(controller: LibraryController, content: LibraryContent
                 AlbumsPlace.PrivateGroups -> PrivateGroupsScreen(
                     groups = content.arrangedGroups,
                     isRearranging = selection.isRearranging,
+                    onStartRearranging = controller::startRearranging,
                     selectedNames = selection.covers,
                     onToggle = { selection.toggleCovers(listOf(it.name)) },
                     onMove = { from, to ->
@@ -252,6 +255,8 @@ private fun FavoritesSection(controller: LibraryController, content: LibraryCont
                     navigation.openFavoriteStacks = opened
                 },
                 isRearranging = selection.isRearranging,
+                onStartRearranging = controller::startRearranging,
+                onDropIntoGroup = { album, group -> controller.dropIntoGroup(AlbumShelfKind.FAVORITES, album, group) },
                 onArrange = { AlbumArrangement.favoriteAlbumOrder.update(it) },
                 selectedPaths = selection.covers,
                 onToggle = { picked -> selection.toggleCovers(picked.map { it.relativePath }) },

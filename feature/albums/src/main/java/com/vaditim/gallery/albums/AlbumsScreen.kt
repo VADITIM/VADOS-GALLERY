@@ -5,9 +5,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +38,10 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -59,6 +64,7 @@ import com.vaditim.gallery.components.SpanCell
 import com.vaditim.gallery.components.coverColumns
 import com.vaditim.gallery.components.coverRowGap
 import com.vaditim.gallery.components.currentSettingsView
+import com.vaditim.gallery.components.dragToArrange
 import com.vaditim.gallery.components.entrance
 import com.vaditim.gallery.components.jiggle
 import com.vaditim.gallery.components.rememberReorder
@@ -93,21 +99,24 @@ private sealed interface AlbumEntry {
     }
 
     data class Stack(val name: String, val albums: List<Album>) : AlbumEntry {
-        override val key: Any get() = "stack:$name"
+        override val key: Any get() = "$STACK_KEY_PREFIX$name"
     }
 }
 
-// A group sits where its first album would, so the arranged order still decides where everything is.
+// Groups come first and albums after them, never the other way round; among each kind the arranged order decides, a group standing where its first album would.
 private fun entriesOf(albums: List<Album>, stacks: List<AlbumStack>): List<AlbumEntry> {
     if (stacks.isEmpty()) return albums.map { AlbumEntry.Single(it) }
     val stackOf = stacks.flatMap { stack -> stack.paths.map { it to stack.name } }.toMap()
     val members = albums.groupBy { stackOf[it.relativePath] }
     val placed = HashSet<String>()
-    return albums.mapNotNull { album ->
-        val name = stackOf[album.relativePath] ?: return@mapNotNull AlbumEntry.Single(album)
+    val groups = albums.mapNotNull { album ->
+        val name = stackOf[album.relativePath] ?: return@mapNotNull null
         if (placed.add(name)) AlbumEntry.Stack(name, members.getValue(name)) else null
     }
+    return groups + albums.filter { stackOf[it.relativePath] == null }.map { AlbumEntry.Single(it) }
 }
+
+private const val STACK_KEY_PREFIX = "stack:"
 
 // Folders, or the albums made inside Favorites. No "Recent" and no "Favorites" album: both are sections already, and an album that repeats a section is the Samsung habit this app exists to drop.
 // `stacks` are the groups shown, by album path; the folders pass theirs only while Grouped albums is on.
@@ -132,9 +141,14 @@ fun AlbumsScreen(
     openStacks: Set<String> = emptySet(),
     onOpenStacksChange: (Set<String>) -> Unit = {},
     isAccented: Boolean = false,
+    // A cover held a moment and then dragged turns rearranging on with it.
+    onStartRearranging: () -> Unit = {},
+    // An album outside any group dropped onto a group while rearranging.
+    onDropIntoGroup: (album: Album, group: String) -> Unit = { _, _ -> },
 ) = CompositionLocalProvider(LocalAccentedCoverNames provides isAccented) {
     val isPicking = selectedPaths.isNotEmpty()
     val entries = remember(albums, stacks) { entriesOf(albums, stacks) }
+    val picturesWidth = with(LocalDensity.current) { (LIST_COVER + stackShift(STACK_DEPTH) + GROUP_LABEL_GAP / 2).toPx() }
     // Several groups can be open at once; opening one leaves the others as they are. The set lives above this screen so it survives opening an album and coming back.
     // While rearranging, back ends rearranging (the app root handles that) rather than closing groups.
     BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging) { onOpenStacksChange(emptySet()) }
@@ -149,6 +163,15 @@ fun AlbumsScreen(
     )
     // Albums and closed groups move as wholes; an open group's albums move inside it.
     val reorder = rememberReorder(state, entries.map { it.key }) { from, to -> arrange(entries.toMutableList().apply { add(to, removeAt(from)) }) }
+    reorder.isRearranging = { isRearranging }
+    reorder.onStartRearranging = if (isPicking) null else onStartRearranging
+    // Groups trade places with groups and albums with albums, so an album never lands above a group.
+    reorder.canSwap = { held, target -> (held is String) == (target is String) }
+    reorder.canDropInto = { held, target -> held !is String && target is String }
+    reorder.onDropInto = { held, target ->
+        val album = entries.firstNotNullOfOrNull { (it as? AlbumEntry.Single)?.album?.takeIf { album -> album.id == held } }
+        if (album != null && target is String) onDropIntoGroup(album, target.removePrefix(STACK_KEY_PREFIX))
+    }
     // While a group opens or closes, the rows under it follow its height frame by frame instead of gliding after it, so nothing overlaps.
     var movingGroups by remember { mutableStateOf(emptySet<String>()) }
     val glide = if (movingGroups.isEmpty()) tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut) else null
@@ -165,7 +188,7 @@ fun AlbumsScreen(
             when (entry) {
                 is AlbumEntry.Single -> item(key = entry.key, span = { GridItemSpan(span) }, contentType = "album") {
                     val album = entry.album
-                    SpanCell(span, (if (isRearranging) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide)).entrance()) {
+                    SpanCell(span, reorderable(reorder, entry.key, isEnabled = true, placement = glide).entrance()) {
                         CoverCard(
                             album.name,
                             album.cover,
@@ -183,6 +206,8 @@ fun AlbumsScreen(
                     val hasAlbumAfter = entries.getOrNull(index + 1) is AlbumEntry.Single
                     val isOpen = entry.name in openStacks
                     val isMovable = isRearranging && !isOpen
+                    val isDropTarget = reorder.dropTargetKey == entry.key
+                    val dropScale by animateFloatAsState(if (isDropTarget) DROP_TARGET_SCALE else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "drop-target")
                     GroupRow(
                         stack = entry,
                         isOpen = isOpen,
@@ -199,8 +224,15 @@ fun AlbumsScreen(
                         onStackLongPress = { onStackLongPress(entry.name) },
                         isRearranging = isRearranging,
                         isMovable = isMovable,
+                        isHeld = { reorder.draggedKey == entry.key },
                         onArrangeGroup = { reordered -> arrange(entries, entry.name, reordered) },
-                        modifier = (if (isMovable) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide))
+                        onStartRearranging = if (isPicking) null else onStartRearranging,
+                        // Before rearranging, only a drag that starts on the stack's pictures picks the group up; anywhere else the swipe still opens it.
+                        modifier = reorderable(reorder, entry.key, isEnabled = !isOpen, placement = glide, startArea = { at, _ -> at.x < picturesWidth })
+                            .graphicsLayer {
+                                scaleX = dropScale
+                                scaleY = dropScale
+                            }
                             .entrance()
                             .albumDividers(hasAlbumBefore, hasAlbumAfter, coverRowGap())
                             .padding(vertical = GROUP_GAP),
@@ -229,6 +261,8 @@ private fun Modifier.albumDividers(isAbove: Boolean, isBelow: Boolean, rowGap: D
 }
 
 private const val ALBUM_DIVIDER_SHARE = 0.35f
+// A group swells a little while an album hangs over it, ready to go in.
+private const val DROP_TARGET_SCALE = 1.03f
 
 // Extra room above and below a group, so groups read as separate rows.
 private val GROUP_GAP = 12.4.dp
@@ -296,7 +330,9 @@ private fun GroupRow(
     onStackLongPress: () -> Unit,
     isRearranging: Boolean,
     isMovable: Boolean,
+    isHeld: () -> Boolean,
     onArrangeGroup: (List<Album>) -> Unit,
+    onStartRearranging: (() -> Unit)?,
     onMotion: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -335,6 +371,9 @@ private fun GroupRow(
     val isArranging = isRearranging && isOpen
     val geometry = remember { GroupGeometry() }
     val currentAlbums by rememberUpdatedState(albums)
+    val currentIsRearranging by rememberUpdatedState(isRearranging)
+    val currentOnStartRearranging by rememberUpdatedState(onStartRearranging)
+    val currentOnArrangeGroup by rememberUpdatedState(onArrangeGroup)
     var heldId by remember { mutableStateOf<Long?>(null) }
     var heldOffset by remember { mutableStateOf(Offset.Zero) }
     val haptic = LocalHapticFeedback.current
@@ -352,11 +391,12 @@ private fun GroupRow(
     }
 
     val context = LocalContext.current
+    val picturesWidth = with(LocalDensity.current) { (LIST_COVER + stackShift(STACK_DEPTH) + GROUP_LABEL_GAP / 2).toPx() }
     val currentOnOpenChange by rememberUpdatedState(onOpenChange)
     val scope = rememberCoroutineScope()
     Layout(
         modifier = modifier
-            .jiggle(stack.key, isMovable, pivot = LIST_COVER / 2)
+            .jiggle(stack.key, isMovable, pivot = LIST_COVER / 2, isHeld = isHeld)
             // Each card follows the swipe back toward the stack, the last ones pulled hardest, so they land under one another; let go far enough and the group lays itself down, otherwise the cards go back.
             .then(
                 if (!isOpen || isRearranging) Modifier else Modifier.pointerInput(stack.name) {
@@ -409,28 +449,36 @@ private fun GroupRow(
                         }
                         Unit
                     }
-                    detectHorizontalDragGestures(
-                        onDragStart = {
-                            pushed = 0f
-                            onMotion(true)
-                        },
-                        onDragEnd = {
-                            if (time.value > PUSH_OPEN) {
-                                Haptics.tick(context)
-                                currentOnOpenChange(true)
-                            } else {
-                                settle()
-                            }
-                        },
-                        onDragCancel = { settle() },
-                    ) { change, amount ->
-                        change.consume()
+                    val push = { amount: Float ->
                         pushed = (pushed + amount).coerceAtLeast(0f)
-                        val reach = size.width * PULL_REACH
-                        val shown = (pushed / reach).coerceIn(0f, 1f)
+                        val shown = (pushed / (size.width * PULL_REACH)).coerceIn(0f, 1f)
                         scope.launch {
                             time.snapTo(shown)
                             arrow.snapTo(shown)
+                        }
+                        Unit
+                    }
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        // On the stack's pictures a drag picks the group up instead, so the swipe stands aside there.
+                        if (currentOnStartRearranging != null && down.position.x < picturesWidth) return@awaitEachGesture
+                        var overSlop = 0f
+                        val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                            change.consume()
+                            overSlop = over
+                        } ?: return@awaitEachGesture
+                        pushed = 0f
+                        onMotion(true)
+                        push(overSlop)
+                        val isReleased = horizontalDrag(slop.id) { change ->
+                            change.consume()
+                            push(change.positionChange().x)
+                        }
+                        if (isReleased && time.value > PUSH_OPEN) {
+                            Haptics.tick(context)
+                            currentOnOpenChange(true)
+                        } else {
+                            settle()
                         }
                     }
                 },
@@ -488,38 +536,40 @@ private fun GroupRow(
                         // The name waits until the card is well clear of the stack, so names never print over each other.
                         labelAlpha = { ((progressOf(index) - 0.5f) * 2f).coerceIn(0f, 1f) },
                         modifier = Modifier
+                            // Open, the group's albums are arranged inside it the same way covers are in the grid: at once while rearranging, or held a moment and dragged to start rearranging.
                             .then(
-                                if (!isArranging) {
+                                if (!isOpen) {
                                     Modifier
                                 } else {
-                                    Modifier.pointerInput(album.id) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                                heldId = album.id
-                                                heldOffset = Offset.Zero
-                                            },
-                                            onDragEnd = { heldId = null },
-                                            onDragCancel = { heldId = null },
-                                        ) { change, amount ->
-                                            change.consume()
+                                    Modifier.dragToArrange(
+                                        key = album.id,
+                                        isRearranging = { currentIsRearranging },
+                                        canStart = { _, _ -> currentOnStartRearranging != null },
+                                        onStart = {
+                                            if (!currentIsRearranging) currentOnStartRearranging?.invoke()
+                                            haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            heldId = album.id
+                                            heldOffset = Offset.Zero
+                                        },
+                                        onDrag = drag@{ amount ->
                                             heldOffset += amount
                                             val list = currentAlbums
                                             val from = list.indexOfFirst { it.id == album.id }
-                                            if (from < 0) return@detectDragGestures
+                                            if (from < 0) return@drag
                                             val centre = geometry.slot(from) + heldOffset + Offset(geometry.cell / 2f, geometry.cell / 2f)
                                             val to = geometry.slotAt(centre, list.size)
                                             if (to != from) {
-                                                onArrangeGroup(list.toMutableList().apply { add(to, removeAt(from)) })
+                                                currentOnArrangeGroup(list.toMutableList().apply { add(to, removeAt(from)) })
                                                 haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                                 // The card takes the new slot, so the offset is rebased onto it to stay under the finger.
                                                 heldOffset += geometry.slot(from) - geometry.slot(to)
                                             }
-                                        }
-                                    }
+                                        },
+                                        onEnd = { heldId = null },
+                                    )
                                 },
                             )
-                            .jiggle(album.id, isArranging) { heldId == album.id },
+                            .jiggle(album.id, isArranging, isHeld = { heldId == album.id }),
                     )
                 }
             }

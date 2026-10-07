@@ -363,6 +363,17 @@ fun RestoreIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit,
 @Composable
 fun CropIcon(color: Color, size: Dp = 22.dp) = SvgGlyph(color, size, strokeWidth = 2f, paths = arrayOf(CROP))
 
+// A frame with an arrow bending over it clockwise: a quarter turn to the right.
+@Composable
+fun RotateIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(4.5f * u, 11f * u); lineTo(13f * u, 11f * u); lineTo(13f * u, 19.5f * u); lineTo(4.5f * u, 19.5f * u); close()
+        moveTo(6f * u, 11f * u)
+        arcTo(Rect(6f * u, 3.5f * u, 18f * u, 15.5f * u), 180f, 135f, false)
+        moveTo(13.2f * u, 5.3f * u); lineTo(16.2f * u, 5.3f * u); lineTo(16.2f * u, 2.3f * u)
+    }, color, style = stroke)
+}
+
 @Composable
 fun BackIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
     drawPath(path(unit) { u -> moveTo(15f * u, 5f * u); lineTo(8f * u, 12f * u); lineTo(15f * u, 19f * u) }, color, style = stroke)

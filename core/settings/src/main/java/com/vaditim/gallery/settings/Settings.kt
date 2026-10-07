@@ -24,6 +24,8 @@ object Settings {
     private const val DEFAULT_ALBUM_COLUMNS = 3
     private const val DEFAULT_GROUND_BRIGHTNESS = 17.5f / MAX_GROUND_LEVEL
     private val DEFAULT_DATE_GROUPS = setOf(DateGroup.DAYS, DateGroup.MONTHS, DateGroup.YEARS)
+    private const val DEFAULT_PENCIL_COLOR = 0xFFFFFFFF.toInt()
+    private const val DEFAULT_PENCIL_THICKNESS = 0.3f
     private const val OWN_SETTINGS = "ownSettings."
     private const val OWN_HEADERS = "ownHeaders."
     private const val FOLDER_COLUMNS = "folderColumns."
@@ -106,6 +108,11 @@ object Settings {
     // Private's Favorites keeps its own choice between one grid and its groups, apart from the Favorites outside.
     var privateFavoritesAsGroups by mutableStateOf(false)
         private set
+    // The pencil as it was last left in the editor: its colour (ARGB) and its thickness, 0 to 1 across the slider.
+    var pencilColor by mutableStateOf(DEFAULT_PENCIL_COLOR)
+        private set
+    var pencilThickness by mutableFloatStateOf(DEFAULT_PENCIL_THICKNESS)
+        private set
 
     fun init(store: PreferenceStore) {
         this.store = store
@@ -121,6 +128,8 @@ object Settings {
         todaysSelection = preferences.getBoolean("todaysSelection", true)
         favoritesAsAlbums = preferences.getBoolean("favoritesAsAlbums", false)
         privateFavoritesAsGroups = preferences.getBoolean("privateFavoritesAsGroups", false)
+        pencilColor = preferences.getInt("pencilColor", DEFAULT_PENCIL_COLOR)
+        pencilThickness = preferences.getFloat("pencilThickness", DEFAULT_PENCIL_THICKNESS)
         for ((key, value) in preferences.all) {
             when {
                 key.startsWith(OWN_SETTINGS) && value is Boolean -> ownSettings[key.removePrefix(OWN_SETTINGS)] = value
@@ -282,5 +291,15 @@ object Settings {
     fun updatePrivateFavoritesAsGroups(value: Boolean) {
         privateFavoritesAsGroups = value
         store.edit { putBoolean("privateFavoritesAsGroups", value) }
+    }
+
+    fun updatePencilColor(value: Int) {
+        pencilColor = value
+        store.edit { putInt("pencilColor", value) }
+    }
+
+    fun updatePencilThickness(value: Float) {
+        pencilThickness = value.coerceIn(0f, 1f)
+        store.edit { putFloat("pencilThickness", pencilThickness) }
     }
 }

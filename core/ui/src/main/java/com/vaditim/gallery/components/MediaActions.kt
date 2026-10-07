@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import com.vaditim.gallery.media.Album
+import com.vaditim.gallery.media.DrawnStroke
 import com.vaditim.gallery.media.MediaEditor
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.media.MediaRepository
@@ -67,6 +68,11 @@ class MediaActions(
         undoOffer = UndoOffer(message)
     }
 
+    // A change made outside MediaStore (an album put into a group) offered for taking back in the same pill.
+    fun offerUndo(message: String, revert: () -> Unit) {
+        undoOffer = UndoOffer(message, revert = revert)
+    }
+
     fun expireUndo(offer: UndoOffer) {
         if (undoOffer === offer) undoOffer = null
     }
@@ -84,9 +90,9 @@ class MediaActions(
         context.startActivity(Intent.createChooser(send, null))
     }
 
-    // A crop or trim saved as a copy beside the original. The returned job is cancelled when the editor is left mid-save.
-    fun crop(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit, onFinished: (Boolean) -> Unit): Job = scope.launch {
-        val result = runCatching { if (item.isVideo) editor.editVideo(item, crop, startMs, endMs, onProgress) else editor.cropImage(item, crop) }
+    // A crop, trim, turn or drawing saved as a copy beside the original. The returned job is cancelled when the editor is left mid-save.
+    fun crop(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit, quarterTurns: Int = 0, strokes: List<DrawnStroke> = emptyList(), onFinished: (Boolean) -> Unit): Job = scope.launch {
+        val result = runCatching { if (item.isVideo) editor.editVideo(item, crop, startMs, endMs, onProgress, quarterTurns) else editor.cropImage(item, crop, quarterTurns, strokes) }
         result.onSuccess { file ->
             if (isPrivate(item)) {
                 onPrivateChanged()

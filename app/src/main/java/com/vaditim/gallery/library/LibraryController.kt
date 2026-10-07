@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.vaditim.gallery.components.MediaActions
 import com.vaditim.gallery.components.rememberMediaActions
+import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.vas.Haptics
 import com.vaditim.gallery.vault.PrivateLock
@@ -33,6 +34,21 @@ class LibraryController(
     )
 
     fun shelf(kind: AlbumShelfKind): AlbumShelf = if (kind == AlbumShelfKind.FOLDERS) folders else favoriteShelf
+
+    // A drag that starts before rearranging is on turns it on; any sheet left open would sit over the covers being moved.
+    fun startRearranging() {
+        selection.isRearranging = true
+        sheets.dismiss()
+    }
+
+    // An album dropped onto a group goes into it; the pill can take it back out to where it lay.
+    fun dropIntoGroup(kind: AlbumShelfKind, album: Album, group: String) {
+        val stacks = shelf(kind).stacks
+        val before = stacks.all
+        stacks.add(listOf(album.relativePath), group)
+        Haptics.confirm(context)
+        actions.offerUndo("Moved to $group") { stacks.update(before) }
+    }
 
     // Letting go of a selection closes whatever sheet it had open.
     fun clearSelection() {

@@ -2,7 +2,11 @@ package com.vaditim.gallery.media
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.ImageDecoder
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.media.ExifInterface
@@ -15,7 +19,9 @@ import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as PlayerMediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.Effect
 import androidx.media3.effect.Crop
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
@@ -34,20 +40,24 @@ import kotlinx.coroutines.withContext
 // Crops and trims are written as a new file beside the original, which is never touched: undoing an edit is deleting the copy.
 class MediaEditor(private val context: Context) {
 
-    // `crop` is the kept part of the picture as fractions of its upright width and height.
-    suspend fun cropImage(item: MediaItem, crop: RectF): File = withContext(Dispatchers.IO) {
+    // `crop` is the kept part of the picture as fractions of its width and height once turned a quarter clockwise `quarterTurns` times; the strokes are drawn on the upright picture before it turns.
+    suspend fun cropImage(item: MediaItem, crop: RectF, quarterTurns: Int = 0, strokes: List<DrawnStroke> = emptyList()): File = withContext(Dispatchers.IO) {
         val source = if (item.uri.scheme == "content") ImageDecoder.createSource(context.contentResolver, item.uri) else ImageDecoder.createSource(File(item.uri.path!!))
-        // The decoder turns the picture upright before it crops, so the fractions match what was shown.
-        val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+        val turns = Math.floorMod(quarterTurns, 4)
+        // A plain crop lets the decoder cut, so only the kept part is ever in memory; drawing and turning need the whole picture.
+        val isPlainCrop = turns == 0 && strokes.isEmpty()
+        // The decoder turns the picture upright before anything else, so the fractions match what was shown.
+        val decoded = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            val width = info.size.width
-            val height = info.size.height
-            decoder.crop = Rect(
-                (crop.left * width).roundToInt().coerceIn(0, width - 1),
-                (crop.top * height).roundToInt().coerceIn(0, height - 1),
-                (crop.right * width).roundToInt().coerceIn(1, width),
-                (crop.bottom * height).roundToInt().coerceIn(1, height),
-            )
+            if (isPlainCrop) decoder.crop = pixelsOf(crop, info.size.width, info.size.height) else decoder.isMutableRequired = true
+        }
+        val bitmap = if (isPlainCrop) {
+            decoded
+        } else {
+            drawStrokes(decoded, strokes)
+            val region = pixelsOf(crop.unturned(turns), decoded.width, decoded.height)
+            val turn = Matrix().apply { postRotate(90f * turns) }
+            Bitmap.createBitmap(decoded, region.left, region.top, region.width(), region.height(), turn, true).also { if (it !== decoded) decoded.recycle() }
         }
         val isPng = item.mimeType == "image/png"
         val output = uniqueFile(outputFolder(item), item.name, "crop", if (isPng) "png" else "jpg")
@@ -76,14 +86,19 @@ class MediaEditor(private val context: Context) {
 
     // `endMs` is C.TIME_END_OF_SOURCE to keep the video to its end.
     @OptIn(UnstableApi::class)
-    suspend fun editVideo(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit): File {
+    suspend fun editVideo(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit, quarterTurns: Int = 0): File {
         val output = withContext(Dispatchers.IO) { uniqueFile(outputFolder(item), item.name, "edit", "mp4") }
         val clipping = PlayerMediaItem.ClippingConfiguration.Builder().setStartPositionMs(startMs)
             .apply { if (endMs != C.TIME_END_OF_SOURCE) setEndPositionMs(endMs) }
             .build()
         val media = PlayerMediaItem.Builder().setUri(item.uri).setClippingConfiguration(clipping).build()
-        // The crop effect counts from the centre, -1 to 1, with up being positive.
-        val effects = if (crop == RectF(0f, 0f, 1f, 1f)) Effects.EMPTY else Effects(emptyList(), listOf(Crop(crop.left * 2f - 1f, crop.right * 2f - 1f, 1f - crop.bottom * 2f, 1f - crop.top * 2f)))
+        val turns = Math.floorMod(quarterTurns, 4)
+        // Turned first, so the crop, given on the turned picture, cuts the frame as it was shown; the rotation counts anticlockwise, the crop from the centre, -1 to 1, with up being positive.
+        val videoEffects = buildList<Effect> {
+            if (turns != 0) add(ScaleAndRotateTransformation.Builder().setRotationDegrees(360f - 90f * turns).build())
+            if (crop != RectF(0f, 0f, 1f, 1f)) add(Crop(crop.left * 2f - 1f, crop.right * 2f - 1f, 1f - crop.bottom * 2f, 1f - crop.top * 2f))
+        }
+        val effects = if (videoEffects.isEmpty()) Effects.EMPTY else Effects(emptyList(), videoEffects)
         val edited = EditedMediaItem.Builder(media).setEffects(effects).build()
         // The transformer lives on the thread that made it; the main thread is the one with a looper to hand.
         withContext(Dispatchers.Main) {
@@ -121,6 +136,39 @@ class MediaEditor(private val context: Context) {
         }
         output.setLastModified(item.timestampMillis)
         return output
+    }
+
+    private fun pixelsOf(crop: RectF, width: Int, height: Int) = Rect(
+        (crop.left * width).roundToInt().coerceIn(0, width - 1),
+        (crop.top * height).roundToInt().coerceIn(0, height - 1),
+        (crop.right * width).roundToInt().coerceIn(1, width),
+        (crop.bottom * height).roundToInt().coerceIn(1, height),
+    )
+
+    private fun drawStrokes(bitmap: Bitmap, strokes: List<DrawnStroke>) {
+        if (strokes.isEmpty()) return
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        val width = bitmap.width.toFloat()
+        val height = bitmap.height.toFloat()
+        strokes.forEach { stroke ->
+            paint.color = stroke.color
+            paint.strokeWidth = stroke.width * width
+            val first = stroke.points.firstOrNull() ?: return@forEach
+            if (stroke.points.size == 1) {
+                canvas.drawPoint(first.x * width, first.y * height, paint)
+            } else {
+                val path = Path().apply {
+                    moveTo(first.x * width, first.y * height)
+                    stroke.points.drop(1).forEach { lineTo(it.x * width, it.y * height) }
+                }
+                canvas.drawPath(path, paint)
+            }
+        }
     }
 
     private fun outputFolder(item: MediaItem): File =

@@ -1,9 +1,17 @@
 package com.vaditim.gallery.viewer
 
+import android.graphics.PointF
 import android.graphics.RectF
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -28,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -50,15 +59,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -67,6 +83,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import coil3.compose.AsyncImage
@@ -75,12 +92,16 @@ import coil3.video.VideoFrameDecoder
 import coil3.video.videoFrameMillis
 import com.vaditim.gallery.components.BackIcon
 import com.vaditim.gallery.components.CheckIcon
+import com.vaditim.gallery.components.CropIcon
 import com.vaditim.gallery.components.MediaActions
 import com.vaditim.gallery.components.NavBar
+import com.vaditim.gallery.components.PenIcon
 import com.vaditim.gallery.components.RedoIcon
+import com.vaditim.gallery.components.RotateIcon
 import com.vaditim.gallery.components.TopButton
 import com.vaditim.gallery.components.UndoIcon
 import com.vaditim.gallery.components.fitInside
+import com.vaditim.gallery.media.DrawnStroke
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.LocalAccent
@@ -95,9 +116,11 @@ import com.vaditim.gallery.vas.pressable
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sin
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -112,8 +135,18 @@ private val FULL = Rect(0f, 0f, 1f, 1f)
 // Unavailable actions keep their accent, faded.
 private const val UNAVAILABLE_ALPHA = 0.38f
 
-// One state of everything crop can change, as the undo history keeps it.
-private data class CropEdit(val crop: Rect, val aspect: Aspect, val zoom: Float, val pan: Offset, val startMs: Long, val endMs: Long)
+// The pencil's thinnest and thickest line on screen; what is saved keeps the same share of the picture.
+private val PENCIL_THINNEST = 2.dp
+private val PENCIL_THICKEST = 28.dp
+private val SWATCH = 20.dp
+// The pencil's row stands as tall as the ratios' nav it replaces, so switching never moves the picture.
+private val OPTIONS_HEIGHT = 54.dp
+
+// What the editor's nav switches between: cutting the frame, or drawing on the photo.
+private enum class EditMode { CROP, DRAW }
+
+// One state of everything the editor can change, as the undo history keeps it. `turns` counts quarter turns clockwise and is never wrapped, so undoing a turn runs it back the way it came.
+private data class CropEdit(val crop: Rect, val aspect: Aspect, val zoom: Float, val pan: Offset, val startMs: Long, val endMs: Long, val turns: Int, val strokes: List<DrawnStroke>)
 
 // A glass capsule around one accent icon; it fades while there is nothing for it to do.
 @Composable
@@ -144,12 +177,21 @@ private enum class Aspect(val label: String, val ratio: Float?) {
     TALL("9:16", 9f / 16f),
 }
 
+// A ratio follows the frame round a quarter turn; one the list has no turned twin for lets go and the frame is free.
+private fun Aspect.turned(): Aspect = when (this) {
+    Aspect.WIDE -> Aspect.TALL
+    Aspect.TALL -> Aspect.WIDE
+    Aspect.FREE, Aspect.ORIGINAL, Aspect.SQUARE -> this
+    else -> Aspect.FREE
+}
+
 private enum class Handle { MOVE, LEFT, TOP, RIGHT, BOTTOM, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT }
 
-// Cropping a photo, and cropping and trimming a video. What is kept is saved as a copy beside the original.
+// Cropping, turning and drawing on a photo, and cropping, turning and trimming a video. What is kept is saved as a copy beside the original.
 @Composable
 fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val video = rememberVideoState(item)
     var imageRatio by remember { mutableStateOf<Float?>(null) }
@@ -167,13 +209,23 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
     LaunchedEffect(duration) { if (duration > 0 && endMs == 0L) endMs = duration }
     var savingJob by remember { mutableStateOf<Job?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
+    var mode by remember { mutableStateOf(EditMode.CROP) }
+    var turns by remember { mutableIntStateOf(0) }
+    // Finished lines, and the one under the finger; both in the upright picture's fractions, so they turn, zoom and crop with it.
+    var strokes by remember { mutableStateOf<List<DrawnStroke>>(emptyList()) }
+    var drawing by remember { mutableStateOf<DrawnStroke?>(null) }
+    val quarterTurns = Math.floorMod(turns, 4)
+    // The picture as the frame shows it: turned on its side, it stands the other way up.
+    val shownRatio = if (quarterTurns % 2 == 1) 1f / ratio else ratio
+    val angle by animateFloatAsState(turns * 90f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut), label = "turn")
+    val isTurning = angle != turns * 90f
 
     val lockedRatio = when (aspect.ratio) {
         null -> null
-        -1f -> ratio
+        -1f -> shownRatio
         else -> aspect.ratio
     }
-    // What is kept, as fractions of the upright picture: the frame seen through the zoom.
+    // What is kept, as fractions of the picture as it is turned: the frame seen through the zoom.
     val kept = Rect(
         0.5f + (crop.left - 0.5f - pan.x) / zoom,
         0.5f + (crop.top - 0.5f - pan.y) / zoom,
@@ -181,7 +233,26 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
         0.5f + (crop.bottom - 0.5f - pan.y) / zoom,
     )
     val isTrimmed = video != null && duration > 0 && (startMs > 0 || endMs < duration)
-    val isChanged = kept != FULL || isTrimmed
+    val isChanged = kept != FULL || isTrimmed || quarterTurns != 0 || strokes.isNotEmpty()
+
+    // A quarter turn clockwise: the frame, the shift and the ratio turn with the picture, so the same part stays framed.
+    val turn = {
+        crop = Rect(1f - crop.bottom, crop.left, 1f - crop.top, crop.right)
+        pan = Offset(-pan.y, pan.x)
+        aspect = aspect.turned()
+        turns += 1
+    }
+    // A point on the frame, in its own pixels, as a fraction of the upright picture: the zoom and the turns taken back off.
+    val toPicture = { at: Offset, box: Size ->
+        var x = 0.5f + (at.x / box.width - 0.5f - pan.x) / zoom
+        var y = 0.5f + (at.y / box.height - 0.5f - pan.y) / zoom
+        repeat(quarterTurns) {
+            val upright = y
+            y = 1f - x
+            x = upright
+        }
+        PointF(x, y)
+    }
 
     // The trimmed part plays round and round, so the cut can be watched while it is set.
     if (video != null) {
@@ -227,6 +298,8 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
             startMs = if (video != null) startMs else 0L,
             endMs = if (video != null && endMs < duration) endMs else C.TIME_END_OF_SOURCE,
             onProgress = { progress = it },
+            quarterTurns = quarterTurns,
+            strokes = strokes,
         ) { isDone ->
             savingJob = null
             if (isDone) leave()
@@ -235,7 +308,7 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
     // Every settled edit, oldest first; undo and redo walk it, and a new edit after an undo drops the steps ahead.
     val history = remember { mutableStateListOf<CropEdit>() }
     var step by remember { mutableIntStateOf(0) }
-    val current = CropEdit(crop, aspect, zoom, pan, startMs, endMs)
+    val current = CropEdit(crop, aspect, zoom, pan, startMs, endMs, turns, strokes)
     val isReady = video == null || endMs > 0
     LaunchedEffect(current, isReady) {
         if (!isReady) return@LaunchedEffect
@@ -256,6 +329,8 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
         pan = edit.pan
         startMs = edit.startMs
         endMs = edit.endMs
+        turns = edit.turns
+        strokes = edit.strokes
     }
     // An edit still settling counts as a step of its own, so undo takes it back first.
     val isUnsettled = history.isNotEmpty() && current != history[step]
@@ -301,19 +376,35 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TopButton(leave) { BackIcon(LocalAccent.current) }
+                Spacer(Modifier.weight(1f))
+                // Turning belongs to cutting the frame; it pops in and out with that mode.
+                AnimatedVisibility(
+                    visible = mode == EditMode.CROP,
+                    enter = scaleIn(tween(Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f),
+                    exit = scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f),
+                ) {
+                    TopButton(turn) { RotateIcon(LocalAccent.current) }
+                }
             }
 
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp).hazeSource(hazeState), contentAlignment = Alignment.Center) {
-                val isWiderThanRoom = maxWidth / maxHeight > ratio
-                val frameWidth = if (isWiderThanRoom) maxHeight * ratio else maxWidth
-                val frameHeight = if (isWiderThanRoom) maxHeight else maxWidth / ratio
+                // The frame holds the picture at its present angle: mid-turn it is the box around the leaning picture, so the picture always fits the room while it swings round.
+                val radians = Math.toRadians(angle.toDouble())
+                val cosine = abs(cos(radians)).toFloat()
+                val sine = abs(sin(radians)).toFloat()
+                val boundWidth = ratio * cosine + sine
+                val boundHeight = ratio * sine + cosine
+                val pictureHeight = min(maxWidth.value / boundWidth, maxHeight.value / boundHeight).dp
+                val pictureWidth = pictureHeight * ratio
+                val frameWidth = pictureHeight * boundWidth
+                val frameHeight = pictureHeight * boundHeight
                 Box(
                     Modifier
                         .size(frameWidth, frameHeight)
                         .onGloballyPositioned { frame = it.boundsInWindow() }
                         .graphicsLayer {
                             // From the box the viewer fits the picture in to this one, as one move and one scale, so the picture never changes shape on the way.
-                            val viewerSpot = fitInside(ratio, screen.width, screen.height).translate(screen.topLeft)
+                            val viewerSpot = fitInside(shownRatio, screen.width, screen.height).translate(screen.topLeft)
                             if (frame.width > 0f && viewerSpot.width > 0f) {
                                 val away = 1f - arrival.value
                                 transformOrigin = TransformOrigin(0f, 0f)
@@ -326,44 +417,80 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                         },
                 ) {
                     Box(Modifier.fillMaxSize().clipToBounds()) {
-                        if (video != null) {
-                            VideoSurface(video, Modifier.fillMaxSize())
-                        } else {
-                            val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).size(PREVIEW_PIXELS).build() }
-                            AsyncImage(
-                                model = request,
-                                contentDescription = item.name,
-                                contentScale = ContentScale.Fit,
-                                onSuccess = { success ->
-                                    val size = success.painter.intrinsicSize
-                                    if (size.width > 0f && size.height > 0f) imageRatio = size.width / size.height
-                                },
-                                modifier = Modifier.fillMaxSize().graphicsLayer {
-                                    scaleX = zoom
-                                    scaleY = zoom
-                                    translationX = pan.x * size.width
-                                    translationY = pan.y * size.height
-                                },
-                            )
+                        // The zoom works on the picture as the frame shows it, turned; the turn works on the picture and its lines together.
+                        Box(
+                            Modifier.fillMaxSize().graphicsLayer {
+                                scaleX = zoom
+                                scaleY = zoom
+                                translationX = pan.x * size.width
+                                translationY = pan.y * size.height
+                            },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.requiredSize(pictureWidth, pictureHeight).graphicsLayer { rotationZ = angle }) {
+                                if (video != null) {
+                                    VideoSurface(video, Modifier.fillMaxSize())
+                                } else {
+                                    val request = remember(item.uri) { ImageRequest.Builder(context).data(item.uri).size(PREVIEW_PIXELS).build() }
+                                    AsyncImage(
+                                        model = request,
+                                        contentDescription = item.name,
+                                        contentScale = ContentScale.Fit,
+                                        onSuccess = { success ->
+                                            val size = success.painter.intrinsicSize
+                                            if (size.width > 0f && size.height > 0f) imageRatio = size.width / size.height
+                                        },
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                    Canvas(Modifier.fillMaxSize()) {
+                                        strokes.forEach { drawStroke(it) }
+                                        drawing?.let { drawStroke(it) }
+                                    }
+                                }
+                            }
                         }
                     }
-                    CropFrame(
-                        crop = crop,
-                        lockedRatio = lockedRatio,
-                        onChange = { crop = it },
-                        onTap = { video?.let { if (it.player.isPlaying) it.player.pause() else it.player.play() } },
-                        // Zooming is for the photo; a video's frame is cropped as it is.
-                        onZoom = if (video != null) null else { { factor, shift, focus ->
-                            val nextZoom = (zoom * factor).coerceIn(1f, MAX_CROP_ZOOM)
-                            // The point under the fingers stays under them, as in the viewer.
-                            val centre = Offset(0.5f, 0.5f)
-                            val moved = (focus - centre) - (focus - centre - pan) * (nextZoom / zoom) + shift
-                            val limit = (nextZoom - 1f) / 2f
-                            zoom = nextZoom
-                            pan = Offset(moved.x.coerceIn(-limit, limit), moved.y.coerceIn(-limit, limit))
-                        } },
-                        modifier = Modifier.graphicsLayer { alpha = arrival.value },
-                    )
+                    // Zooming is for the photo; a video's frame is cropped as it is.
+                    val zoomBy: ((Float, Offset, Offset) -> Unit)? = if (video != null) null else { { factor, shift, focus ->
+                        val nextZoom = (zoom * factor).coerceIn(1f, MAX_CROP_ZOOM)
+                        // The point under the fingers stays under them, as in the viewer.
+                        val centre = Offset(0.5f, 0.5f)
+                        val moved = (focus - centre) - (focus - centre - pan) * (nextZoom / zoom) + shift
+                        val limit = (nextZoom - 1f) / 2f
+                        zoom = nextZoom
+                        pan = Offset(moved.x.coerceIn(-limit, limit), moved.y.coerceIn(-limit, limit))
+                    } }
+                    // Mid-turn the frame is not over the picture it marks, so it fades out while the picture swings and back once it lands.
+                    val frameAlpha = { arrival.value * (1f - (abs(angle - turns * 90f) / 90f).coerceIn(0f, 1f)) }
+                    if (mode == EditMode.CROP) {
+                        CropFrame(
+                            crop = crop,
+                            lockedRatio = lockedRatio,
+                            onChange = { crop = it },
+                            onTap = { video?.let { if (it.player.isPlaying) it.player.pause() else it.player.play() } },
+                            onZoom = zoomBy,
+                            modifier = Modifier.graphicsLayer { alpha = frameAlpha() },
+                        )
+                    } else {
+                        DrawLayer(
+                            crop = crop,
+                            isEnabled = !isTurning,
+                            onStart = { at, box ->
+                                // The width is the pencil's on screen as a share of the picture's own width as it is shown now.
+                                val shownWidth = (if (quarterTurns % 2 == 1) box.height else box.width) * zoom
+                                val thickness = with(density) { (PENCIL_THINNEST + (PENCIL_THICKEST - PENCIL_THINNEST) * Settings.pencilThickness).toPx() }
+                                drawing = DrawnStroke(listOf(toPicture(at, box)), Settings.pencilColor, thickness / shownWidth)
+                            },
+                            onMove = { at, box -> drawing = drawing?.let { it.copy(points = it.points + toPicture(at, box)) } },
+                            onEnd = {
+                                drawing?.let { strokes = strokes + it }
+                                drawing = null
+                            },
+                            onCancel = { drawing = null },
+                            onZoom = zoomBy,
+                            modifier = Modifier.graphicsLayer { alpha = frameAlpha() },
+                        )
+                    }
                 }
             }
 
@@ -388,24 +515,62 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                     )
                 }
 
-                NavBar(
-                    Aspect.entries,
-                    aspect,
-                    onSelect = { option ->
-                        aspect = option
-                        crop = fitted(option.ratio?.let { if (it < 0f) ratio else it }, ratio) ?: crop
+                // Each mode brings its own row: the ratios for cutting, the pencil for drawing; one pops away and the other pops in.
+                AnimatedContent(
+                    targetState = mode,
+                    transitionSpec = {
+                        scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
+                            .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f))
+                            .using(SizeTransform(clip = false))
                     },
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 14.dp),
-                    scroll = rememberScrollState(),
-                ) { option ->
-                    val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
-                    BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(top = 14.dp).height(OPTIONS_HEIGHT),
+                    label = "edit-mode",
+                ) { shownMode ->
+                    when (shownMode) {
+                        EditMode.CROP -> NavBar(
+                            Aspect.entries,
+                            aspect,
+                            onSelect = { option ->
+                                aspect = option
+                                crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            scroll = rememberScrollState(),
+                        ) { option ->
+                            val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
+                            BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                        }
+                        EditMode.DRAW -> PencilRow(
+                            color = Settings.pencilColor,
+                            thickness = Settings.pencilThickness,
+                            onColor = Settings::updatePencilColor,
+                            onThickness = Settings::updatePencilThickness,
+                            modifier = Modifier.padding(horizontal = 16.dp).fillMaxHeight(),
+                        )
+                    }
                 }
 
-                Row(Modifier.padding(top = 12.dp, bottom = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.padding(top = 12.dp, bottom = if (video == null) 0.dp else 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CropAction(onClick = undo, isEnabled = canUndo, onLongClick = revert) { UndoIcon(it) }
                     CropAction(onClick = redo, isEnabled = canRedo) { RedoIcon(it) }
                     CropAction(onClick = save, isEnabled = isChanged) { CheckIcon(it) }
+                }
+
+                // Drawing is for photos, so a video keeps to cutting and has no nav.
+                if (video == null) {
+                    NavBar(
+                        EditMode.entries,
+                        mode,
+                        onSelect = { chosen -> if (savingJob == null) mode = chosen },
+                        modifier = Modifier.padding(top = 12.dp, bottom = 14.dp),
+                    ) { option ->
+                        val ink by animateColorAsState(if (option == mode) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "mode-ink")
+                        when (option) {
+                            EditMode.CROP -> CropIcon(ink)
+                            EditMode.DRAW -> PenIcon(ink)
+                        }
+                    }
                 }
             }
         }
@@ -550,6 +715,161 @@ private fun CropFrame(crop: Rect, lockedRatio: Float?, onChange: (Rect) -> Unit,
 }
 
 private fun Rect.scaledTo(width: Float, height: Float) = Rect(left * width, top * height, right * width, bottom * height)
+
+// One line, drawn into a box the size of the upright picture.
+private fun DrawScope.drawStroke(stroke: DrawnStroke) {
+    val first = stroke.points.firstOrNull() ?: return
+    val color = Color(stroke.color)
+    val width = stroke.width * size.width
+    if (stroke.points.size == 1) {
+        drawCircle(color, width / 2f, Offset(first.x * size.width, first.y * size.height))
+        return
+    }
+    val path = Path().apply {
+        moveTo(first.x * size.width, first.y * size.height)
+        for (index in 1 until stroke.points.size) lineTo(stroke.points[index].x * size.width, stroke.points[index].y * size.height)
+    }
+    drawPath(path, color, style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+// Drawing over the photo: one finger draws, two zoom and pan the picture under the frame as in cutting. The part outside the frame stays veiled, so what is drawn there is plainly not kept.
+@Composable
+private fun DrawLayer(
+    crop: Rect,
+    isEnabled: Boolean,
+    onStart: (Offset, Size) -> Unit,
+    onMove: (Offset, Size) -> Unit,
+    onEnd: () -> Unit,
+    onCancel: () -> Unit,
+    onZoom: ((factor: Float, shift: Offset, focus: Offset) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val enabled by rememberUpdatedState(isEnabled)
+    val start by rememberUpdatedState(onStart)
+    val move by rememberUpdatedState(onMove)
+    val end by rememberUpdatedState(onEnd)
+    val cancel by rememberUpdatedState(onCancel)
+    val zoom by rememberUpdatedState(onZoom)
+    Canvas(
+        modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (!enabled) return@awaitEachGesture
+                    val box = Size(size.width.toFloat(), size.height.toFloat())
+                    start(down.position, box)
+                    down.consume()
+                    var isPinching = false
+                    do {
+                        val event = awaitPointerEvent()
+                        // A second finger means the first was not drawing, so its line is taken back.
+                        if (!isPinching && event.changes.count { it.pressed } >= 2) {
+                            isPinching = true
+                            cancel()
+                        }
+                        if (isPinching) {
+                            val zoomBy = zoom
+                            val centroid = event.calculateCentroid(useCurrent = false)
+                            if (zoomBy != null && centroid.isSpecified) {
+                                val shift = event.calculatePan()
+                                zoomBy(event.calculateZoom(), Offset(shift.x / box.width, shift.y / box.height), Offset(centroid.x / box.width, centroid.y / box.height))
+                            }
+                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            continue
+                        }
+                        val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (pointer.positionChanged()) {
+                            move(pointer.position, box)
+                            pointer.consume()
+                        }
+                    } while (event.changes.any { it.pressed })
+                    if (!isPinching) end()
+                }
+            },
+    ) {
+        val r = crop.scaledTo(size.width, size.height)
+        val veil = Color.Black.copy(alpha = 0.6f)
+        drawRect(veil, Offset.Zero, Size(size.width, r.top))
+        drawRect(veil, Offset(0f, r.bottom), Size(size.width, size.height - r.bottom))
+        drawRect(veil, Offset(0f, r.top), Size(r.left, r.height))
+        drawRect(veil, Offset(r.right, r.top), Size(size.width - r.right, r.height))
+        drawRect(Palette.textBright.copy(alpha = 0.5f), r.topLeft, r.size, style = Stroke(1.dp.toPx()))
+    }
+}
+
+// The pencil: its colours as dots, the chosen one ringed, and how thick it draws on a drag-only slider whose knob is the line itself.
+@Composable
+private fun PencilRow(color: Int, thickness: Float, onColor: (Int) -> Unit, onThickness: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val accent = LocalAccent.current
+    Row(
+        modifier.glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Palette.pencil.forEach { swatch ->
+            val argb = swatch.toArgb()
+            val ring by animateFloatAsState(if (argb == color) 1f else 0f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "swatch")
+            Canvas(Modifier.size(SWATCH).pressable(onClick = { onColor(argb) }, pressedScale = 0.85f)) {
+                val radius = size.minDimension / 2f
+                drawCircle(swatch, radius * (1f - 0.3f * ring))
+                // Black would vanish on the black behind it, so every dot carries a faint edge.
+                drawCircle(Palette.borderControl, radius * (1f - 0.3f * ring), style = Stroke(1.dp.toPx()))
+                if (ring > 0f) drawCircle(accent, radius - 1.dp.toPx(), style = Stroke(2.dp.toPx()), alpha = ring.coerceIn(0f, 1f))
+            }
+        }
+        ThicknessSlider(thickness, Color(color), onThickness, Modifier.weight(1f).padding(start = 4.dp))
+    }
+}
+
+// A drag-only slider, as in the settings (VAS components/03-panel-and-field.md §3): the value moves by how far the finger travels sideways from where it went down, and a tap changes nothing.
+@Composable
+private fun ThicknessSlider(fraction: Float, ink: Color, onChange: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val haptic = LocalHapticFeedback.current
+    val accent = LocalAccent.current
+    val currentFraction by rememberUpdatedState(fraction)
+    val currentOnChange by rememberUpdatedState(onChange)
+    var isTouched by remember { mutableStateOf(false) }
+    val track by animateDpAsState(if (isTouched) 10.dp else 4.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "pencil-track")
+    Box(
+        modifier
+            .height(32.dp)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val from = currentFraction
+                    var isArmed = false
+                    isTouched = true
+                    do {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        val travelled = change.position.x - down.position.x
+                        if (!isArmed) {
+                            if (abs(travelled) < viewConfiguration.touchSlop) continue
+                            isArmed = true
+                        }
+                        val next = (from + travelled / size.width).coerceIn(0f, 1f)
+                        // A tick every tenth of the track, so dragging it feels stepped.
+                        if ((next * 10).toInt() != (currentFraction * 10).toInt()) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                        currentOnChange(next)
+                        change.consume()
+                    } while (event.changes.any { it.pressed })
+                    isTouched = false
+                }
+            }
+            .drawBehind {
+                val thickest = PENCIL_THICKEST.toPx().coerceAtMost(size.height)
+                val radius = (PENCIL_THINNEST.toPx() + (thickest - PENCIL_THINNEST.toPx()) * fraction.coerceIn(0f, 1f)) / 2f
+                val trackHeight = track.toPx()
+                val top = (size.height - trackHeight) / 2f
+                val centre = thickest / 2f + (size.width - thickest) * fraction.coerceIn(0f, 1f)
+                drawRoundRect(Palette.borderStrong, Offset(0f, top), Size(size.width, trackHeight), CornerRadius(trackHeight / 2f))
+                drawRoundRect(accent, Offset(0f, top), Size(centre, trackHeight), CornerRadius(trackHeight / 2f))
+                drawCircle(ink, radius, Offset(centre, size.height / 2f))
+                drawCircle(Palette.borderControl, radius, Offset(centre, size.height / 2f), style = Stroke(1.dp.toPx()))
+            },
+    )
+}
 
 private fun hit(at: Offset, r: Rect, reach: Float): Handle? {
     val nearLeft = abs(at.x - r.left) < reach
