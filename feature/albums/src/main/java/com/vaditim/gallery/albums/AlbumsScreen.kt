@@ -28,7 +28,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.components.AddCardRow
 import com.vaditim.gallery.components.COVER_GAP
 import com.vaditim.gallery.components.CollapseButton
@@ -174,6 +177,8 @@ fun AlbumsScreen(
                     }
                 }
                 is AlbumEntry.Stack -> item(key = entry.key, span = { GridItemSpan(maxLineSpan) }, contentType = "stack") {
+                    val hasAlbumBefore = entries.getOrNull(index - 1) is AlbumEntry.Single
+                    val hasAlbumAfter = entries.getOrNull(index + 1) is AlbumEntry.Single
                     val isOpen = entry.name in openStacks
                     val isMovable = isRearranging && !isOpen
                     GroupRow(
@@ -195,6 +200,7 @@ fun AlbumsScreen(
                         onArrangeGroup = { reordered -> arrange(entries, entry.name, reordered) },
                         modifier = (if (isMovable) reorderable(reorder, entry.key, true) else Modifier.animateItem(placementSpec = glide))
                             .entrance()
+                            .albumDividers(hasAlbumBefore, hasAlbumAfter)
                             .padding(vertical = GROUP_GAP),
                     )
                 }
@@ -209,6 +215,18 @@ fun AlbumsScreen(
         }
     }
 }
+
+// A short hairline, centred, in the room between a group and the albums beside it, so the two kinds read apart.
+private fun Modifier.albumDividers(isAbove: Boolean, isBelow: Boolean): Modifier = if (!isAbove && !isBelow) this else drawBehind {
+    val width = size.width * ALBUM_DIVIDER_SHARE
+    val left = (size.width - width) / 2f
+    val inset = GROUP_GAP.toPx() / 2f
+    val thickness = 1.dp.toPx()
+    if (isAbove) drawRect(Palette.border, Offset(left, inset - thickness / 2f), Size(width, thickness))
+    if (isBelow) drawRect(Palette.border, Offset(left, size.height - inset - thickness / 2f), Size(width, thickness))
+}
+
+private const val ALBUM_DIVIDER_SHARE = 0.35f
 
 // Extra room above and below a group, so groups read as separate rows.
 private val GROUP_GAP = 12.4.dp

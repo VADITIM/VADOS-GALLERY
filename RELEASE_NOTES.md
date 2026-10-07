@@ -1,3 +1,6 @@
-# 1.1.51
+# 1.1.52
 
-- With a photo open, the nav no longer picks up the photo's colours when the photo ends just above it.
+- In the trash, the days left show at a photo's top left, smaller and in red.
+- A video's length is centred at the bottom of its tile, a little smaller at five or more columns.
+- A favourite's heart now sits at the top right of its tile.
+- A short divider separates groups from the albums beside them.

@@ -349,6 +349,7 @@ fun MediaGrid(
                         isSettled = isSettled,
                         isSelected = selection != null && item.id in selection.selectedIds,
                         badge = badge?.invoke(item),
+                        isDense = columns >= DENSE_COLUMNS,
                         isMarked = isMarked(item),
                         stackSize = if (entry.isFoldedStack) entry.stack.size else 0,
                         // From four columns a tile is too small to carry a date over the picture.
@@ -570,6 +571,7 @@ private fun Tile(
     isSelected: Boolean,
     onClick: () -> Unit,
     badge: String? = null,
+    isDense: Boolean = false,
     stampDay: LocalDate? = null,
     isMarked: Boolean = false,
     stackSize: Int = 0,
@@ -620,7 +622,7 @@ private fun Tile(
         AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         if (sharpRequest != null) AsyncImage(model = sharpRequest, contentDescription = null, contentScale = ContentScale.Crop, onSuccess = { TileImages.register(item.id, it.result.memoryCacheKey) }, modifier = Modifier.fillMaxSize())
         // Top left, away from the timeline: the day this photo opens, on a backdrop so it reads over any picture.
-        if (stampDay != null) {
+        if (stampDay != null && badge == null) {
             BasicText(
                 dayStamp(stampDay),
                 style = Type.value.copy(color = Palette.textBright, fontSize = 9.sp),
@@ -634,69 +636,75 @@ private fun Tile(
                     .padding(horizontal = 5.dp, vertical = 1.dp),
             )
         }
+        // Top left, where the day stamp would be: the days a trashed photo has left, in the danger colour.
         if (badge != null) {
             BasicText(
                 badge,
-                style = Type.value.copy(color = Palette.textBright),
+                style = Type.value.copy(color = Palette.danger, fontSize = 9.sp),
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
+                    .align(Alignment.TopStart)
+                    .padding(4.dp)
+                    .clip(Shapes.capsule)
+                    .background(Palette.panel)
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+        }
+        // Bottom right: the mark of a motion photo.
+        if (isMotion) {
+            Box(Modifier.align(Alignment.BottomEnd).padding(5.dp).clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 3.dp, vertical = 2.dp)) {
+                MotionIcon(Palette.textBright, size = TILE_HEART + 2.dp)
+            }
+        }
+        // Bottom centre: a video's length, smaller once the tiles are small.
+        if (item.isVideo) {
+            BasicText(
+                if (item.durationMillis > 0) formatDuration(item.durationMillis) else "VIDEO",
+                style = Type.value.copy(color = Palette.textBright, fontSize = if (isDense) 10.sp else Type.value.fontSize),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .padding(5.dp)
                     .clip(Shapes.capsule)
                     .background(Palette.panel)
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
+                    .padding(horizontal = if (isDense) 5.dp else 6.dp, vertical = 1.dp),
             )
         }
-        // Bottom right: the mark of a motion photo, the heart of a favourite, then a video's length beside it.
-        if (item.isFavorite || item.isVideo || isMotion) {
+        // Top right: the heart of a favourite, then a folded stack's count or an opened stack's place in it, which folds it back when tapped.
+        if (item.isFavorite || stackSize > 0 || stackPlace != null) {
             Row(
-                Modifier.align(Alignment.BottomEnd).padding(5.dp),
+                Modifier.align(Alignment.TopEnd).padding(5.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (isMotion) {
-                    Box(Modifier.clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 3.dp, vertical = 2.dp)) {
-                        MotionIcon(Palette.textBright, size = TILE_HEART + 2.dp)
-                    }
-                }
                 if (item.isFavorite) {
                     Box(Modifier.clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 4.dp, vertical = 3.dp)) {
                         HeartIcon(isFilled = true, color = Palette.favorite, size = TILE_HEART)
                     }
                 }
-                if (item.isVideo) {
+                if (stackSize > 0) {
+                    Row(
+                        Modifier.clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 5.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ReviewIcon(Palette.textBright, size = TILE_HEART)
+                        BasicText("$stackSize", style = Type.value.copy(color = Palette.textBright))
+                    }
+                } else if (stackPlace != null) {
                     BasicText(
-                        if (item.durationMillis > 0) formatDuration(item.durationMillis) else "VIDEO",
-                        style = Type.value.copy(color = Palette.textBright),
+                        stackPlace,
+                        style = Type.value.copy(color = LocalAccent.current),
                         modifier = Modifier
+                            .pressable(onClick = onCloseStack)
                             .clip(Shapes.capsule)
                             .background(Palette.panel)
                             .padding(horizontal = 6.dp, vertical = 1.dp),
                     )
                 }
             }
-        }
-        // Top right: a folded stack's count, or an opened stack's place in it, which folds it back when tapped.
-        if (stackSize > 0) {
-            Row(
-                Modifier.align(Alignment.TopEnd).padding(5.dp).clip(Shapes.capsule).background(Palette.panel).padding(horizontal = 5.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ReviewIcon(Palette.textBright, size = TILE_HEART)
-                BasicText("$stackSize", style = Type.value.copy(color = Palette.textBright))
-            }
-        } else if (stackPlace != null) {
-            BasicText(
-                stackPlace,
-                style = Type.value.copy(color = LocalAccent.current),
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .pressable(onClick = onCloseStack)
-                    .padding(5.dp)
-                    .clip(Shapes.capsule)
-                    .background(Palette.panel)
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
-            )
         }
         if (isMarked) {
             Box(Modifier.fillMaxSize().background(MARKED_SHADE), contentAlignment = Alignment.Center) {
@@ -710,6 +718,8 @@ private fun Tile(
 private val TILE_HEART = 11.dp
 private const val SHARP_DELAY_MS = 120L
 private const val MAX_STAMP_COLUMNS = 3
+// From this many columns a video's length is set smaller, so it fits the tile.
+private const val DENSE_COLUMNS = 5
 private val MARKED_SHADE = androidx.compose.ui.graphics.Color(0x99000000)
 
 @Composable
