@@ -56,6 +56,8 @@ object Shapes {
     val sheet = SquircleShape(30.dp)
     val panel = SquircleShape(22.dp)
     val cover = SquircleShape(20.dp)
+    // A card holding a group of settings (components/03-panel-and-field.md §2).
+    val field = SquircleShape(18.dp)
     val tile = RoundedCornerShape(8.dp)
     val viewerPhoto = RoundedCornerShape(24.dp)
     val capsule = RoundedCornerShape(percent = 50)

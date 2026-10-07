@@ -12,6 +12,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import kotlin.math.abs
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,9 +57,6 @@ import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.backup.Backup
 import com.vaditim.gallery.components.OverlaySheet
 import com.vaditim.gallery.components.ReviewIcon
-import com.vaditim.gallery.components.SheetHeader
-import com.vaditim.gallery.components.SheetRow
-import com.vaditim.gallery.components.rowDivider
 import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.DateGroup
 import com.vaditim.gallery.settings.Settings
@@ -70,6 +73,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // The settings, as a sheet in three tabs: the place you are in, what the app does everywhere, and how it looks. The look tab keeps the glass settings, so their effect can be watched on the sheet itself while they are dragged.
+// Every group is a card of its own (VAS components/03-panel-and-field.md), so two settings never run into each other and the eye has an edge to hold on to.
 private enum class SettingsTab { PLACE, GENERAL, INTERFACE }
 
 // The first tab is named after the view it changes, since each view keeps its own grid and album settings.
@@ -103,7 +107,9 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
     val onBackup = { saveBackup.launch("vados-gallery-backup.json") }
     val onRestore = { loadBackup.launch(arrayOf("*/*")) }
     OverlaySheet(visible = visible, label = "SETTINGS", onDismiss = onDismiss, isCentered = true, onPull = onPull) {
-        SettingsTabs(tab, onSelect = { tab = it })
+        Box(Modifier.padding(start = SHEET_MARGIN, end = SHEET_MARGIN, top = 4.dp, bottom = CARD_GAP)) {
+            SettingsSegments(SettingsTab.entries.map { it.label() }, tab.ordinal, height = TABS_HEIGHT) { tab = SettingsTab.entries[it] }
+        }
         // Every tab is measured and the sheet takes the tallest, so switching tabs never changes its height; a shorter tab sits in the middle of it.
         SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
             val loose = constraints.copy(minHeight = 0)
@@ -124,8 +130,12 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
             }.map { it.measure(fixed) }
             layout(constraints.maxWidth, height) { shown.forEach { it.place(0, 0) } }
         }
-        Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
-            BasicText("V/AS", style = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f)))
+        // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
+        val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
+        val footStyle = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f))
+        Box(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            BasicText("V/AS", style = footStyle, modifier = Modifier.align(Alignment.Center))
+            if (version != null) BasicText("V$version", style = footStyle, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp))
         }
     }
 }
@@ -133,129 +143,185 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, onReview: (() -> Unit)?, 
 @Composable
 // `isFilling`: the shown tab fills the sheet's fixed height and centres in it; measured, it takes only its own.
 private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onBackup: () -> Unit, onRestore: () -> Unit, isFilling: Boolean = true) {
-    Column(Modifier.fillMaxWidth().then(if (isFilling) Modifier.fillMaxHeight() else Modifier), verticalArrangement = Arrangement.Center) {
+    Column(
+        Modifier.fillMaxWidth().then(if (isFilling) Modifier.fillMaxHeight() else Modifier).padding(horizontal = SHEET_MARGIN),
+        verticalArrangement = Arrangement.spacedBy(CARD_GAP, Alignment.CenterVertically),
+    ) {
         when (shown) {
             SettingsTab.PLACE -> {
                 if (onReview != null) {
-                    SheetRow("Review photos", icon = { ReviewIcon(it) }) {
+                    SettingsButton("Review photos", Modifier.fillMaxWidth(), icon = { ReviewIcon(it, size = 18.dp) }) {
                         onDismiss()
                         onReview()
                     }
                 }
                 if (isCovers) {
-                    SettingsHeader("Albums")
-                    // Grouped albums lie as rows, so the column count only counts with grouping off.
-                    val canGroup = Settings.view.canGroup
-                    if (canGroup) SettingsToggle("Grouped albums", Settings.groupedAlbumsInView) { Settings.updateGroupedAlbums(it) }
-                    SettingsSteps("Album columns", Settings.MIN_COLUMNS..Settings.MAX_ALBUM_COLUMNS, Settings.albumColumnsInView, isEnabled = !(canGroup && Settings.groupedAlbumsInView)) {
-                        Settings.updateAlbumColumns(it)
+                    SettingsCard("Albums") {
+                        // Grouped albums lie as rows, so the column count only counts with grouping off.
+                        val canGroup = Settings.view.canGroup
+                        if (canGroup) {
+                            SettingsToggle("Grouped albums", Settings.groupedAlbumsInView) { Settings.updateGroupedAlbums(it) }
+                            CardDivider()
+                        }
+                        SettingsSteps("Album columns", Settings.MIN_COLUMNS..Settings.MAX_ALBUM_COLUMNS, Settings.albumColumnsInView, isEnabled = !(canGroup && Settings.groupedAlbumsInView)) {
+                            Settings.updateAlbumColumns(it)
+                        }
                     }
                 } else {
                     // An open album shows Recent's settings, greyed, until it is given its own.
                     val isEditable = Settings.folder == null || Settings.hasOwnSettings(Settings.folder)
-                    SettingsHeader("Photos")
-                    SettingsSteps("Image columns", Settings.MIN_COLUMNS..Settings.MAX_COLUMNS, Settings.defaultColumns, isEnabled = isEditable) {
-                        Settings.updateDefaultColumns(it)
-                        onColumnsChanged(it)
+                    SettingsCard("Photos") {
+                        // Stacking is the view's, not the album's, so it stays live while the rest is greyed; the trash never stacks.
+                        if (Settings.view != SettingsView.TRASH) {
+                            SettingsToggle("Stack similar shots", Settings.stackSimilarInView) { Settings.updateStackSimilar(it) }
+                            CardDivider()
+                        }
+                        SettingsSteps("Image columns", Settings.MIN_COLUMNS..Settings.MAX_COLUMNS, Settings.defaultColumns, isEnabled = isEditable) {
+                            Settings.updateDefaultColumns(it)
+                            onColumnsChanged(it)
+                        }
+                        CardDivider()
+                        HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = isEditable)
+                        if (Settings.folder != null) {
+                            CardDivider()
+                            SettingsToggle("Own settings", Settings.hasOwnSettings(Settings.folder)) {
+                                Settings.updateOwnSettings(it)
+                                onColumnsChanged(Settings.defaultColumns)
+                            }
+                        }
                     }
-                    HeadersLayout(Settings.headersInView, Settings.dateGroupsInView, isEnabled = isEditable)
                 }
                 if (Settings.view == SettingsView.PRIVATE) {
-                    SettingsHeader("Private")
-                    SettingsToggle("Today's selection", Settings.todaysSelection) { Settings.updateTodaysSelection(it) }
-                }
-                if (!isCovers && Settings.folder != null) {
-                    SettingsToggle("Own settings", Settings.hasOwnSettings(Settings.folder), isDivided = false) {
-                        Settings.updateOwnSettings(it)
-                        onColumnsChanged(Settings.defaultColumns)
+                    SettingsCard("Private") {
+                        SettingsToggle("Today's selection", Settings.todaysSelection) { Settings.updateTodaysSelection(it) }
                     }
                 }
             }
             SettingsTab.GENERAL -> {
-                SettingsHeader("Videos")
-                SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
-                SettingsHeader("Photos")
-                SettingsToggle("Stack similar shots", Settings.stackSimilarInView) { Settings.updateStackSimilar(it) }
-                SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
-                SettingsChoice("Folder label", listOf("Top", "Bottom"), if (Settings.folderLabel) 1 else 0) { Settings.updateFolderLabel(it == 1) }
-                SettingsHeader("Backup")
-                SheetRow("Back up", onClick = onBackup)
-                SheetRow("Restore", onClick = onRestore)
+                SettingsCard("Videos") {
+                    SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
+                }
+                SettingsCard("Backup") {
+                    Row(Modifier.fillMaxWidth().padding(start = CARD_INSET, end = CARD_INSET, top = 6.dp, bottom = CARD_INSET), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsButton("Back up", Modifier.weight(1f), onClick = onBackup)
+                        SettingsButton("Restore", Modifier.weight(1f), onClick = onRestore)
+                    }
+                }
             }
             SettingsTab.INTERFACE -> {
-                SettingsHeader("Overlays")
-                SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
-                SettingsSlider("Opacity", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
-                SettingsHeader("Background")
-                SettingsSlider("Brightness", Settings.groundBrightness, "${(Settings.groundBrightness * 100).toInt()}%") { Settings.updateGroundBrightness(it) }
-            }
-        }
-    }
-}
-
-// The tabs as one capsule at the head of the sheet; the accent fill slides under the chosen one.
-@Composable
-private fun SettingsTabs(active: SettingsTab, onSelect: (SettingsTab) -> Unit) {
-    val accent = LocalAccent.current
-    val position by animateFloatAsState(active.ordinal.toFloat(), tween(Motion.STATE_MS, easing = Motion.powerTwoOut), label = "settings-tabs")
-    Box(
-        Modifier
-            .padding(start = 20.dp, end = 20.dp, bottom = 14.dp)
-            .fillMaxWidth()
-            .clip(Shapes.capsule)
-            .background(Palette.sunkenDeep)
-            .drawBehind {
-                val width = size.width / SettingsTab.entries.size
-                drawRoundRect(accent, Offset(width * position, 0f), Size(width, size.height), CornerRadius(size.height / 2f))
-            },
-    ) {
-        Row(Modifier.fillMaxWidth()) {
-            SettingsTab.entries.forEach { tab ->
-                Box(
-                    Modifier.weight(1f).pressable(onClick = { onSelect(tab) }, pressedScale = 0.96f).padding(vertical = 11.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    BasicText(tab.label(), style = Type.navigation.copy(color = if (tab == active) Palette.sunkenDeep else Palette.textMuted))
+                // How a photo tile and the folder's name look are part of the look, not of what the app does.
+                SettingsCard("Tiles") {
+                    SettingsToggle("Day stamps", Settings.dayStamps) { Settings.updateDayStamps(it) }
+                    CardDivider()
+                    SettingsChoice("Folder label", listOf("Top", "Bottom"), if (Settings.folderLabel) 1 else 0) { Settings.updateFolderLabel(it == 1) }
+                }
+                SettingsCard("Glass") {
+                    SettingsSlider("Blur", Settings.blurDp / Settings.MAX_BLUR_DP, "${Settings.blurDp.toInt()}") { Settings.updateBlur(it * Settings.MAX_BLUR_DP) }
+                    CardDivider()
+                    SettingsSlider("Opacity", Settings.glassOpacity, "${(Settings.glassOpacity * 100).toInt()}%") { Settings.updateGlassOpacity(it) }
+                }
+                SettingsCard("Background") {
+                    SettingsSlider("Brightness", Settings.groundBrightness, "${(Settings.groundBrightness * 100).toInt()}%") { Settings.updateGroundBrightness(it) }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun SettingsHeader(text: String) = SheetHeader(text)
+// The sheet's edge to its cards, the gap between cards, and a card's edge to its text: one spacing for every tab.
+private val SHEET_MARGIN = 14.dp
+private val CARD_GAP = 10.dp
+private val CARD_INSET = 16.dp
+private val ROW_PADDING = 13.dp
 
+// One group of settings in a box of its own: a hairline edge and a darker fill than the glass, its name in the accent at the top left.
+@Composable
+private fun SettingsCard(label: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(Shapes.field)
+            .background(Palette.sunken.copy(alpha = CARD_FILL))
+            .border(1.dp, Palette.border, Shapes.field),
+    ) {
+        BasicText(label.uppercase(), style = Type.microLabel.copy(color = LocalAccent.current), modifier = Modifier.padding(start = CARD_INSET, end = CARD_INSET, top = 12.dp, bottom = 2.dp))
+        content()
+    }
+}
+
+private const val CARD_FILL = 0.85f
+
+// A hairline between two settings inside one card, inset to their text.
+@Composable
+private fun CardDivider() = Box(Modifier.padding(horizontal = CARD_INSET).fillMaxWidth().height(1.dp).background(Palette.border))
+
+// A setting's name, always the same face, size and brightness, so the eye reads every card the same way.
+@Composable
+private fun SettingName(text: String) = BasicText(text, style = Type.cardTitle, maxLines = 1)
+
+// The value a setting is at, plain bright beside its name in the accent card, as in the field card's head.
+@Composable
+private fun SettingValue(text: String) = BasicText(text, style = Type.value.copy(color = Palette.textBright))
+
+// An outlined button for a move rather than a setting (review, back up, restore): the outline says it does something once, unlike the filled controls that hold a state.
+@Composable
+private fun SettingsButton(text: String, modifier: Modifier = Modifier, icon: (@Composable (Color) -> Unit)? = null, onClick: () -> Unit) {
+    Row(
+        modifier
+            .pressable(onClick = onClick, pressedScale = 0.96f)
+            .height(BUTTON_HEIGHT)
+            .clip(Shapes.capsule)
+            .background(Palette.sunkenDeep)
+            .border(1.dp, Palette.borderControl, Shapes.capsule),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon?.invoke(LocalAccent.current)
+        BasicText(text.uppercase(), style = Type.navigation.copy(color = Palette.textBright), maxLines = 1)
+    }
+}
+
+private val BUTTON_HEIGHT = 46.dp
+
+// A drag-only slider (VAS components/03-panel-and-field.md §3): the value moves by how far the finger travels sideways from where it went down, so a finger on its way down the sheet passes over it without changing anything, and a tap does nothing.
 @Composable
 private fun SettingsSlider(label: String, fraction: Float, value: String, onChange: (Float) -> Unit) {
     val haptic = LocalHapticFeedback.current
     val accent = LocalAccent.current
+    val currentFraction by rememberUpdatedState(fraction)
+    val currentOnChange by rememberUpdatedState(onChange)
     var isHeld by remember { mutableStateOf(false) }
-    val thumb by animateDpAsState(if (isHeld) 22.dp else 16.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "slider-thumb")
-    // A tick every twentieth of the track, so dragging it feels stepped.
-    val tick: (Float) -> Unit = { next ->
-        if ((next * 20).toInt() != (fraction * 20).toInt()) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-        onChange(next)
-    }
-    Column(Modifier.fillMaxWidth().rowDivider().padding(horizontal = 20.dp, vertical = 14.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            BasicText(label, style = Type.cardTitle)
-            BasicText(value, style = Type.value.copy(color = accent))
+    val thumb by animateDpAsState(if (isHeld) 24.dp else 20.dp, tween(Motion.STATE_MS, easing = Motion.backOut), label = "slider-thumb")
+    Column(Modifier.fillMaxWidth().padding(horizontal = CARD_INSET, vertical = ROW_PADDING)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            SettingName(label)
+            SettingValue(value)
         }
         Box(
             Modifier
-                .padding(top = 10.dp)
+                .padding(top = 8.dp)
                 .fillMaxWidth()
                 .height(28.dp)
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        isHeld = true
-                        tick((down.position.x / size.width).coerceIn(0f, 1f))
-                        down.consume()
+                        val from = currentFraction
+                        var isArmed = false
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Main)
-                            val change = event.changes.firstOrNull() ?: break
-                            tick((change.position.x / size.width).coerceIn(0f, 1f))
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val travelled = change.position - down.position
+                            if (!isArmed) {
+                                // Under the slop it is not a drag yet; going down the sheet first leaves it to the sheet's own pull.
+                                if (abs(travelled.y) > viewConfiguration.touchSlop && abs(travelled.y) > abs(travelled.x)) break
+                                if (abs(travelled.x) < viewConfiguration.touchSlop) continue
+                                isArmed = true
+                                isHeld = true
+                            }
+                            val next = (from + travelled.x / size.width).coerceIn(0f, 1f)
+                            // A tick every twentieth of the track, so dragging it feels stepped.
+                            if ((next * 20).toInt() != (currentFraction * 20).toInt()) haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                            currentOnChange(next)
                             change.consume()
                         } while (event.changes.any { it.pressed })
                         isHeld = false
@@ -264,34 +330,38 @@ private fun SettingsSlider(label: String, fraction: Float, value: String, onChan
                 .drawBehind {
                     val trackHeight = 6.dp.toPx()
                     val top = (size.height - trackHeight) / 2f
-                    val end = size.width * fraction.coerceIn(0f, 1f)
-                    drawRoundRect(Palette.borderControl, Offset(0f, top), Size(size.width, trackHeight), CornerRadius(trackHeight / 2f))
-                    drawRoundRect(accent, Offset(0f, top), Size(end, trackHeight), CornerRadius(trackHeight / 2f))
                     val radius = thumb.toPx() / 2f
-                    drawCircle(Palette.textBright, radius, Offset(end.coerceIn(radius, size.width - radius), size.height / 2f))
+                    val center = radius + (size.width - radius * 2f) * fraction.coerceIn(0f, 1f)
+                    drawRoundRect(Palette.borderStrong, Offset(0f, top), Size(size.width, trackHeight), CornerRadius(trackHeight / 2f))
+                    drawRoundRect(accent, Offset(0f, top), Size(center, trackHeight), CornerRadius(trackHeight / 2f))
+                    drawCircle(accent, radius, Offset(center, size.height / 2f))
+                    drawCircle(Palette.sunkenDeep, radius - 3.dp.toPx(), Offset(center, size.height / 2f))
                 },
         )
     }
 }
 
-// A switch whose knob slides across on the overshoot and stretches while pressed, the track taking the accent as it goes.
+// A switch whose knob slides across on the overshoot and stretches while pressed, the track taking the accent as it goes; off, it is an outline with a bright knob, so off still reads as a control and not as a gap.
 @Composable
-private fun SettingsToggle(label: String, isOn: Boolean, isEnabled: Boolean = true, isDivided: Boolean = true, onChange: (Boolean) -> Unit) {
+private fun SettingsToggle(label: String, isOn: Boolean, isEnabled: Boolean = true, onChange: (Boolean) -> Unit) {
     val accent = LocalAccent.current
     val travel by animateFloatAsState(if (isOn) 1f else 0f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "toggle-travel")
-    val track by animateColorAsState(if (isOn) accent else Palette.borderControl, tween(Motion.STATE_MS), label = "toggle-track")
-    val knob by animateColorAsState(if (isOn) Palette.sunkenDeep else Palette.textBright, tween(Motion.STATE_MS), label = "toggle-knob")
+    val track by animateColorAsState(if (isOn) accent else Palette.sunkenDeep, tween(Motion.STATE_MS), label = "toggle-track")
+    val edge by animateColorAsState(if (isOn) accent else Palette.borderControl, tween(Motion.STATE_MS), label = "toggle-edge")
+    val knob by animateColorAsState(if (isOn) Palette.sunkenDeep else Palette.textMuted, tween(Motion.STATE_MS), label = "toggle-knob")
     Row(
         Modifier
             .fillMaxWidth()
-            .then(if (isDivided) Modifier.rowDivider() else Modifier)
             .then(if (isEnabled) Modifier.pressable(onClick = { onChange(!isOn) }, pressedScale = 0.98f) else Modifier.alpha(DISABLED_ALPHA))
-            .padding(horizontal = 20.dp, vertical = 13.dp),
+            .padding(horizontal = CARD_INSET, vertical = ROW_PADDING),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText(label, style = Type.cardTitle)
-        Box(Modifier.size(width = TOGGLE_WIDTH, height = TOGGLE_HEIGHT).clip(Shapes.capsule).background(track), contentAlignment = Alignment.CenterStart) {
+        SettingName(label)
+        Box(
+            Modifier.size(width = TOGGLE_WIDTH, height = TOGGLE_HEIGHT).clip(Shapes.capsule).background(track).border(1.dp, edge, Shapes.capsule),
+            contentAlignment = Alignment.CenterStart,
+        ) {
             Box(
                 Modifier
                     .offset(x = TOGGLE_INSET + (TOGGLE_WIDTH - TOGGLE_KNOB - TOGGLE_INSET * 2) * travel)
@@ -303,100 +373,123 @@ private fun SettingsToggle(label: String, isOn: Boolean, isEnabled: Boolean = tr
     }
 }
 
-private val TOGGLE_WIDTH = 52.dp
+private val TOGGLE_WIDTH = 50.dp
 private val TOGGLE_HEIGHT = 30.dp
-private val TOGGLE_KNOB = 24.dp
-private val TOGGLE_INSET = 3.dp
+private val TOGGLE_KNOB = 22.dp
+private val TOGGLE_INSET = 4.dp
 
-// Every possible value laid out as a stop; the accent pill under the chosen one follows the finger across them and settles on the nearest when let go, which is when the value changes.
+// A setting with a number to pick: its name above, every value as a stop of one segmented track under it.
 @Composable
 private fun SettingsSteps(label: String, range: IntRange, value: Int, isEnabled: Boolean = true, onChange: (Int) -> Unit) {
-    val count = range.last - range.first + 1
+    val stops = range.toList()
+    Column(
+        Modifier.fillMaxWidth().then(if (isEnabled) Modifier else Modifier.alpha(DISABLED_ALPHA)).padding(horizontal = CARD_INSET, vertical = ROW_PADDING),
+    ) {
+        SettingName(label)
+        Box(Modifier.padding(top = 10.dp)) {
+            SettingsSegments(stops.map { it.toString() }, stops.indexOf(value).coerceAtLeast(0), isEnabled = isEnabled, style = Type.value) { onChange(stops[it]) }
+        }
+    }
+}
+
+// A setting with a few named answers, laid out as the steps are, so every one-of-many pick in the sheet is the same control.
+@Composable
+private fun SettingsChoice(label: String, options: List<String>, chosen: Int, onChoose: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = CARD_INSET, vertical = ROW_PADDING)) {
+        SettingName(label)
+        Box(Modifier.padding(top = 10.dp)) {
+            SettingsSegments(options.map { it.uppercase() }, chosen, onChoose = onChoose)
+        }
+    }
+}
+
+// One-of-many as a sunken track with every option as a stop; the accent pill under the chosen one follows the finger across them and settles on the nearest when let go, which is when the choice is made. The tabs are one too.
+@Composable
+private fun SettingsSegments(options: List<String>, chosen: Int, isEnabled: Boolean = true, height: Dp = SEGMENTS_HEIGHT, style: TextStyle = Type.navigation, onChoose: (Int) -> Unit) {
+    val count = options.size
     val accent = LocalAccent.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
-    val position = remember { Animatable((value - range.first).toFloat()) }
+    val currentChosen by rememberUpdatedState(chosen)
+    val currentOnChoose by rememberUpdatedState(onChoose)
+    val position = remember { Animatable(chosen.toFloat()) }
     var isHeld by remember { mutableStateOf(false) }
-    // A value changed elsewhere (a pinch on the grid) moves the pill too.
-    LaunchedEffect(value) {
-        if (!isHeld) position.animateTo((value - range.first).toFloat(), tween(Motion.STATE_MS, easing = Motion.backOut))
+    // A choice made elsewhere (a pinch on the grid) moves the pill too.
+    LaunchedEffect(chosen) {
+        if (!isHeld) position.animateTo(chosen.toFloat(), tween(Motion.STATE_MS, easing = Motion.backOut))
     }
     val nearest = position.value.roundToInt().coerceIn(0, count - 1)
-    Column(
+    Box(
         Modifier
             .fillMaxWidth()
-            .rowDivider()
-            .then(if (isEnabled) Modifier else Modifier.alpha(DISABLED_ALPHA))
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-    ) {
-        BasicText(label, style = Type.cardTitle)
-        Box(
-            Modifier
-                .padding(top = 10.dp)
-                .fillMaxWidth()
-                .height(STEPS_HEIGHT)
-                .clip(Shapes.capsule)
-                .background(Palette.sunkenDeep)
-                .then(
-                    if (!isEnabled) Modifier else Modifier.pointerInput(range) {
-                        val stopWidth = size.width.toFloat() / count
-                        fun stopAt(x: Float) = (x / stopWidth - 0.5f).coerceIn(0f, (count - 1).toFloat())
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            down.consume()
-                            isHeld = true
-                            var lastStop = position.value.roundToInt()
-                            scope.launch { position.animateTo(stopAt(down.position.x), tween(Motion.PRESS_MS, easing = Motion.powerTwoOut)) }
-                            do {
-                                val event = awaitPointerEvent(PointerEventPass.Main)
-                                val change = event.changes.firstOrNull() ?: break
-                                if (change.position != change.previousPosition) scope.launch { position.snapTo(stopAt(change.position.x)) }
-                                val stop = stopAt(change.position.x).roundToInt()
-                                if (stop != lastStop) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                                    lastStop = stop
-                                }
-                                change.consume()
-                            } while (event.changes.any { it.pressed })
-                            val chosen = lastStop
-                            scope.launch {
-                                position.animateTo(chosen.toFloat(), tween(Motion.STATE_MS, easing = Motion.backOut))
-                                isHeld = false
+            .height(height)
+            .clip(Shapes.capsule)
+            .background(Palette.sunkenDeep)
+            .border(1.dp, Palette.borderStrong, Shapes.capsule)
+            .then(
+                if (!isEnabled) Modifier else Modifier.pointerInput(count) {
+                    val inset = SEGMENTS_INSET.toPx()
+                    val stopWidth = (size.width - inset * 2f) / count
+                    fun stopAt(x: Float) = ((x - inset) / stopWidth - 0.5f).coerceIn(0f, (count - 1).toFloat())
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        isHeld = true
+                        var lastStop = position.value.roundToInt()
+                        scope.launch { position.animateTo(stopAt(down.position.x), tween(Motion.PRESS_MS, easing = Motion.powerTwoOut)) }
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.firstOrNull() ?: break
+                            if (change.position != change.previousPosition) scope.launch { position.snapTo(stopAt(change.position.x)) }
+                            val stop = stopAt(change.position.x).roundToInt()
+                            if (stop != lastStop) {
+                                haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                                lastStop = stop
                             }
-                            if (range.first + chosen != value) onChange(range.first + chosen)
+                            change.consume()
+                        } while (event.changes.any { it.pressed })
+                        val picked = lastStop
+                        scope.launch {
+                            position.animateTo(picked.toFloat(), tween(Motion.STATE_MS, easing = Motion.backOut))
+                            isHeld = false
                         }
-                    },
-                )
-                .drawBehind {
-                    val width = size.width / count
-                    drawRoundRect(accent, Offset(width * position.value, 0f), Size(width, size.height), CornerRadius(size.height / 2f))
-                },
-        ) {
-            Row(Modifier.fillMaxWidth().fillMaxHeight()) {
-                range.forEachIndexed { index, stop ->
-                    val ink by animateColorAsState(if (index == nearest) Palette.sunkenDeep else Palette.textMuted, tween(Motion.PRESS_MS), label = "step-ink")
-                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        BasicText(stop.toString(), style = Type.value.copy(color = ink))
+                        if (picked != currentChosen) currentOnChoose(picked)
                     }
+                },
+            )
+            .drawBehind {
+                val inset = SEGMENTS_INSET.toPx()
+                val width = (size.width - inset * 2f) / count
+                drawRoundRect(accent, Offset(inset + width * position.value, inset), Size(width, size.height - inset * 2f), CornerRadius((size.height - inset * 2f) / 2f))
+            }
+            .padding(horizontal = SEGMENTS_INSET),
+    ) {
+        Row(Modifier.fillMaxWidth().fillMaxHeight()) {
+            options.forEachIndexed { index, option ->
+                val ink by animateColorAsState(if (index == nearest) Palette.sunkenDeep else Palette.textMuted, tween(Motion.PRESS_MS), label = "segment-ink")
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    BasicText(option, style = style.copy(color = ink), maxLines = 1)
                 }
             }
         }
     }
 }
 
-private val STEPS_HEIGHT = 36.dp
+private val SEGMENTS_HEIGHT = 38.dp
+private val TABS_HEIGHT = 42.dp
+private val SEGMENTS_INSET = 3.dp
 
 // Days, weeks, months and years can be on together, at least one; the switch under them turns every cut off and greys them, keeping the pick for when it comes back.
 // An empty pick stored before it could not be emptied reads as off, and turning on from it starts at months.
 @Composable
 private fun HeadersLayout(isOn: Boolean, groups: Set<DateGroup>, isEnabled: Boolean = true) {
     val isActive = isOn && groups.isNotEmpty()
-    Column(Modifier.fillMaxWidth().rowDivider()) {
-        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
-            BasicText("Headers - Layout", style = Type.cardTitle)
+    Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().then(if (isEnabled) Modifier else Modifier.alpha(DISABLED_ALPHA)).padding(start = CARD_INSET, end = CARD_INSET, top = ROW_PADDING)) {
+            SettingName("Headers - Layout")
             Row(Modifier.padding(top = 10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 DateGroup.entries.forEach { group ->
-                    LayoutChip(group.label, isOn = group in groups, isGreyed = !isActive || !isEnabled, modifier = Modifier.weight(1f)) {
+                    LayoutChip(group.label, isOn = group in groups, isGreyed = !isActive, modifier = Modifier.weight(1f)) {
                         if (!isEnabled) return@LayoutChip
                         val next = if (group in groups) groups - group else groups + group
                         if (next.isNotEmpty()) Settings.updateDateGroups(next)
@@ -404,47 +497,31 @@ private fun HeadersLayout(isOn: Boolean, groups: Set<DateGroup>, isEnabled: Bool
                 }
             }
         }
-        SettingsToggle("Headers", isActive, isEnabled = isEnabled, isDivided = false) { isTurnedOn ->
+        SettingsToggle("Headers", isActive, isEnabled = isEnabled) { isTurnedOn ->
             if (isTurnedOn && groups.isEmpty()) Settings.updateDateGroups(setOf(DateGroup.MONTHS))
             Settings.updateHeaders(isTurnedOn)
         }
     }
 }
 
-// A setting with a few named answers side by side, the chosen one lit as the layout buttons are.
-@Composable
-private fun SettingsChoice(label: String, options: List<String>, chosen: Int, onChoose: (Int) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().rowDivider().padding(horizontal = 20.dp, vertical = 13.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BasicText(label, style = Type.cardTitle)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            options.forEachIndexed { index, option ->
-                LayoutChip(option, isOn = index == chosen, isGreyed = false, modifier = Modifier.width(CHOICE_WIDTH)) { onChoose(index) }
-            }
-        }
-    }
-}
-
-private val CHOICE_WIDTH = 76.dp
-
+// Any-of-many, one chip each: outlined while off, filled with the accent while on, like the portfolio's option buttons.
 @Composable
 private fun LayoutChip(label: String, isOn: Boolean, isGreyed: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val accent = LocalAccent.current
     val fill by animateColorAsState(if (isOn) accent else Palette.sunkenDeep, tween(Motion.STATE_MS), label = "chip-fill")
+    val edge by animateColorAsState(if (isOn) accent else Palette.borderStrong, tween(Motion.STATE_MS), label = "chip-edge")
     val ink by animateColorAsState(if (isOn) Palette.sunkenDeep else Palette.textMuted, tween(Motion.STATE_MS), label = "chip-ink")
     val shade by animateFloatAsState(if (isGreyed) DISABLED_ALPHA else 1f, tween(Motion.STATE_MS), label = "chip-shade")
     Box(
         modifier
             .pressable(onClick = onClick, pressedScale = 0.94f)
             .alpha(shade)
+            .height(SEGMENTS_HEIGHT)
             .clip(Shapes.capsule)
             .background(fill)
-            .padding(vertical = 10.dp),
+            .border(1.dp, edge, Shapes.capsule),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1)
+        BasicText(label.uppercase(), style = Type.navigation.copy(color = ink), maxLines = 1)
     }
 }
