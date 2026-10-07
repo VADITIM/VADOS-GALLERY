@@ -3,6 +3,7 @@ package com.vaditim.gallery.albums
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -49,12 +50,16 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.vaditim.gallery.vas.Palette
 import com.vaditim.gallery.components.AddCardRow
 import com.vaditim.gallery.components.COVER_GAP
 import com.vaditim.gallery.components.CollapseButton
 import com.vaditim.gallery.components.CoverCard
 import com.vaditim.gallery.components.CoverGrid
+import com.vaditim.gallery.components.DROPPING_SCALE
+import com.vaditim.gallery.components.HELD_SCALE
+import com.vaditim.gallery.components.Reorder
 import com.vaditim.gallery.components.GridMemory
 import com.vaditim.gallery.components.LIST_COVER
 import com.vaditim.gallery.components.LocalAccentedCoverNames
@@ -87,6 +92,7 @@ import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -143,8 +149,8 @@ fun AlbumsScreen(
     isAccented: Boolean = false,
     // A cover held a moment and then dragged turns rearranging on with it.
     onStartRearranging: () -> Unit = {},
-    // An album outside any group dropped onto a group while rearranging.
-    onDropIntoGroup: (album: Album, group: String) -> Unit = { _, _ -> },
+    // An album dropped onto a group while rearranging, or dragged out of its own group (group null).
+    onRegroup: (album: Album, group: String?) -> Unit = { _, _ -> },
 ) = CompositionLocalProvider(LocalAccentedCoverNames provides isAccented) {
     val isPicking = selectedPaths.isNotEmpty()
     val entries = remember(albums, stacks) { entriesOf(albums, stacks) }
@@ -168,13 +174,38 @@ fun AlbumsScreen(
     // Groups trade places with groups and albums with albums, so an album never lands above a group.
     reorder.canSwap = { held, target -> (held is String) == (target is String) }
     reorder.canDropInto = { held, target -> held !is String && target is String }
+    // A group opened by an album hanging over it; it closes again once the album moves off, unless the album was let go into it.
+    var hoverOpened by remember { mutableStateOf<String?>(null) }
+    val regroup = { album: Album, group: String? ->
+        hoverOpened = null
+        onRegroup(album, group)
+    }
     reorder.onDropInto = { held, target ->
         val album = entries.firstNotNullOfOrNull { (it as? AlbumEntry.Single)?.album?.takeIf { album -> album.id == held } }
-        if (album != null && target is String) onDropIntoGroup(album, target.removePrefix(STACK_KEY_PREFIX))
+        if (album != null && target is String) regroup(album, target.removePrefix(STACK_KEY_PREFIX))
     }
     // While a group opens or closes, the rows under it follow its height frame by frame instead of gliding after it, so nothing overlaps.
     var movingGroups by remember { mutableStateOf(emptySet<String>()) }
     val glide = if (movingGroups.isEmpty()) tween<IntOffset>(Motion.STACK_MS, easing = Motion.powerThreeInOut) else null
+    val currentOpenStacks by rememberUpdatedState(openStacks)
+    val currentOnOpenStacksChange by rememberUpdatedState(onOpenStacksChange)
+    val setOpen = { name: String, open: Boolean ->
+        movingGroups = movingGroups + name
+        currentOnOpenStacksChange(if (open) currentOpenStacks + name else currentOpenStacks - name)
+    }
+    val hovered = (reorder.dropTargetKey as? String)?.removePrefix(STACK_KEY_PREFIX)
+    LaunchedEffect(hovered) {
+        val opened = hoverOpened
+        if (opened != null && opened != hovered) {
+            hoverOpened = null
+            setOpen(opened, false)
+        }
+        if (hovered != null && hovered !in currentOpenStacks) {
+            delay(Motion.HOVER_OPEN_MS)
+            hoverOpened = hovered
+            setOpen(hovered, true)
+        }
+    }
 
     // Every group is a row of its own, so the albums before it end their row early.
     val spans = coverColumns().let { columns -> remember(entries, columns) { spansOf(entries, columns) } }
@@ -211,10 +242,7 @@ fun AlbumsScreen(
                     GroupRow(
                         stack = entry,
                         isOpen = isOpen,
-                        onOpenChange = { open ->
-                            movingGroups = movingGroups + entry.name
-                            onOpenStacksChange(if (open) openStacks + entry.name else openStacks - entry.name)
-                        },
+                        onOpenChange = { open -> setOpen(entry.name, open) },
                         onMotion = { isMoving -> movingGroups = if (isMoving) movingGroups + entry.name else movingGroups - entry.name },
                         isPicking = isPicking,
                         selectedPaths = selectedPaths,
@@ -227,8 +255,12 @@ fun AlbumsScreen(
                         isHeld = { reorder.draggedKey == entry.key },
                         onArrangeGroup = { reordered -> arrange(entries, entry.name, reordered) },
                         onStartRearranging = if (isPicking) null else onStartRearranging,
+                        reorder = reorder,
+                        onRegroup = regroup,
                         // Before rearranging, only a drag that starts on the stack's pictures picks the group up; anywhere else the swipe still opens it.
                         modifier = reorderable(reorder, entry.key, isEnabled = !isOpen, placement = glide, startArea = { at, _ -> at.x < picturesWidth })
+                            // An album dragged out of this group is drawn by it, so the group lies above the rows it is dragged over.
+                            .zIndex(if (reorder.groupHoldingKey == entry.key) 1f else 0f)
                             .graphicsLayer {
                                 scaleX = dropScale
                                 scaleY = dropScale
@@ -299,6 +331,8 @@ private class GroupGeometry {
     var rowHeight = 1f
     var rowGap = 0f
     var headingHeight = 0f
+    // From the top of the group to the top of its first row of cards.
+    var headingSpace = 0f
 
     fun slot(index: Int): Offset = Offset((index % GROUP_COLUMNS) * (cell + gap), (index / GROUP_COLUMNS) * (rowHeight + rowGap))
 
@@ -333,6 +367,8 @@ private fun GroupRow(
     isHeld: () -> Boolean,
     onArrangeGroup: (List<Album>) -> Unit,
     onStartRearranging: (() -> Unit)?,
+    reorder: Reorder,
+    onRegroup: (Album, String?) -> Unit,
     onMotion: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -376,6 +412,11 @@ private fun GroupRow(
     val currentOnArrangeGroup by rememberUpdatedState(onArrangeGroup)
     var heldId by remember { mutableStateOf<Long?>(null) }
     var heldOffset by remember { mutableStateOf(Offset.Zero) }
+    // Off the group's own row, the held album no longer trades places inside it: it is on its way out, or into another group.
+    var isHeldOutside by remember { mutableStateOf(false) }
+    var settling by remember { mutableStateOf<Job?>(null) }
+    val groupGap = with(LocalDensity.current) { GROUP_GAP.toPx() }
+    val heldScale by animateFloatAsState(if (reorder.dropTargetKey != null && heldId != null) DROPPING_SCALE else HELD_SCALE, tween(Motion.STATE_MS, easing = Motion.backOut), label = "held")
     val haptic = LocalHapticFeedback.current
 
     // Card `index` of the albums: the deeper ones leave a little later and come back a little sooner, and opening overshoots slightly.
@@ -548,14 +589,23 @@ private fun GroupRow(
                                         onStart = {
                                             if (!currentIsRearranging) currentOnStartRearranging?.invoke()
                                             haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            settling?.cancel()
+                                            // A card caught while still gliding home is picked up where it is drawn.
+                                            if (heldId != album.id) heldOffset = Offset.Zero
                                             heldId = album.id
-                                            heldOffset = Offset.Zero
+                                            isHeldOutside = false
+                                            reorder.startFromGroup(stack.key)
                                         },
                                         onDrag = drag@{ amount ->
                                             heldOffset += amount
                                             val list = currentAlbums
                                             val from = list.indexOfFirst { it.id == album.id }
                                             if (from < 0) return@drag
+                                            // Where its centre is in the grid, to tell whether it has left this group or hangs over another.
+                                            val topLeft = reorder.topLeftOf(stack.key)
+                                            val inGroup = Offset(0f, geometry.headingSpace) + geometry.slot(from) + heldOffset + Offset(geometry.cell / 2f, geometry.cell / 2f)
+                                            isHeldOutside = topLeft != null && reorder.hoverFromGroup(stack.key, album.id, topLeft + Offset(0f, groupGap) + inGroup)
+                                            if (isHeldOutside) return@drag
                                             val centre = geometry.slot(from) + heldOffset + Offset(geometry.cell / 2f, geometry.cell / 2f)
                                             val to = geometry.slotAt(centre, list.size)
                                             if (to != from) {
@@ -565,11 +615,26 @@ private fun GroupRow(
                                                 heldOffset += geometry.slot(from) - geometry.slot(to)
                                             }
                                         },
-                                        onEnd = { heldId = null },
+                                        onEnd = {
+                                            val target = reorder.endFromGroup()
+                                            val isLeaving = target != null || isHeldOutside
+                                            isHeldOutside = false
+                                            if (isLeaving) {
+                                                heldId = null
+                                                onRegroup(album, (target as? String)?.removePrefix(STACK_KEY_PREFIX))
+                                            } else {
+                                                // Let go inside the group, the card glides the rest of the way into its slot from where the finger left it.
+                                                val from = heldOffset
+                                                settling = scope.launch {
+                                                    animate(0f, 1f, animationSpec = tween(Motion.RELEASE_MS, easing = Motion.powerTwoOut)) { progress, _ -> heldOffset = from * (1f - progress) }
+                                                    if (heldId == album.id) heldId = null
+                                                }
+                                            }
+                                        },
                                     )
                                 },
                             )
-                            .jiggle(album.id, isArranging, isHeld = { heldId == album.id }),
+                            .jiggle(album.id, isArranging, isHeld = { heldId == album.id }, heldScale = { heldScale }),
                     )
                 }
             }
@@ -606,6 +671,7 @@ private fun GroupRow(
         val headingHeight = maxOf(heading.height, back.height)
         geometry.headingHeight = headingHeight.toFloat()
         val headingSpace = headingHeight + GROUP_HEADING_GAP.roundToPx()
+        geometry.headingSpace = headingSpace.toFloat()
         val openHeight = headingSpace + rows * rowHeight + (rows - 1).coerceAtLeast(0) * rowGap
         val openness = Motion.powerThreeInOut.transform(time.value)
         val placements = cards.mapIndexed { index, card ->

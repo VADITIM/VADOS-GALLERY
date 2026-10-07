@@ -3,6 +3,7 @@ package com.vaditim.gallery.components
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,6 +23,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -39,15 +41,18 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.zIndex
 import com.vaditim.gallery.vas.Motion
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 private const val JIGGLE_DEGREES = 1.4f
-private const val HELD_SCALE = 1.05f
+const val HELD_SCALE = 1.05f
 // A card held over something it can go into shrinks, as if about to drop in.
-private const val DROPPING_SCALE = 0.8f
+const val DROPPING_SCALE = 0.8f
 
 // Dragging a cover past another swaps their places. Every cover grid that can be arranged (albums, private groups, Favorites albums) uses this one, so it feels the same in all of them.
 @Stable
-class Reorder(private val state: LazyGridState, private val haptic: HapticFeedback) {
+class Reorder(private val state: LazyGridState, private val haptic: HapticFeedback, private val scope: CoroutineScope) {
     // Refreshed on every composition by rememberReorder, so a swap always reads the list as it is now.
     var keys: List<Any> = emptyList()
     var onMove: (from: Int, to: Int) -> Unit = { _, _ -> }
@@ -64,6 +69,9 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
         private set
     var dropTargetKey by mutableStateOf<Any?>(null)
         private set
+    // The open group one of whose albums is being dragged; that album is drawn by its group, which then has to lie above the other rows.
+    var groupHoldingKey by mutableStateOf<Any?>(null)
+        private set
     // Where the held card's top-left corner belongs in the grid, following the finger; it is drawn there whatever slot the grid has given it, so a swap with a taller row never throws it off.
     private var heldTopLeft by mutableStateOf(Offset.Zero)
     // After a swap the grid has not laid out yet; until it has, no further swap is looked for.
@@ -72,7 +80,11 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     internal fun start(key: Any) {
         val info = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key } ?: return
         haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-        heldTopLeft = Offset(info.offset.x.toFloat(), info.offset.y.toFloat())
+        // A card caught while still gliding in is picked up where it is drawn.
+        val gliding = if (key == settlingKey) settleOffset else Offset.Zero
+        settling?.cancel()
+        settlingKey = null
+        heldTopLeft = Offset(info.offset.x.toFloat(), info.offset.y.toFloat()) + gliding
         staleLayout = null
         draggedKey = key
     }
@@ -80,14 +92,38 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     internal fun end() {
         val held = draggedKey
         val target = dropTargetKey
+        // Let go, the card glides the rest of the way into its slot from where the finger left it.
+        if (held != null && target == null) settle(held, translation())
         draggedKey = null
         dropTargetKey = null
         if (held != null && target != null) onDropInto(held, target)
     }
 
+    // The card let go last, and how far it still is from its slot while it glides in.
+    var settlingKey by mutableStateOf<Any?>(null)
+        private set
+    private var settleOffset by mutableStateOf(Offset.Zero)
+    private var settling: Job? = null
+
+    private fun settle(key: Any, from: Offset) {
+        settling?.cancel()
+        settlingKey = key
+        settleOffset = from
+        settling = scope.launch {
+            animate(0f, 1f, animationSpec = tween(Motion.RELEASE_MS, easing = Motion.powerTwoOut)) { progress, _ -> settleOffset = from * (1f - progress) }
+            settlingKey = null
+        }
+    }
+
     internal fun translation(): Offset {
         val info = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == draggedKey } ?: return Offset.Zero
         return heldTopLeft - Offset(info.offset.x.toFloat(), info.offset.y.toFloat())
+    }
+
+    internal fun offsetOf(key: Any): Offset = when (key) {
+        draggedKey -> translation()
+        settlingKey -> settleOffset
+        else -> Offset.Zero
     }
 
     internal fun drag(amount: Offset) {
@@ -105,10 +141,7 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
         val held = visible.firstOrNull { it.key == heldKey } ?: return
         val centre = heldTopLeft + Offset(held.size.width / 2f, held.size.height / 2f)
         val into = visible.firstOrNull { it.key != heldKey && canDropInto(heldKey, it.key) && it.holds(centre) }?.key
-        if (into != dropTargetKey) {
-            dropTargetKey = into
-            if (into != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-        }
+        aimAt(into)
         if (into != null) return
         val from = keys.indexOf(heldKey)
         if (from < 0) return
@@ -131,6 +164,35 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
         staleLayout = layout
     }
+
+    private fun aimAt(target: Any?) {
+        if (target == dropTargetKey) return
+        dropTargetKey = target
+        if (target != null) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+    }
+
+    // Where an item's top-left corner lies in the grid, for a group to place what it draws in the grid's terms.
+    fun topLeftOf(key: Any): Offset? = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.let { Offset(it.offset.x.toFloat(), it.offset.y.toFloat()) }
+
+    fun startFromGroup(group: Any) {
+        groupHoldingKey = group
+    }
+
+    // An album dragged inside an open group is drawn by the group, not the grid, so the group reports where its centre is in the grid. Off its own group it is on its way out; over another group it can go in. Returns whether it is off its own group.
+    fun hoverFromGroup(group: Any, album: Any, centre: Offset): Boolean {
+        val visible = state.layoutInfo.visibleItemsInfo
+        val isOutside = visible.firstOrNull { it.key == group }?.holds(centre) != true
+        aimAt(if (isOutside) visible.firstOrNull { it.key != group && canDropInto(album, it.key) && it.holds(centre) }?.key else null)
+        return isOutside
+    }
+
+    // The group it was let go over, if any; the hold is over either way.
+    fun endFromGroup(): Any? {
+        val target = dropTargetKey
+        dropTargetKey = null
+        groupHoldingKey = null
+        return target
+    }
 }
 
 private fun LazyGridItemInfo.holds(point: Offset): Boolean =
@@ -139,7 +201,8 @@ private fun LazyGridItemInfo.holds(point: Offset): Boolean =
 @Composable
 fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, to: Int) -> Unit): Reorder {
     val haptic = LocalHapticFeedback.current
-    val reorder = remember(state) { Reorder(state, haptic) }
+    val scope = rememberCoroutineScope()
+    val reorder = remember(state) { Reorder(state, haptic, scope) }
     reorder.keys = keys
     reorder.onMove = onMove
     return reorder
@@ -149,16 +212,14 @@ fun rememberReorder(state: LazyGridState, keys: List<Any>, onMove: (from: Int, t
 // `startArea` limits where a drag may begin before rearranging is on, in the item's own pixels.
 fun LazyGridItemScope.reorderable(reorder: Reorder, key: Any, isEnabled: Boolean, placement: FiniteAnimationSpec<IntOffset>? = spring(), startArea: (Offset, IntSize) -> Boolean = { _, _ -> true }): Modifier {
     if (!isEnabled) return Modifier.animateItem(placementSpec = placement)
-    val isDragged = key == reorder.draggedKey
+    val isDragged = key == reorder.draggedKey || key == reorder.settlingKey
     return Modifier
         .animateItem(placementSpec = if (isDragged) null else if (reorder.isRearranging()) spring() else placement)
         .zIndex(if (isDragged) 1f else 0f)
         .graphicsLayer {
-            if (key == reorder.draggedKey) {
-                val moved = reorder.translation()
-                translationX = moved.x
-                translationY = moved.y
-            }
+            val moved = reorder.offsetOf(key)
+            translationX = moved.x
+            translationY = moved.y
         }
         // On the card itself, so it claims the drag before the grid can scroll with it.
         .dragToArrange(

@@ -72,6 +72,8 @@ object Motion {
     const val DRAG_REST_MS = 150L
     // A cover's long press waits this much past the system's, so there is more time to start a drag before its menu opens.
     const val COVER_HOLD_EXTRA_MS = 150L
+    // An album held over a shut group this long opens it, so passing over a group on the way elsewhere leaves it shut.
+    const val HOVER_OPEN_MS = 350L
     // A finger that lands while the grid moves faster than this (pixels per second) is stopping a scroll, not starting a selection; slower, it is a slight drift and selects.
     const val SELECT_FAST_SCROLL_PX_PER_S = 400f
 

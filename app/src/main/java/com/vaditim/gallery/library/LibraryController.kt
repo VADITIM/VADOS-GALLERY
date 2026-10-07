@@ -41,13 +41,15 @@ class LibraryController(
         sheets.dismiss()
     }
 
-    // An album dropped onto a group goes into it; the pill can take it back out to where it lay.
-    fun dropIntoGroup(kind: AlbumShelfKind, album: Album, group: String) {
+    // An album dropped onto a group goes into it, out of any other; dragged off its group (null) it stands on its own. The pill can put it back where it lay.
+    fun regroup(kind: AlbumShelfKind, album: Album, group: String?) {
         val stacks = shelf(kind).stacks
         val before = stacks.all
-        stacks.add(listOf(album.relativePath), group)
+        val left = stacks.holding(album.relativePath)?.name
+        if (group == left) return
+        if (group == null) stacks.remove(listOf(album.relativePath)) else stacks.add(listOf(album.relativePath), group)
         Haptics.confirm(context)
-        actions.offerUndo("Moved to $group") { stacks.update(before) }
+        actions.offerUndo(if (group != null) "Moved to $group" else "Moved out of ${left.orEmpty()}") { stacks.update(before) }
     }
 
     // Letting go of a selection closes whatever sheet it had open.
