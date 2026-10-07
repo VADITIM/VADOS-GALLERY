@@ -207,8 +207,9 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
                 val isLeaving = transition.targetState == EnterExitState.PostExit
                 CompositionLocalProvider(LocalButtonPop provides pop) {
                     when (shownBar) {
-                        BottomBar.REARRANGING -> Box(pop.pressable(onClick = { selection.isRearranging = false }).padding(horizontal = 22.dp, vertical = 13.dp)) {
-                            CheckIcon(LocalAccent.current)
+                        // Inverted, a dark tick on the section colour, so the only way out of rearranging is not missed.
+                        BottomBar.REARRANGING -> Box(pop.pressable(onClick = { selection.isRearranging = false }).clip(Shapes.capsule).background(LocalAccent.current).padding(horizontal = 22.dp, vertical = 13.dp)) {
+                            CheckIcon(Palette.viewerGround)
                         }
                         BottomBar.COVERS -> CoverActions(controller, screen, isLeaving)
                         BottomBar.PHOTOS -> PhotoActions(controller, content, screen, isLeaving)
