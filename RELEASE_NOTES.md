@@ -1,4 +1,3 @@
-# 1.1.55
+# 1.1.56
 
-- Set as cover and Remove from group now pop in and out of the selection bar while it smoothly resizes.
-- Letting go of the last selected photo no longer makes the bar jump as it changes back to the nav.
+- An open photo has a back button at the top left.

@@ -112,7 +112,7 @@ Tapping a thumbnail opens it full screen, on black.
 
 - Swipe sideways through the neighbours of the list it was opened from.
 - Tap toggles the chrome.
-- The system back gesture (or a swipe down) closes it; there is no back button.
+- A back button at the top left closes it, as the system back gesture or a swipe down does (an open sheet closes first). It comes and goes with the rest of the viewer's chrome.
 - *Planned:*
   - **Shared-element zoom** (done): the photo's own frame (no black around it) is cropped to the tile's square and moved onto the tile of whichever photo you ended on, scrolling the grid to it first when needed; a quiet fade when no tile applies.
   - Pinch and double-tap to zoom (done); photos sit in a rounded frame with a gap between pages when swiping.

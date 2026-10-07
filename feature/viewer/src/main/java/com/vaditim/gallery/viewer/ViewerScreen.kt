@@ -112,6 +112,8 @@ import com.vaditim.gallery.media.MotionPhoto
 import com.vaditim.gallery.media.Place
 import com.vaditim.gallery.media.newAlbumPath
 import com.vaditim.gallery.vas.LocalAccent
+import com.vaditim.gallery.components.BackIcon
+import com.vaditim.gallery.components.TopButton
 import com.vaditim.gallery.vas.LocalHazeState
 import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Motion
@@ -242,9 +244,12 @@ fun BoxScope.ViewerScreen(
             Row(
                 Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                // No back button: the system back gesture or a swipe down closes the viewer.
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
+                // Back does what the system back does: an open sheet closes first, then the viewer.
+                ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, pull = { pull }) {
+                    TopButton({ if (overlay != Overlay.NONE) overlay = Overlay.NONE else onClose() }, ground = Palette.viewerGround) { BackIcon(LocalAccent.current) }
+                }
                 // The date stays through a swipe up: the details rise below it and it is still there once they are open.
                 // The pill takes the pull itself, running its arrival back, rather than shrinking as the other pieces do.
                 ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = true, order = 0, isPoppedWhole = false) {
