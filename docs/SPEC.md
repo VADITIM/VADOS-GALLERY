@@ -320,3 +320,4 @@ review, which is not a goal.
 - **Back lets go of a selection.** The system back gesture, while photos or covers are selected, clears the selection first, even with groups open or a screen opened since; it never leaves the folder or the app while anything is selected.
 - **Dropping into a group waits for the peek.** An album let go over a shut group goes in only once the group has opened under it; let go sooner, it glides back to its place.
 - **Done in Settings.** A Done pill, filled with the section colour and white on it, stands at the foot of the settings sheet above V/AS and closes it.
+- **Trash origin.** A photo opened in the trash shows a glass pill above the nav reading "Was originally in <album>", fading at the end if the name is long.
