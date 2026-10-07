@@ -25,11 +25,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -41,6 +39,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -139,8 +139,6 @@ private const val UNAVAILABLE_ALPHA = 0.38f
 private val PENCIL_THINNEST = 2.dp
 private val PENCIL_THICKEST = 28.dp
 private val SWATCH = 20.dp
-// The ratios' column and the pencil's both fit in this height and stand on its foot, so switching modes never moves the picture.
-private val OPTIONS_HEIGHT = 260.dp
 
 // What the editor's nav switches between: cutting the frame, or drawing on the photo.
 private enum class EditMode { CROP, DRAW }
@@ -150,15 +148,14 @@ private data class CropEdit(val crop: Rect, val aspect: Aspect, val zoom: Float,
 
 // A glass capsule around one accent icon; it fades while there is nothing for it to do.
 @Composable
-private fun CropAction(onClick: () -> Unit, isEnabled: Boolean, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, icon: @Composable (Color) -> Unit) {
+private fun CropAction(onClick: () -> Unit, isEnabled: Boolean, onLongClick: (() -> Unit)? = null, icon: @Composable (Color) -> Unit) {
     val shade by animateFloatAsState(if (isEnabled) 1f else UNAVAILABLE_ALPHA, tween(Motion.STATE_MS), label = "crop-action")
     Box(
-        modifier
+        Modifier
             .pressable(onClick = onClick, onLongClick = onLongClick)
             .glass(Shapes.capsule, Palette.viewerGround)
             .padding(horizontal = 20.dp, vertical = 10.dp)
             .graphicsLayer { alpha = shade },
-        contentAlignment = Alignment.Center,
     ) { icon(LocalAccent.current) }
 }
 private const val MAX_CROP_ZOOM = 8f
@@ -388,9 +385,10 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                 }
             }
 
+            Box(Modifier.weight(1f).fillMaxWidth()) {
             // A zoomed picture spills out of its frame, veiled, as far as the room between the controls; on its way in or out the picture's own rounded clip holds it instead.
             BoxWithConstraints(
-                Modifier.weight(1f).fillMaxWidth().graphicsLayer { clip = arrival.value == 1f }.padding(horizontal = 28.dp, vertical = 20.dp).hazeSource(hazeState),
+                Modifier.fillMaxSize().graphicsLayer { clip = arrival.value == 1f }.padding(horizontal = 28.dp, vertical = 20.dp).hazeSource(hazeState),
                 contentAlignment = Alignment.Center,
             ) {
                 // The frame holds the picture at its present angle: mid-turn it is the box around the leaning picture, so the picture always fits the room while it swings round.
@@ -509,6 +507,44 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                 }
             }
 
+            // Over the picture's bottom left, each mode stands its own column, the ratios for cutting or the pencil for drawing, its first choice at the bottom; one pops away and the other pops in.
+            AnimatedContent(
+                targetState = mode,
+                transitionSpec = {
+                    scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f, transformOrigin = TransformOrigin(0f, 1f))
+                        .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f, transformOrigin = TransformOrigin(0f, 1f)))
+                        .using(SizeTransform(clip = false))
+                },
+                contentAlignment = Alignment.BottomStart,
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 8.dp).graphicsLayer {
+                    translationX = -(1f - arrival.value) * (size.width + 16.dp.toPx())
+                    alpha = arrival.value
+                },
+                label = "edit-mode",
+            ) { shownMode ->
+                when (shownMode) {
+                    EditMode.CROP -> NavBar(
+                        Aspect.entries.reversed(),
+                        aspect,
+                        onSelect = { option ->
+                            aspect = option
+                            crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
+                        },
+                        isVertical = true,
+                    ) { option ->
+                        val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
+                        BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
+                    }
+                    EditMode.DRAW -> PencilColumn(
+                        color = Settings.pencilColor,
+                        thickness = Settings.pencilThickness,
+                        onColor = Settings::updatePencilColor,
+                        onThickness = Settings::updatePencilThickness,
+                    )
+                }
+            }
+            }
+
             Column(
                 Modifier.fillMaxWidth().graphicsLayer {
                     translationY = (1f - arrival.value) * (size.height + 12.dp.toPx())
@@ -530,68 +566,30 @@ fun CropScreen(item: MediaItem, actions: MediaActions, onClose: () -> Unit) {
                     )
                 }
 
-                // Bottom left: undo and redo at the far left with the tick under them, and beside them the mode's own column, the ratios for cutting or the pencil for drawing, its first choice at the bottom; one column pops away and the other pops in.
+                // Bottom right, level with the nav: undo, redo and save; the nav takes the left of the foot.
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = if (video == null) 0.dp else 14.dp),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CropAction(onClick = undo, isEnabled = canUndo, onLongClick = revert) { UndoIcon(it) }
-                            CropAction(onClick = redo, isEnabled = canRedo) { RedoIcon(it) }
-                        }
-                        CropAction(onClick = save, isEnabled = isChanged, modifier = Modifier.fillMaxWidth()) { CheckIcon(it) }
-                    }
-                    AnimatedContent(
-                        targetState = mode,
-                        transitionSpec = {
-                            scaleIn(tween(Motion.STATE_MS, delayMillis = Motion.STATE_MS, easing = Motion.backOut), initialScale = 0f)
-                                .togetherWith(scaleOut(tween(Motion.STATE_MS, easing = Motion.backIn), targetScale = 0f))
-                                .using(SizeTransform(clip = false))
-                        },
-                        contentAlignment = Alignment.BottomStart,
-                        modifier = Modifier.height(OPTIONS_HEIGHT),
-                        label = "edit-mode",
-                    ) { shownMode ->
-                        Box(Modifier.fillMaxHeight(), contentAlignment = Alignment.BottomStart) {
-                            when (shownMode) {
-                                EditMode.CROP -> NavBar(
-                                    Aspect.entries.reversed(),
-                                    aspect,
-                                    onSelect = { option ->
-                                        aspect = option
-                                        crop = fitted(option.ratio?.let { if (it < 0f) shownRatio else it }, shownRatio) ?: crop
-                                    },
-                                    isVertical = true,
-                                ) { option ->
-                                    val ink by animateColorAsState(if (option == aspect) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "aspect-ink")
-                                    BasicText(option.label.uppercase(), style = Type.microLabel.copy(color = ink), maxLines = 1, softWrap = false)
-                                }
-                                EditMode.DRAW -> PencilColumn(
-                                    color = Settings.pencilColor,
-                                    thickness = Settings.pencilThickness,
-                                    onColor = Settings::updatePencilColor,
-                                    onThickness = Settings::updatePencilThickness,
-                                )
+                    // Drawing is for photos, so a video keeps to cutting and has no nav.
+                    if (video == null) {
+                        NavBar(
+                            EditMode.entries,
+                            mode,
+                            onSelect = { chosen -> if (savingJob == null) mode = chosen },
+                        ) { option ->
+                            val ink by animateColorAsState(if (option == mode) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "mode-ink")
+                            when (option) {
+                                EditMode.CROP -> CropIcon(ink)
+                                EditMode.DRAW -> PenIcon(ink)
                             }
                         }
                     }
-                }
-
-                // Drawing is for photos, so a video keeps to cutting and has no nav.
-                if (video == null) {
-                    NavBar(
-                        EditMode.entries,
-                        mode,
-                        onSelect = { chosen -> if (savingJob == null) mode = chosen },
-                        modifier = Modifier.padding(top = 12.dp, bottom = 14.dp),
-                    ) { option ->
-                        val ink by animateColorAsState(if (option == mode) LocalAccent.current else Palette.textMuted, tween(Motion.STATE_MS), label = "mode-ink")
-                        when (option) {
-                            EditMode.CROP -> CropIcon(ink)
-                            EditMode.DRAW -> PenIcon(ink)
-                        }
+                    Spacer(Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CropAction(onClick = undo, isEnabled = canUndo, onLongClick = revert) { UndoIcon(it) }
+                        CropAction(onClick = redo, isEnabled = canRedo) { RedoIcon(it) }
+                        CropAction(onClick = save, isEnabled = isChanged) { CheckIcon(it) }
                     }
                 }
             }

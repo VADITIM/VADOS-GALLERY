@@ -1,6 +1,8 @@
-# 1.4.0
+# 1.3.10
 
-- Crop: zoomed in, dragging inside the frame now moves the picture instead of the frame; the frame still resizes by its edges and corners.
-- Crop: the parts of a zoomed picture outside the frame stay visible around it, darkened.
-- Crop: the ratios and the pencil's colours stand in a column at the bottom left, from the bottom up; undo and redo sit at the far left with the tick under them.
-- Crop: the picture's rounded corners turn square as it moves into the crop screen, and round again as it leaves.
+- 1.4.0's crop layout is undone.
+- The ratios stand in a column over the photo's bottom left, Free at the bottom; in drawing, the pencil's colours and thickness stand there instead.
+- Undo, redo and save sit at the bottom right, level with the nav.
+- Zoomed in, a drag inside the crop frame moves the picture; the frame moves by its edges and corners.
+- The parts of a zoomed picture outside the frame stay visible under the dark veil.
+- The photo's rounded corners turn square going into crop and round again coming out.
