@@ -325,18 +325,17 @@ private fun Modifier.pinchAlbumColumns(haptic: HapticFeedback): Modifier = point
         var zoom = 1f
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
-            // Grouped albums lie as rows, so there is no column count to pinch.
-            if (event.changes.count { it.pressed } >= 2 && !(Settings.groupedAlbumsInView && Settings.view.canGroup)) {
+            if (event.changes.count { it.pressed } >= 2) {
                 zoom *= event.calculateZoom()
-                val before = Settings.albumColumnsInView
+                val before = Settings.coverColumns
                 if (zoom > PINCH_STEP) {
-                    Settings.updateAlbumColumns(Settings.albumColumnsInView - 1)
+                    Settings.updateCoverColumns(Settings.coverColumns - 1)
                     zoom = 1f
                 } else if (zoom < 1f / PINCH_STEP) {
-                    Settings.updateAlbumColumns(Settings.albumColumnsInView + 1)
+                    Settings.updateCoverColumns(Settings.coverColumns + 1)
                     zoom = 1f
                 }
-                if (Settings.albumColumnsInView != before) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                if (Settings.coverColumns != before) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 event.changes.forEach { it.consume() }
             }
         } while (event.changes.any { it.pressed })

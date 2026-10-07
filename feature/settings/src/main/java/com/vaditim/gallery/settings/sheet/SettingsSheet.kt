@@ -76,6 +76,7 @@ import com.vaditim.gallery.components.SEGMENT_INSET
 import com.vaditim.gallery.components.Segments
 import com.vaditim.gallery.components.risesIn
 import androidx.compose.ui.geometry.Rect
+import com.vaditim.gallery.components.CheckIcon
 import com.vaditim.gallery.components.DuplicatesIcon
 import com.vaditim.gallery.components.ReviewIcon
 import com.vaditim.gallery.settings.AlbumArrangement
@@ -138,10 +139,25 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onRev
             HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth().swipeFade(pager), beyondViewportPageCount = SettingsTab.entries.size - 1, verticalAlignment = Alignment.Top) { page ->
                 SettingsTabContent(SettingsTab.entries[page], isCovers, onReview, onFindDuplicates, onDismiss, onColumnsChanged, onBackup, onRestore)
             }
+            // Done closes the sheet; filled with the accent and white on it, as review's Done is, so the way out is found at a glance.
+            Box(Modifier.fillMaxWidth().padding(top = 10.dp).risesIn(5), contentAlignment = Alignment.Center) {
+                Row(
+                    Modifier
+                        .pressable(onClick = onDismiss)
+                        .clip(Shapes.capsule)
+                        .background(LocalAccent.current)
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CheckIcon(Color.White, size = 18.dp)
+                    BasicText("DONE", style = Type.action.copy(color = Color.White))
+                }
+            }
             // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
             val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
             val footStyle = Type.microLabel.copy(color = Palette.textFaint.copy(alpha = 0.35f))
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp).risesIn(5)) {
+            Box(Modifier.fillMaxWidth().padding(top = 8.dp).risesIn(6)) {
                 BasicText("V/AS", style = footStyle, modifier = Modifier.align(Alignment.Center))
                 if (version != null) BasicText("V$version", style = footStyle, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp))
             }
@@ -163,14 +179,15 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 }
                 if (isCovers) {
                     SettingsCard("Albums", order = 3) {
-                        // Grouped albums lie as rows, so the column count only counts with grouping off.
                         val canGroup = Settings.view.canGroup
                         if (canGroup) {
                             SettingsToggle("Grouped albums", Settings.groupedAlbumsInView) { Settings.updateGroupedAlbums(it) }
                             CardDivider()
                         }
-                        SettingsSteps("Album columns", Settings.MIN_COLUMNS..Settings.MAX_ALBUM_COLUMNS, Settings.albumColumnsInView, isEnabled = !(canGroup && Settings.groupedAlbumsInView)) {
-                            Settings.updateAlbumColumns(it)
+                        // Grouped, the albums outside the groups have their own count, one to three in a row.
+                        val maxColumns = if (Settings.isGroupedIn(Settings.view)) Settings.MAX_GROUPED_COLUMNS else Settings.MAX_ALBUM_COLUMNS
+                        SettingsSteps("Album columns", Settings.MIN_COLUMNS..maxColumns, Settings.coverColumns) {
+                            Settings.updateCoverColumns(it)
                         }
                     }
                 } else {

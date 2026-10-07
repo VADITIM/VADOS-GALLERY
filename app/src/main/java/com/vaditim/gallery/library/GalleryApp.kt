@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -278,7 +279,9 @@ private fun LibraryEffects(controller: LibraryController, content: LibraryConten
     }
     BackHandler(enabled = navigation.isPrivateSection, onBack = navigation::backInsidePrivate)
     BackHandler(enabled = selection.isRearranging) { selection.isRearranging = false }
-    BackHandler(enabled = screen.isSelecting || screen.isSelectingCovers, onBack = controller::clearSelection)
+    // Registered afresh each time a selection begins, so it is the newest handler and no screen opened since can take back from it.
+    val isSelectionActive = screen.isSelecting || screen.isSelectingCovers
+    key(isSelectionActive) { BackHandler(enabled = isSelectionActive, onBack = controller::clearSelection) }
 
     // Leaving the app locks Private again, and drops anyone standing in it back to the albums list.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.lockPrivate() }

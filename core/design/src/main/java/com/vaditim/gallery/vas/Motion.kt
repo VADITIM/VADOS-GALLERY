@@ -91,14 +91,11 @@ object Motion {
     // An edit in crop goes into its undo history once the finger has rested this long, so one drag is one step.
     const val EDIT_SETTLE_MS = 350L
 
-    // How long a delete or a move can still be taken back from the pill above the bar.
-    const val UNDO_MS = 4500
+    // How long any change can still be taken back from the pill above the bar, whatever it was.
+    const val UNDO_MS = 2500
 
     // The glide down to the newest photos when their section is tapped again: a base, more for each screen of distance, never longer than the cap.
     const val SCROLL_TO_END_MS = 400
     const val SCROLL_TO_END_PER_SCREEN_MS = 60
     const val SCROLL_TO_END_MAX_MS = 1100
-
-    // A delete's restore pill leaves sooner: the trash keeps the photo anyway.
-    const val TRASH_UNDO_MS = 2500
 }
