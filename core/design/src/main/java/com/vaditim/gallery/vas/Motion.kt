@@ -30,8 +30,10 @@ object Motion {
     const val BURST_MS = 520
 
     // A sheet opening out of its button: the pane growing from the button to its own size, then what it holds rising in one after another, starting this far into the growth.
-    const val MORPH_MS = 340
-    const val RISE_DELAY_MS = 200
+    // The growth starts while the button's icon is still leaving, so the pane is there in about a quarter second.
+    const val MORPH_DELAY_MS = 80
+    const val MORPH_MS = 160
+    const val RISE_DELAY_MS = 80
     const val RISE_MS = 280
     const val RISE_STAGGER_MS = 40
 

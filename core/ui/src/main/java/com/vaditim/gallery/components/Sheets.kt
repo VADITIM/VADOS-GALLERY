@@ -94,15 +94,16 @@ fun OverlaySheet(visible: Boolean, label: String, onDismiss: () -> Unit, ground:
     LaunchedEffect(visible) { if (visible) pull = 0f }
     // How far down the sheet is pulled, 0 to 1 of its height, for what behind it should follow the finger.
     LaunchedEffect(Unit) { snapshotFlow { (pull / sheetHeight).coerceIn(0f, 1f) }.collect { onPull(it) } }
-    // With an origin, the pane opens out of the button that asked for it: it waits for the button's icon to leave, grows from the button's rectangle to its own, and what it holds then rises in one after another.
+    // With an origin, the pane opens out of the button that asked for it: as the button's icon leaves, it grows from the button's rectangle to its own, and what it holds then rises in one after another.
     val grow = remember { Animatable(0f) }
     val rise = remember { Animatable(0f) }
     val hasOrigin = origin != null
     LaunchedEffect(visible, hasOrigin) {
         if (!hasOrigin) return@LaunchedEffect
         if (visible) {
-            launch { grow.animateTo(1f, tween(Motion.MORPH_MS, delayMillis = Motion.STATE_MS, easing = Motion.powerThreeInOut)) }
-            rise.animateTo(RISE_TOTAL_MS, tween(RISE_TOTAL_MS.toInt(), delayMillis = Motion.STATE_MS + Motion.RISE_DELAY_MS, easing = LinearEasing))
+            // Out fast and settling, so the pane is under the finger at once rather than easing in from a standstill.
+            launch { grow.animateTo(1f, tween(Motion.MORPH_MS, delayMillis = Motion.MORPH_DELAY_MS, easing = Motion.powerTwoOut)) }
+            rise.animateTo(RISE_TOTAL_MS, tween(RISE_TOTAL_MS.toInt(), delayMillis = Motion.MORPH_DELAY_MS + Motion.RISE_DELAY_MS, easing = LinearEasing))
         } else {
             // Closing goes the usual way down, so the next opening starts again from the button.
             grow.snapTo(0f)

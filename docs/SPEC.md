@@ -289,7 +289,7 @@ review, which is not a goal.
 - **New group and New album** share one row, group on the left; with groups off, New album stands alone and centred.
 - **Icons.** The Locations pin, the crop glyph and the share glyph are the supplied SVGs; the lock is drawn as wide as the filled glyphs beside it; the lock is filled with an empty keyhole. The favourites-only heart's shadow follows the heart's drawn lines.
 - **Settings sheet position.** The settings sheet runs the full height between the status and navigation bars, its content from the top; it can be pulled down from anywhere to close.
-- **Settings opens out of its button.** Tapping the settings button turns its gear and pops it down; the settings panel then grows from the button's own size to its full size, and its tabs, cards and foot rise in from below one after another. Closing is the sheet's usual way down, and the gear turns back in after it.
+- **Settings opens out of its button.** Tapping the settings button turns its gear and pops it down; while the gear is still leaving, the settings panel grows quickly (0.16 s) from the button's own size to its full size, and its tabs, cards and foot rise in from below one after another. Closing is the sheet's usual way down, and the gear turns back in after it.
 - **Rotation.** The app stays upright; only the viewer (a photo or video open) turns with the phone.
 - **Private marks its own sections.** Inside Private, Recent and Favorites are underlined in the accent below their nav icons, since there they show only private photos.
 - **Place label above the nav.** Inside Private, Locations and the trash, a label with the place's name sits above the nav with a back arrow beside it, both ink on the place colour. In the trash, Delete now sits above them.
