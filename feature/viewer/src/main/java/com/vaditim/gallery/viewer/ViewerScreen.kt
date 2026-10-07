@@ -80,6 +80,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.media3.exoplayer.SeekParameters
+import com.vaditim.gallery.components.formatSize
 import com.vaditim.gallery.components.AlbumPickerSheet
 import com.vaditim.gallery.components.CloseIcon
 import com.vaditim.gallery.components.ConfirmPill
@@ -642,9 +643,6 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
 
 private fun formatStamp(item: MediaItem): String =
     STAMP_FORMAT.format(Instant.ofEpochMilli(item.timestampMillis).atZone(ZoneId.systemDefault())).uppercase(Locale.ENGLISH) + " · " + calendarWeekLabel(dayOf(item.timestampMillis))
-
-private fun formatSize(bytes: Long): String =
-    if (bytes >= 1_000_000) "%.1f MB".format(bytes / 1_000_000.0) else "%d KB".format(bytes / 1000)
 
 // One of the viewer's floating buttons. As the viewer opens it pops in once the library's buttons have popped away, and pops away as it closes, like a bar changing kind; a tap on the photo slides it off its own edge and back, a step after the one before.
 // `isPoppedWhole` off, the piece pops its own parts, through the scope it is given.

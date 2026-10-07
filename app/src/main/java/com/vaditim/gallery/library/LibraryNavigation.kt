@@ -24,6 +24,8 @@ class LibraryNavigation {
     // The folder being reviewed one photo at a time, and where the photo picker puts what is picked.
     var review by mutableStateOf<ViewerSource?>(null)
     var picker by mutableStateOf<PickerTarget?>(null)
+    // The duplicates found across the whole library, over everything but the viewer.
+    var isFindingDuplicates by mutableStateOf(false)
     // Tapping the section already shown asks its grid to scroll back to the newest photo.
     var scrollToNewestRequest by mutableIntStateOf(0)
         private set

@@ -455,3 +455,12 @@ fun GripIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, _ 
 
 @Composable
 fun ClockIcon(color: Color, size: Dp = 22.dp) = SvgGlyph(color, size, paths = arrayOf(CLOCK))
+
+// Duplicates: the same picture twice, one copy lying over the other.
+@Composable
+fun DuplicatesIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawRoundRect(color, Offset(3f * unit, 3f * unit), Size(12f * unit, 12f * unit), CornerRadius(2f * unit), style = stroke)
+    drawRoundRect(Color.Black, Offset(9f * unit, 9f * unit), Size(12f * unit, 12f * unit), CornerRadius(2f * unit))
+    drawRoundRect(color, Offset(9f * unit, 9f * unit), Size(12f * unit, 12f * unit), CornerRadius(2f * unit), style = stroke)
+    drawPath(path(unit) { u -> moveTo(11f * u, 19f * u); lineTo(14.5f * u, 14.5f * u); lineTo(17f * u, 17f * u); lineTo(19f * u, 15f * u) }, color, style = stroke)
+}

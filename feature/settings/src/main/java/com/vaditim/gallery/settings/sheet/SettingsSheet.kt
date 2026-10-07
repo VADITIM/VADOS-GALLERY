@@ -71,8 +71,12 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.vaditim.gallery.backup.Backup
 import com.vaditim.gallery.components.OverlaySheet
+import com.vaditim.gallery.components.SEGMENT_HEIGHT
+import com.vaditim.gallery.components.SEGMENT_INSET
+import com.vaditim.gallery.components.Segments
 import com.vaditim.gallery.components.risesIn
 import androidx.compose.ui.geometry.Rect
+import com.vaditim.gallery.components.DuplicatesIcon
 import com.vaditim.gallery.components.ReviewIcon
 import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.DateGroup
@@ -104,7 +108,7 @@ private const val DISABLED_ALPHA = 0.38f
 
 // `isCovers`: the place shows albums or groups rather than photos, so only the album settings apply. `onReview` sorts through the photos of the place, when it has any. `placeName`: the album, group or location open inside the view, named under the first tab.
 @Composable
-fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, origin: Rect? = null, onPull: (Float) -> Unit = {}) {
+fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onReview: (() -> Unit)?, onFindDuplicates: () -> Unit, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onAnnounce: (String) -> Unit, origin: Rect? = null, onPull: (Float) -> Unit = {}) {
     val pager = rememberPagerState { SettingsTab.entries.size }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -132,7 +136,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onRev
             }
             // The tabs lie side by side and the finger drags between them; the pill above follows the same position, so a swipe and a tap move both together.
             HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth().swipeFade(pager), beyondViewportPageCount = SettingsTab.entries.size - 1, verticalAlignment = Alignment.Top) { page ->
-                SettingsTabContent(SettingsTab.entries[page], isCovers, onReview, onDismiss, onColumnsChanged, onBackup, onRestore)
+                SettingsTabContent(SettingsTab.entries[page], isCovers, onReview, onFindDuplicates, onDismiss, onColumnsChanged, onBackup, onRestore)
             }
             // The running version at the foot's right end, in the V/AS mark's own faint style, so which release is on the phone is one look away.
             val version = remember { runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() }
@@ -147,7 +151,7 @@ fun SettingsSheet(visible: Boolean, isCovers: Boolean, placeName: String?, onRev
 
 @Composable
 // Every tab starts at the top under the tabs, so the first thing on it is where the eye already is.
-private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onBackup: () -> Unit, onRestore: () -> Unit) {
+private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: (() -> Unit)?, onFindDuplicates: () -> Unit, onDismiss: () -> Unit, onColumnsChanged: (Int) -> Unit, onBackup: () -> Unit, onRestore: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = SHEET_MARGIN), verticalArrangement = Arrangement.spacedBy(CARD_GAP)) {
         when (shown) {
             SettingsTab.PLACE -> {
@@ -203,7 +207,15 @@ private fun SettingsTabContent(shown: SettingsTab, isCovers: Boolean, onReview: 
                 SettingsCard("Videos", order = 2) {
                     SettingsToggle("Autoplay videos", Settings.autoplayVideos) { Settings.updateAutoplayVideos(it) }
                 }
-                SettingsCard("Backup", order = 3) {
+                SettingsCard("Library", order = 3) {
+                    Box(Modifier.fillMaxWidth().padding(start = CARD_INSET, end = CARD_INSET, top = 6.dp, bottom = CARD_INSET)) {
+                        SettingsButton("Find duplicates", Modifier.fillMaxWidth(), icon = { DuplicatesIcon(it, size = 18.dp) }) {
+                            onDismiss()
+                            onFindDuplicates()
+                        }
+                    }
+                }
+                SettingsCard("Backup", order = 4) {
                     Row(Modifier.fillMaxWidth().padding(start = CARD_INSET, end = CARD_INSET, top = 6.dp, bottom = CARD_INSET), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SettingsButton("Back up", Modifier.weight(1f), onClick = onBackup)
                         SettingsButton("Restore", Modifier.weight(1f), onClick = onRestore)
@@ -402,7 +414,7 @@ private fun SettingsSteps(label: String, range: IntRange, value: Int, isEnabled:
     ) {
         SettingName(label)
         Box(Modifier.padding(top = 10.dp)) {
-            SettingsSegments(stops.map { it.toString() }, stops.indexOf(value).coerceAtLeast(0), isEnabled = isEnabled, style = Type.value) { onChange(stops[it]) }
+            Segments(stops.map { it.toString() }, stops.indexOf(value).coerceAtLeast(0), isEnabled = isEnabled, style = Type.value) { onChange(stops[it]) }
         }
     }
 }
@@ -413,84 +425,11 @@ private fun SettingsChoice(label: String, options: List<String>, chosen: Int, on
     Column(Modifier.fillMaxWidth().padding(horizontal = CARD_INSET, vertical = ROW_PADDING)) {
         SettingName(label)
         Box(Modifier.padding(top = 10.dp)) {
-            SettingsSegments(options.map { it.uppercase() }, chosen, onChoose = onChoose)
+            Segments(options.map { it.uppercase() }, chosen, onChoose = onChoose)
         }
     }
 }
 
-// One-of-many as a sunken track with every option as a stop; the accent pill under the chosen one follows the finger across them and settles on the nearest when let go, which is when the choice is made.
-@Composable
-private fun SettingsSegments(options: List<String>, chosen: Int, isEnabled: Boolean = true, height: Dp = SEGMENTS_HEIGHT, style: TextStyle = Type.navigation, onChoose: (Int) -> Unit) {
-    val count = options.size
-    val accent = LocalAccent.current
-    val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
-    val currentChosen by rememberUpdatedState(chosen)
-    val currentOnChoose by rememberUpdatedState(onChoose)
-    val position = remember { Animatable(chosen.toFloat()) }
-    var isHeld by remember { mutableStateOf(false) }
-    // A choice made elsewhere (a pinch on the grid) moves the pill too.
-    LaunchedEffect(chosen) {
-        if (!isHeld) position.animateTo(chosen.toFloat(), tween(Motion.STATE_MS, easing = Motion.backOut))
-    }
-    val nearest = position.value.roundToInt().coerceIn(0, count - 1)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(height)
-            .clip(Shapes.capsule)
-            .background(Palette.sunkenDeep)
-            .border(1.dp, Palette.borderStrong, Shapes.capsule)
-            .then(
-                if (!isEnabled) Modifier else Modifier.pointerInput(count) {
-                    val inset = SEGMENTS_INSET.toPx()
-                    val stopWidth = (size.width - inset * 2f) / count
-                    fun stopAt(x: Float) = ((x - inset) / stopWidth - 0.5f).coerceIn(0f, (count - 1).toFloat())
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        isHeld = true
-                        var lastStop = position.value.roundToInt()
-                        scope.launch { position.animateTo(stopAt(down.position.x), tween(Motion.PRESS_MS, easing = Motion.powerTwoOut)) }
-                        do {
-                            val event = awaitPointerEvent(PointerEventPass.Main)
-                            val change = event.changes.firstOrNull() ?: break
-                            if (change.position != change.previousPosition) scope.launch { position.snapTo(stopAt(change.position.x)) }
-                            val stop = stopAt(change.position.x).roundToInt()
-                            if (stop != lastStop) {
-                                haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-                                lastStop = stop
-                            }
-                            change.consume()
-                        } while (event.changes.any { it.pressed })
-                        val picked = lastStop
-                        scope.launch {
-                            position.animateTo(picked.toFloat(), tween(Motion.STATE_MS, easing = Motion.backOut))
-                            isHeld = false
-                        }
-                        if (picked != currentChosen) currentOnChoose(picked)
-                    }
-                },
-            )
-            .drawBehind {
-                val inset = SEGMENTS_INSET.toPx()
-                val width = (size.width - inset * 2f) / count
-                drawRoundRect(accent, Offset(inset + width * position.value, inset), Size(width, size.height - inset * 2f), CornerRadius((size.height - inset * 2f) / 2f))
-            }
-            .padding(horizontal = SEGMENTS_INSET),
-    ) {
-        Row(Modifier.fillMaxWidth().fillMaxHeight()) {
-            options.forEachIndexed { index, option ->
-                val ink by animateColorAsState(if (index == nearest) Palette.sunkenDeep else Palette.textMuted, tween(Motion.PRESS_MS), label = "segment-ink")
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    BasicText(option, style = style.copy(color = ink), maxLines = 1)
-                }
-            }
-        }
-    }
-}
-
-private val SEGMENTS_HEIGHT = 38.dp
 private val TABS_HEIGHT = 42.dp
 private val TABS_CAPTIONED_HEIGHT = 52.dp
 
@@ -510,12 +449,12 @@ private fun SettingsTabs(pager: PagerState, labels: List<String>, caption: Strin
             .background(Palette.sunkenDeep)
             .border(1.dp, Palette.borderStrong, Shapes.capsule)
             .drawBehind {
-                val inset = SEGMENTS_INSET.toPx()
+                val inset = SEGMENT_INSET.toPx()
                 val width = (size.width - inset * 2f) / count
                 val position = (pager.currentPage + pager.currentPageOffsetFraction).coerceIn(0f, (count - 1).toFloat())
                 drawRoundRect(accent, Offset(inset + width * position, inset), Size(width, size.height - inset * 2f), CornerRadius((size.height - inset * 2f) / 2f))
             }
-            .padding(horizontal = SEGMENTS_INSET),
+            .padding(horizontal = SEGMENT_INSET),
     ) {
         Row(Modifier.fillMaxWidth().fillMaxHeight()) {
             labels.forEachIndexed { index, label ->
@@ -551,7 +490,6 @@ private fun rememberLastCaption(caption: String?): String {
     if (caption != null) last = caption
     return last
 }
-private val SEGMENTS_INSET = 3.dp
 
 // Days, weeks, months and years can be on together, at least one; the switch under them turns every cut off and greys them, keeping the pick for when it comes back.
 // An empty pick stored before it could not be emptied reads as off, and turning on from it starts at months.
@@ -590,7 +528,7 @@ private fun LayoutChip(label: String, isOn: Boolean, isGreyed: Boolean, modifier
         modifier
             .pressable(onClick = onClick, pressedScale = 0.94f)
             .alpha(shade)
-            .height(SEGMENTS_HEIGHT)
+            .height(SEGMENT_HEIGHT)
             .clip(Shapes.capsule)
             .background(fill)
             .border(1.dp, edge, Shapes.capsule),

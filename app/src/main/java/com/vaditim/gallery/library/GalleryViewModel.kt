@@ -9,6 +9,7 @@ import com.vaditim.gallery.access.AccessState
 import com.vaditim.gallery.access.StorageAccess
 import com.vaditim.gallery.media.Album
 import com.vaditim.gallery.media.CoverStore
+import com.vaditim.gallery.media.DuplicateFinder
 import com.vaditim.gallery.media.LocationGroup
 import com.vaditim.gallery.media.LocationIndex
 import com.vaditim.gallery.media.MediaItem
@@ -96,6 +97,8 @@ class GalleryViewModel(application: Application) : AndroidViewModel(application)
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val similarIndex = SimilarIndex(application)
+
+    val duplicates = DuplicateFinder(application)
 
     init {
         // Hashes only what is new since the last run; the rest is read back from disk.

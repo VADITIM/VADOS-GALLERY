@@ -8,12 +8,13 @@ Features never depend on each other.
 :app                 MainActivity, GalleryApplication, the library shell (package library)
 :feature:viewer      the photo and video viewer, crop, the external viewer
 :feature:review      going through a folder one photo at a time
+:feature:duplicates  the same picture saved more than once, found by its pixels
 :feature:picker      the photo picker
 :feature:albums      Albums, Locations, Private and the trash as screens
 :feature:settings    the settings sheet
 :core:ui             shared pieces used by several screens (package components)
 :core:design         VAS in Compose: palette, type, motion, glass, pressable (package vas)
-:core:data           MediaStore, the private vault, locations, similar shots, backup
+:core:data           MediaStore, the private vault, locations, similar shots, duplicates, backup
 :core:settings       Settings (how things look) and AlbumArrangement (orders, groups, names)
 build-logic          the convention plugins every module applies
 ```

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import com.vaditim.gallery.components.fitInside
+import com.vaditim.gallery.duplicates.DuplicatesScreen
 import com.vaditim.gallery.components.revealItem
 import com.vaditim.gallery.media.MediaItem
 import com.vaditim.gallery.picker.PickerScreen
@@ -93,6 +94,36 @@ internal fun ReviewOverlay(controller: LibraryController, content: LibraryConten
                 progressKey = source.reviewKey,
                 onDelete = { picked -> if (source.isPrivate) controller.actions.deletePrivate(picked) else controller.actions.trash(picked) },
                 onClose = { controller.navigation.review = null },
+            )
+        }
+    }
+}
+
+// Duplicates rises in and sinks out the way review does. What it deletes goes to the trash with the pill's undo, and it closes, since the sets it showed are gone.
+@Composable
+internal fun DuplicatesOverlay(controller: LibraryController, content: LibraryContent) {
+    val finder = controller.viewModel.duplicates
+    AnimatedContent(
+        targetState = controller.navigation.isFindingDuplicates,
+        transitionSpec = {
+            (fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)) +
+                scaleIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut), initialScale = 0.94f) +
+                slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)) { it / 12 })
+                .togetherWith(fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) + scaleOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn), targetScale = 0.96f))
+        },
+        label = "duplicates",
+    ) { isShown ->
+        if (isShown) {
+            DuplicatesScreen(
+                finder = finder,
+                library = content.recent,
+                strictness = finder.strictness,
+                onStrictness = { finder.strictness = it },
+                onDelete = { picked ->
+                    controller.actions.trash(picked)
+                    controller.navigation.isFindingDuplicates = false
+                },
+                onClose = { controller.navigation.isFindingDuplicates = false },
             )
         }
     }
