@@ -207,10 +207,20 @@ private fun AlbumsSection(controller: LibraryController, content: LibraryContent
                     onLongPress = sheets::showGroupMenu,
                     onOpenSelection = { controller.openViewer(ViewerSource.PrivateFavorites, it) },
                     onNewGroup = { sheets.show(AppSheet.PRIVATE_NEW_GROUP) },
+                    onTrash = { navigation.albumsPlace = AlbumsPlace.PrivateTrash },
+                    trashCount = content.privateContents.trash.size,
                     onBack = navigation::leavePrivate,
                     contentPadding = contentPadding,
                     state = memories.privateGroupsList,
                     isViewerOpen = controller.viewer.shown != null,
+                )
+                AlbumsPlace.PrivateTrash -> TrashScreen(
+                    items = content.privateContents.trash,
+                    memory = memories.privateTrash,
+                    onOpen = { controller.openViewer(ViewerSource.PrivateTrash, it) },
+                    onBack = { navigation.albumsPlace = AlbumsPlace.PrivateGroups },
+                    contentPadding = contentPadding,
+                    selection = selection.photos,
                 )
                 is AlbumsPlace.PrivateFolder -> content.privateGroup(shownPlace.name)?.let { group ->
                     PrivateItemsScreen(

@@ -94,9 +94,9 @@ private val UPCOMING_STEP = 40.dp
 private const val UNDO_SHARE = 0.6f
 private val REVIEW_STAMP = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
-// One photo at a time, newest first: swipe left to let it go, right to keep it. Nothing is touched until the end, where the photos let go are deleted in one go — to the trash, or for good inside Private, which is why that last step is always shown.
+// One photo at a time, newest first: swipe left to let it go, right to keep it. Nothing is touched until the end, where the photos let go are moved in one go to the trash (inside Private, Private's own), which is why that last step is always shown.
 @Composable
-fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String, onDelete: (List<MediaItem>) -> Unit, onClose: () -> Unit) {
+fun ReviewScreen(items: List<MediaItem>, progressKey: String, onDelete: (List<MediaItem>) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     val progress = remember { ReviewProgress(context) }
     // Held as they were when review began, so the library refreshing underneath does not reshuffle the stack.
@@ -112,7 +112,6 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
     val decisions = remember { mutableStateListOf<Pair<MediaItem, Boolean>>() }
     var isFinishing by remember { mutableStateOf(savedReach >= order.size && order.isNotEmpty()) }
     var isResetArmed by remember { mutableStateOf(false) }
-    var isDoneArmed by remember { mutableStateOf(false) }
     val drag = remember { Animatable(0f) }
     // How far the last decided photo has come back down over the current one, 0 to 1.
     val comeback = remember { Animatable(0f) }
@@ -132,7 +131,6 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         scope.launch {
             drag.animateTo(if (isDelete) -width * 1.4f else width * 1.4f, tween(Motion.STATE_MS, easing = Motion.powerTwoIn))
             decisions += order[position] to isDelete
-            isDoneArmed = false
             isResetArmed = false
             furthest = maxOf(furthest, position + 1)
             saveProgress(carriedMarks + decisions.filter { it.second }.map { it.first })
@@ -169,7 +167,6 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         furthest = 0
         startIndex = 0
         isResetArmed = false
-        isDoneArmed = false
         isFinishing = false
         Haptics.tick(context)
     }
@@ -286,36 +283,24 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
             }
             Spacer(Modifier.weight(1f))
 
-            // Done deletes everything marked so far in one go, or with nothing marked simply ends the sitting. Inside Private deleting is final, so there it takes a second tap.
+            // Done moves everything marked so far to the trash in one go, or with nothing marked simply ends the sitting.
             run {
-                val doneColor = if (isDoneArmed) Palette.danger else Palette.textBright
                 Box(Modifier.fillMaxWidth().padding(top = 14.dp), contentAlignment = Alignment.Center) {
                     Row(
                         Modifier
                             .pressable(onClick = {
-                                if (isPrivate && marked.isNotEmpty() && !isDoneArmed) {
-                                    isDoneArmed = true
-                                } else {
-                                    onDelete(marked)
-                                    saveProgress(emptyList())
-                                    onClose()
-                                }
+                                onDelete(marked)
+                                saveProgress(emptyList())
+                                onClose()
                             })
                             .clip(Shapes.capsule)
-                            .background(if (isDoneArmed) Palette.danger.copy(alpha = 0.22f) else Palette.panelSolid)
+                            .background(Palette.panelSolid)
                             .padding(horizontal = 18.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (marked.isEmpty()) CheckIcon(LocalAccent.current, size = 18.dp) else TrashIcon(Palette.danger, size = 18.dp)
-                        BasicText(
-                            when {
-                                marked.isEmpty() -> "DONE"
-                                isDoneArmed -> "TAP AGAIN · ${marked.size}"
-                                else -> "DONE · ${marked.size}"
-                            },
-                            style = Type.action.copy(color = doneColor),
-                        )
+                        BasicText(if (marked.isEmpty()) "DONE" else "DONE · ${marked.size}", style = Type.action.copy(color = Palette.textBright))
                     }
                 }
             }
@@ -354,7 +339,7 @@ fun ReviewScreen(items: List<MediaItem>, isPrivate: Boolean, progressKey: String
         ) {
             if (marked.isNotEmpty()) {
                 SheetRow(
-                    if (isPrivate) "Delete ${marked.size} forever" else "Move ${marked.size} to trash",
+                    "Move ${marked.size} to trash",
                     color = Palette.danger,
                     icon = { TrashIcon(it) },
                 ) {

@@ -1,4 +1,5 @@
-# 1.3.1
+# 1.3.2
 
-- Find duplicates always searches every photo on the phone, wherever it is opened from.
-- Inside Private it searches only the private photos, on their own; what it remembers about them stays in the private folder. Deleting there is final once confirmed.
+- Private has its own trash: a Trash tile at the foot of Private's albums.
+- Deleting private photos no longer removes them at once: from the viewer, a selection, review, Find duplicates or a whole album, they go to Private's trash, with undo.
+- Restore puts a photo back in the album it came from (or one you pick); delete forever and Delete now empty it. Photos stay 30 days.

@@ -163,10 +163,12 @@ class MediaActions(
         }
     }
 
-    // The trash holds Android's trashed rows and Samsung Gallery's trashed files side by side; the files are plain file moves, the rows go through MediaStore.
+    // The trash holds Android's trashed rows and Samsung Gallery's trashed files side by side; the files are plain file moves, the rows go through MediaStore. Private's trash is its own, and its photos go back into Private.
     fun restore(items: List<MediaItem>) {
         if (items.isEmpty()) return
-        val (samsungItems, systemItems) = items.partition { isSamsungTrash(it) }
+        val (privateItems, publicItems) = items.partition { isPrivateTrash(it) }
+        runVaultBatch(privateItems, "Restored") { vault.restore(it) }
+        val (samsungItems, systemItems) = publicItems.partition { isSamsungTrash(it) }
         runSamsungTrash(samsungItems, "Moved to Restored") { samsungTrash.restore(it) }
         if (systemItems.isEmpty()) return
         startRequest(MediaStore.createTrashRequest(context.contentResolver, systemItems.map { it.uri }, false)) { isDone ->
@@ -188,9 +190,15 @@ class MediaActions(
         }
     }
 
+    // Out of Private's trash into one of its albums, an existing one or a new one by that name.
+    fun restoreToGroup(items: List<MediaItem>, groupName: String) =
+        runVaultBatch(items.filter { isPrivateTrash(it) }, "Restored to $groupName") { vault.restore(it, groupName) }
+
     fun deleteForever(items: List<MediaItem>) {
         if (items.isEmpty()) return
-        val (samsungItems, systemItems) = items.partition { isSamsungTrash(it) }
+        val (privateItems, publicItems) = items.partition { isPrivateTrash(it) }
+        runVaultBatch(privateItems, "Deleted") { vault.deleteFromTrash(it) }
+        val (samsungItems, systemItems) = publicItems.partition { isSamsungTrash(it) }
         runSamsungTrash(samsungItems, "Deleted") { samsungTrash.delete(it) }
         if (systemItems.isEmpty()) return
         startRequest(MediaStore.createDeleteRequest(context.contentResolver, systemItems.map { it.uri })) { isDone ->
@@ -200,6 +208,8 @@ class MediaActions(
     }
 
     private fun isSamsungTrash(item: MediaItem): Boolean = item.absolutePath.startsWith(SamsungTrash.ROOT.absolutePath + "/")
+
+    private fun isPrivateTrash(item: MediaItem): Boolean = item.absolutePath.startsWith(PrivateVault.TRASH.absolutePath + "/")
 
     private fun runSamsungTrash(items: List<MediaItem>, success: String, operation: suspend (MediaItem) -> Boolean) {
         if (items.isEmpty()) return
@@ -279,11 +289,38 @@ class MediaActions(
         }
     }
 
-    fun deleteGroup(group: PrivateGroup) =
-        runVault("Deleted ${group.name}", "Could not delete ${group.name}") { vault.deleteGroup(group).also { if (it) Haptics.confirm(context) } }
+    // A private album's photos go to Private's trash, each remembering the album, so undo (or a restore later) makes it again.
+    fun deleteGroup(group: PrivateGroup) {
+        scope.launch {
+            val trashed = runCatching { vault.deleteGroup(group) }.getOrDefault(emptyList())
+            offerPrivateRestore(trashed, group.items.size, "Moved ${group.name} to trash")
+        }
+    }
 
-    fun deletePrivate(items: List<MediaItem>) =
-        runVaultBatch(items, "Deleted") { vault.delete(it) }
+    // Private photos are deleted into Private's own trash, as the rest go to the system's, with the same pill to take it back.
+    fun trashPrivate(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        scope.launch {
+            val trashed = items.mapNotNull { runCatching { vault.trash(it) }.getOrNull() }
+            offerPrivateRestore(trashed, items.size, "Moved to trash")
+        }
+    }
+
+    private fun offerPrivateRestore(trashed: List<File>, total: Int, success: String) {
+        onPrivateChanged()
+        if (trashed.isEmpty()) {
+            notify(summary(0, total, success))
+            return
+        }
+        Haptics.confirm(context)
+        undoOffer = UndoOffer(summary(trashed.size, total, success), Motion.TRASH_UNDO_MS) {
+            scope.launch {
+                val restored = trashed.count { runCatching { vault.restoreFile(it) }.getOrDefault(false) }
+                onPrivateChanged()
+                if (restored > 0) Haptics.confirm(context)
+            }
+        }
+    }
 
     private fun runVaultBatch(items: List<MediaItem>, success: String, operation: suspend (MediaItem) -> Boolean) {
         if (items.isEmpty()) return

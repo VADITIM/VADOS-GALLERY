@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +43,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.vaditim.gallery.components.AddCard
+import com.vaditim.gallery.components.COVER_GAP
+import com.vaditim.gallery.components.TrashIcon
 import com.vaditim.gallery.components.CoverCard
 import com.vaditim.gallery.components.CoverGrid
 import com.vaditim.gallery.components.GridMemory
@@ -71,6 +74,8 @@ fun PrivateGroupsScreen(
     onLongPress: (PrivateGroup) -> Unit,
     onOpenSelection: (Int) -> Unit,
     onNewGroup: () -> Unit,
+    onTrash: () -> Unit,
+    trashCount: Int,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
     state: LazyGridState,
@@ -113,6 +118,17 @@ fun PrivateGroupsScreen(
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New album", onClick = onNewGroup) } }
+        // Private's own trash at the foot, as the system's sits at the foot of Albums, a tile as big as theirs.
+        item(span = { GridItemSpan(maxLineSpan) }, contentType = "trash") {
+            Column(Modifier.entrance().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                FolderDivider()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COVER_GAP)) {
+                    FolderEntry("Trash", Palette.trashGray, icon = { TrashIcon(it, size = FOLDER_ICON) }, onClick = onTrash, modifier = Modifier.weight(1f), count = trashCount)
+                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 

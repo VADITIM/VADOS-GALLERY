@@ -276,7 +276,7 @@ fun BoxScope.ViewerScreen(
                         pendingDelete = {
                             when {
                                 isTrash -> actions.deleteForever(listOf(current))
-                                isPrivate -> actions.deletePrivate(listOf(current))
+                                isPrivate -> actions.trashPrivate(listOf(current))
                                 else -> actions.trash(listOf(current))
                             }
                         }

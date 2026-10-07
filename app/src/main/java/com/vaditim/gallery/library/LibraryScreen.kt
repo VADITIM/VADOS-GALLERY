@@ -101,7 +101,16 @@ class LibraryScreen(
         openPrivateGroup != null -> ViewerSource.InPrivateGroup(openPrivateGroup.name)
         openLocation != null -> ViewerSource.InLocation(openLocation.key)
         place is AlbumsPlace.Trash -> ViewerSource.Trash
+        place is AlbumsPlace.PrivateTrash -> ViewerSource.PrivateTrash
         else -> null
+    }
+
+    // Either trash is on screen, with what it holds; both restore and delete the same way.
+    val isInTrash: Boolean = place?.isTrash == true
+    val trashItems: List<MediaItem> = when (place) {
+        AlbumsPlace.Trash -> content.trash
+        AlbumsPlace.PrivateTrash -> content.privateContents.trash
+        else -> emptyList()
     }
 
     // The items of the grid on screen, which is what a selection is made of; narrowed to favourites when asked.
@@ -115,14 +124,15 @@ class LibraryScreen(
         is ViewerSource.InPrivateGroup -> memories.privateGroup(source.name)
         is ViewerSource.InLocation -> memories.location(source.key)
         ViewerSource.Trash -> memories.trash
+        ViewerSource.PrivateTrash -> memories.privateTrash
         ViewerSource.Recent -> memories.recent
         is ViewerSource.InFavoriteAlbum -> memories.favoriteAlbum(source.name)
         ViewerSource.Favorites -> memories.favorites
         null -> null
     }
 
-    // The trash has nothing to review from the settings sheet; every other photo grid does.
-    val reviewSource: ViewerSource? = gridSource.takeUnless { it == ViewerSource.Trash }
+    // A trash has nothing to review from the settings sheet; every other photo grid does.
+    val reviewSource: ViewerSource? = gridSource.takeUnless { it.isTrash }
 
     // The folder open takes new photos straight from here; a location only gathers by place, so it has none.
     val addTarget: PickerTarget? = when {
@@ -135,7 +145,7 @@ class LibraryScreen(
 
     // Out of a folder, the same as the system back; Private's own groups leave by the Private pill instead.
     val canGoBack: Boolean = if (isPrivateMode) {
-        (section == Section.ALBUMS && place is AlbumsPlace.PrivateFolder) || (section == Section.FAVORITES && navigation.openPrivateFavoriteGroup != null)
+        (section == Section.ALBUMS && (place is AlbumsPlace.PrivateFolder || place == AlbumsPlace.PrivateTrash)) || (section == Section.FAVORITES && navigation.openPrivateFavoriteGroup != null)
     } else {
         (section == Section.ALBUMS && place != AlbumsPlace.Folders) || (section == Section.FAVORITES && navigation.openFavoriteAlbum != null)
     }
@@ -149,7 +159,7 @@ class LibraryScreen(
     val isAlbumsView: Boolean = if (isPrivateMode) Settings.privateFavoritesAsGroups else Settings.favoritesAsAlbums
 
     // Only favourites in the grid on screen; Favorites and the trash have nothing to narrow.
-    val canNarrowToFavorites: Boolean = folderMemory != null && section != Section.FAVORITES && place !is AlbumsPlace.Trash
+    val canNarrowToFavorites: Boolean = folderMemory != null && section != Section.FAVORITES && !isInTrash
 
     // The cover grid on screen, which picked covers belong to: the albums in Albums, those inside Favorites, or Private's groups. A Favorites album's path is its name, so both album grids pick by path.
     val coverShelf: AlbumShelfKind? = when {

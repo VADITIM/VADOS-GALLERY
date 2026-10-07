@@ -49,13 +49,15 @@ private fun SelectionSheets(controller: LibraryController, content: LibraryConte
     val actions = controller.actions
     val selectedItems = screen.selectedItems
     val isInTrash = screen.place is AlbumsPlace.Trash
+    // Private's trash restores into Private's own albums, never out of Private.
+    val isInPrivateTrash = screen.place is AlbumsPlace.PrivateTrash
     OverlaySheet(visible = sheets.isOpen(AppSheet.TRASH_RESTORE), label = "RESTORE", onDismiss = sheets::dismiss) {
         Column {
             SheetRow("Restore", icon = { RestoreIcon(it) }) {
                 actions.restore(selectedItems)
                 controller.clearSelection()
             }
-            SheetRow("Restore to album", icon = { MoveIcon(it) }) { sheets.show(AppSheet.SELECTION_MOVE) }
+            SheetRow("Restore to album", icon = { MoveIcon(it) }) { sheets.show(if (isInPrivateTrash) AppSheet.SELECTION_GROUP else AppSheet.SELECTION_MOVE) }
         }
     }
     AlbumPickerSheet(
@@ -80,11 +82,18 @@ private fun SelectionSheets(controller: LibraryController, content: LibraryConte
     )
     GroupPickerSheet(
         visible = sheets.isOpen(AppSheet.SELECTION_GROUP),
-        label = if (screen.isPrivateMode) "MOVE TO ALBUM" else "MOVE TO PRIVATE",
+        label = when {
+            isInPrivateTrash -> "RESTORE TO"
+            screen.isPrivateMode -> "MOVE TO ALBUM"
+            else -> "MOVE TO PRIVATE"
+        },
         groups = content.privateContents.groups,
         excludedGroupName = screen.openPrivateGroup?.name,
         onPick = { name ->
-            if (screen.isPrivateMode) {
+            if (isInPrivateTrash) {
+                actions.restoreToGroup(selectedItems, name)
+                controller.clearSelection()
+            } else if (screen.isPrivateMode) {
                 actions.moveToGroup(selectedItems, name)
                 controller.clearSelection()
             } else {
@@ -249,7 +258,7 @@ private fun NewGroupSheets(controller: LibraryController, content: LibraryConten
     }
 }
 
-// A long-pressed private group. Deleting one is final — private photos are outside the system trash — so it takes a second tap.
+// A long-pressed private group. Deleting one sends its photos to Private's trash, a whole album at once, so it takes a second tap.
 @Composable
 private fun PrivateGroupSheets(controller: LibraryController, content: LibraryContent, screen: LibraryScreen) {
     val sheets = controller.sheets
@@ -435,9 +444,12 @@ private fun NameSheets(controller: LibraryController, screen: LibraryScreen) {
         )
         AppSheet.SELECTION_NEW_GROUP -> NameSheet(
             label = "NEW PRIVATE ALBUM",
-            action = "MOVE HERE",
+            action = if (screen.place is AlbumsPlace.PrivateTrash) "RESTORE HERE" else "MOVE HERE",
             onConfirm = { name ->
-                if (screen.isPrivateMode) {
+                if (screen.place is AlbumsPlace.PrivateTrash) {
+                    actions.restoreToGroup(selectedItems, name)
+                    controller.clearSelection()
+                } else if (screen.isPrivateMode) {
                     actions.moveToGroup(selectedItems, name)
                     controller.clearSelection()
                 } else {

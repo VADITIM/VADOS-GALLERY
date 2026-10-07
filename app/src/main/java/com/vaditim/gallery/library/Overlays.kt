@@ -90,16 +90,15 @@ internal fun ReviewOverlay(controller: LibraryController, content: LibraryConten
         if (source != null) {
             ReviewScreen(
                 items = content.itemsFor(source),
-                isPrivate = source.isPrivate,
                 progressKey = source.reviewKey,
-                onDelete = { picked -> if (source.isPrivate) controller.actions.deletePrivate(picked) else controller.actions.trash(picked) },
+                onDelete = { picked -> if (source.isPrivate) controller.actions.trashPrivate(picked) else controller.actions.trash(picked) },
                 onClose = { controller.navigation.review = null },
             )
         }
     }
 }
 
-// Duplicates rises in and sinks out the way review does. The library's deletes go to the trash with the pill's undo, Private's are final once confirmed; either way it closes, since the sets it showed are gone.
+// Duplicates rises in and sinks out the way review does. Its deletes go to the trash with the pill's undo, the library's to the system's and Private's to Private's own; it closes, since the sets it showed are gone.
 @Composable
 internal fun DuplicatesOverlay(controller: LibraryController, content: LibraryContent) {
     AnimatedContent(
@@ -121,7 +120,7 @@ internal fun DuplicatesOverlay(controller: LibraryController, content: LibraryCo
                 strictness = finder.strictness,
                 onStrictness = { finder.strictness = it },
                 onDelete = { picked ->
-                    if (isPrivate) controller.actions.deletePrivate(picked) else controller.actions.trash(picked)
+                    if (isPrivate) controller.actions.trashPrivate(picked) else controller.actions.trash(picked)
                     controller.navigation.duplicates = null
                 },
                 onClose = { controller.navigation.duplicates = null },
@@ -149,7 +148,7 @@ internal fun BoxScope.ViewerOverlay(controller: LibraryController, content: Libr
         privateGroups = content.privateContents.groups,
         isPrivate = request.source.isPrivate,
         canMoveWithinPrivate = request.source != ViewerSource.PrivateRecent,
-        isTrash = request.source == ViewerSource.Trash,
+        isTrash = request.source.isTrash,
         actions = controller.actions,
         onClose = transition::close,
         onCurrentChanged = { transition.currentId = it },

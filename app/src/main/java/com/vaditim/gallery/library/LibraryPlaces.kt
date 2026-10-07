@@ -15,6 +15,7 @@ sealed interface ViewerSource {
     data object PrivateRecent : ViewerSource
     data class InPrivateFavoriteGroup(val name: String) : ViewerSource
     data object Trash : ViewerSource
+    data object PrivateTrash : ViewerSource
     data class InLocation(val key: String) : ViewerSource
     data class InFavoriteAlbum(val name: String) : ViewerSource
 }
@@ -33,6 +34,7 @@ val ViewerSource.reviewKey: String
         ViewerSource.Recent -> "recent"
         ViewerSource.Favorites -> "favorites"
         ViewerSource.Trash -> "trash"
+        ViewerSource.PrivateTrash -> "private-trash"
         is ViewerSource.InFavoriteAlbum -> "favorite-album:$name"
     }
 
@@ -44,7 +46,11 @@ val ViewerSource?.folderKey: String?
     }
 
 val ViewerSource?.isPrivate: Boolean
-    get() = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites || this == ViewerSource.PrivateRecent || this is ViewerSource.InPrivateFavoriteGroup
+    get() = this is ViewerSource.InPrivateGroup || this is ViewerSource.PrivateFavorites || this == ViewerSource.PrivateRecent || this is ViewerSource.InPrivateFavoriteGroup || this == ViewerSource.PrivateTrash
+
+// Either trash: the system's (with Samsung's) or Private's own, which work alike.
+val ViewerSource?.isTrash: Boolean
+    get() = this == ViewerSource.Trash || this == ViewerSource.PrivateTrash
 
 // Where the Albums section stands. The private places are only reachable while Private is unlocked.
 sealed interface AlbumsPlace {
@@ -55,8 +61,11 @@ sealed interface AlbumsPlace {
     data object Locations : AlbumsPlace
     data class Location(val key: String) : AlbumsPlace
     data object Trash : AlbumsPlace
+    // Private's own trash, reached from the foot of its albums.
+    data object PrivateTrash : AlbumsPlace
 
-    val isPrivate: Boolean get() = this is PrivateGroups || this is PrivateFolder
+    val isPrivate: Boolean get() = this is PrivateGroups || this is PrivateFolder || this == PrivateTrash
+    val isTrash: Boolean get() = this == Trash || this == PrivateTrash
     val isInLocations: Boolean get() = this is Locations || this is Location
 
     val settingsView: SettingsView

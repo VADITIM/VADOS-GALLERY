@@ -52,6 +52,7 @@ class LibraryContent(
         is ViewerSource.InLocation -> location(source.key)?.items.orEmpty()
         is ViewerSource.InFavoriteAlbum -> favoriteAlbum(source.name)?.items.orEmpty()
         ViewerSource.Trash -> trash
+        ViewerSource.PrivateTrash -> if (isPrivateUnlocked) privateContents.trash else emptyList()
     }
 }
 

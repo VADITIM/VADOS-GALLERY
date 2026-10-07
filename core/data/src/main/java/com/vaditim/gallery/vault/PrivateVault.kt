@@ -18,7 +18,8 @@ data class PrivateGroup(val name: String, val directory: File, val items: List<M
     val cover: MediaItem? get() = items.firstOrNull { File(it.absolutePath).name == coverFileName } ?: items.lastOrNull()
 }
 
-data class PrivateContents(val groups: List<PrivateGroup>, val favorites: List<MediaItem>)
+// `trash` holds the private photos deleted in the last 30 days, each with when it goes for good.
+data class PrivateContents(val groups: List<PrivateGroup>, val favorites: List<MediaItem>, val trash: List<MediaItem> = emptyList())
 
 // Private photos are ordinary files in a hidden folder at the root of the phone's storage, with a .nomedia marker so MediaStore — and so every gallery, Samsung's included — never indexes them. Plain files rather than app-internal storage, because app storage is wiped when the app is uninstalled and a sideloaded app gets uninstalled; they are not encrypted, so a file manager can still reach them.
 class PrivateVault(private val context: Context) {
@@ -27,14 +28,21 @@ class PrivateVault(private val context: Context) {
     private val favoritesFile get() = File(ROOT, ".favorites")
     private val favoritesLock = Mutex()
 
+    // Deleted private photos wait in a dot folder inside Private for 30 days, as the system trash keeps everything else; they never pass through MediaStore's trash, which would hand them back to the library. The index says, per file, which album it left, when, and whether it was a favourite.
+    private val trashIndex get() = File(TRASH, ".index")
+    private val trashLock = Mutex()
+
+    private class TrashEntry(val group: String, val trashedMillis: Long, val wasFavorite: Boolean)
+
     suspend fun read(): PrivateContents = withContext(Dispatchers.IO) {
         ensureRoot()
         val favoriteKeys = readFavoriteKeys()
-        val groups = ROOT.listFiles { file -> file.isDirectory }
+        // Dot folders (the trash) are Private's own bookkeeping, never albums.
+        val groups = ROOT.listFiles { file -> file.isDirectory && !file.name.startsWith(".") }
             .orEmpty()
             .map { directory -> PrivateGroup(directory.name, directory, readItems(directory, favoriteKeys), File(directory, COVER_FILE).takeIf { it.isFile }?.readText()?.trim()) }
             .sortedBy { it.name.lowercase() }
-        PrivateContents(groups, groups.flatMap { group -> group.items.filter { it.isFavorite } }.sortedBy { it.timestampMillis })
+        PrivateContents(groups, groups.flatMap { group -> group.items.filter { it.isFavorite } }.sortedBy { it.timestampMillis }, readTrash())
     }
 
     // The chosen cover is a one-line dot file inside the group, so it travels with the group and is never listed as a photo.
@@ -83,15 +91,42 @@ class PrivateVault(private val context: Context) {
         updateFavorites { if (isFavorite) it + key else it - key }
     }
 
-    suspend fun delete(item: MediaItem): Boolean = withContext(Dispatchers.IO) {
-        val file = File(item.absolutePath)
-        file.delete().also { if (it) updateFavorites { keys -> keys - keyOf(file) } }
+    // Into Private's trash; the file it now is, so the move can be taken back, or null when it could not be moved.
+    suspend fun trash(item: MediaItem): File? = withContext(Dispatchers.IO) {
+        val source = File(item.absolutePath)
+        val target = uniqueFile(TRASH.apply { mkdirs() }, source.name)
+        val wasFavorite = keyOf(source) in readFavoriteKeys()
+        if (!moveFile(source, target)) return@withContext null
+        if (wasFavorite) updateFavorites { it - keyOf(source) }
+        trashLock.withLock { writeTrashEntries(readTrashEntries() + (target.name to TrashEntry(source.parentFile?.name.orEmpty(), System.currentTimeMillis(), wasFavorite))) }
+        target
     }
 
-    // Deletes a group and everything in it. Final: private photos are outside the system trash.
-    suspend fun deleteGroup(group: PrivateGroup): Boolean = withContext(Dispatchers.IO) {
-        updateFavorites { keys -> keys.filterNot { it.startsWith("${group.directory.name}/") }.toSet() }
-        group.directory.deleteRecursively()
+    suspend fun restore(item: MediaItem, groupName: String? = null): Boolean = restoreFile(File(item.absolutePath), groupName)
+
+    // Back into the album it left, or into `groupName`; an album since deleted is made again. A favourite comes back a favourite.
+    suspend fun restoreFile(file: File, groupName: String? = null): Boolean = withContext(Dispatchers.IO) {
+        val entry = trashLock.withLock { readTrashEntries()[file.name] }
+        val target = uniqueFile(createGroup(groupName ?: entry?.group?.takeIf { it.isNotBlank() } ?: RESTORED_GROUP), file.name)
+        if (!moveFile(file, target)) return@withContext false
+        trashLock.withLock { writeTrashEntries(readTrashEntries() - file.name) }
+        if (entry?.wasFavorite == true) updateFavorites { it + keyOf(target) }
+        true
+    }
+
+    // Out of Private's trash for good.
+    suspend fun deleteFromTrash(item: MediaItem): Boolean = withContext(Dispatchers.IO) {
+        val file = File(item.absolutePath)
+        val isDeleted = file.delete() || !file.exists()
+        if (isDeleted) trashLock.withLock { writeTrashEntries(readTrashEntries() - file.name) }
+        isDeleted
+    }
+
+    // A group's photos go to Private's trash, each remembering the group, so restoring them makes it again; the folder and its cover go. The files they now are, for taking it back.
+    suspend fun deleteGroup(group: PrivateGroup): List<File> = withContext(Dispatchers.IO) {
+        val trashed = group.items.mapNotNull { trash(it) }
+        if (trashed.size == group.items.size) group.directory.deleteRecursively()
+        trashed
     }
 
     // The folder is renamed in place; favourites are keyed by folder name, so their keys follow it.
@@ -129,30 +164,65 @@ class PrivateVault(private val context: Context) {
     }
 
     private fun readItems(directory: File, favoriteKeys: Set<String>): List<MediaItem> =
-        directory.listFiles { file -> file.isFile && !file.name.startsWith(".") }
-            .orEmpty()
-            .mapNotNull { file ->
-                val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: return@mapNotNull null
-                if (!mimeType.startsWith("image/") && !mimeType.startsWith("video/")) return@mapNotNull null
-                MediaItem(
-                    id = stableId(file),
-                    uri = Uri.fromFile(file),
-                    isVideo = mimeType.startsWith("video/"),
-                    mimeType = mimeType,
-                    name = file.name,
-                    timestampMillis = file.lastModified(),
-                    bucketId = stableId(directory),
-                    bucketName = directory.name,
-                    relativePath = "",
-                    isFavorite = keyOf(file) in favoriteKeys,
-                    durationMillis = 0,
-                    width = 0,
-                    height = 0,
-                    sizeBytes = file.length(),
-                    absolutePath = file.absolutePath,
-                )
-            }
+        mediaFilesIn(directory)
+            .mapNotNull { file -> itemOf(file, directory.name, stableId(directory), isFavorite = keyOf(file) in favoriteKeys) }
             .sortedBy { it.timestampMillis }
+
+    // What is in Private's trash, each named after the album it left and dated when it goes for good. Anything past its 30 days is deleted here, as the app does for the system trash.
+    private suspend fun readTrash(): List<MediaItem> = trashLock.withLock {
+        val entries = readTrashEntries()
+        val now = System.currentTimeMillis()
+        val items = mediaFilesIn(TRASH).mapNotNull { file ->
+            val entry = entries[file.name] ?: TrashEntry(RESTORED_GROUP, file.lastModified(), false)
+            val expires = entry.trashedMillis + TRASH_KEEP_MS
+            if (expires <= now) {
+                file.delete()
+                null
+            } else {
+                itemOf(file, entry.group, stableId(TRASH), isFavorite = false)?.copy(expiresMillis = expires)
+            }
+        }
+        val kept = entries.filterKeys { name -> items.any { File(it.absolutePath).name == name } }
+        if (kept.size != entries.size) writeTrashEntries(kept)
+        items.sortedBy { it.timestampMillis }
+    }
+
+    private fun mediaFilesIn(directory: File): List<File> = directory.listFiles { file -> file.isFile && !file.name.startsWith(".") }.orEmpty().toList()
+
+    private fun itemOf(file: File, groupName: String, bucketId: Long, isFavorite: Boolean): MediaItem? {
+        val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: return null
+        if (!mimeType.startsWith("image/") && !mimeType.startsWith("video/")) return null
+        return MediaItem(
+            id = stableId(file),
+            uri = Uri.fromFile(file),
+            isVideo = mimeType.startsWith("video/"),
+            mimeType = mimeType,
+            name = file.name,
+            timestampMillis = file.lastModified(),
+            bucketId = bucketId,
+            bucketName = groupName,
+            relativePath = "",
+            isFavorite = isFavorite,
+            durationMillis = 0,
+            width = 0,
+            height = 0,
+            sizeBytes = file.length(),
+            absolutePath = file.absolutePath,
+        )
+    }
+
+    // One line per trashed file: its name in the trash, the album it left, when, and 1 if it was a favourite.
+    private fun readTrashEntries(): Map<String, TrashEntry> =
+        if (!trashIndex.exists()) emptyMap() else trashIndex.readLines().mapNotNull { line ->
+            val parts = line.split('\t')
+            val millis = parts.getOrNull(2)?.toLongOrNull() ?: return@mapNotNull null
+            parts[0] to TrashEntry(parts.getOrNull(1).orEmpty(), millis, parts.getOrNull(3) == "1")
+        }.toMap()
+
+    private fun writeTrashEntries(entries: Map<String, TrashEntry>) {
+        TRASH.mkdirs()
+        trashIndex.writeText(entries.entries.joinToString("\n") { (name, entry) -> "$name\t${entry.group}\t${entry.trashedMillis}\t${if (entry.wasFavorite) 1 else 0}" })
+    }
 
     private fun readFavoriteKeys(): Set<String> =
         if (favoritesFile.exists()) favoritesFile.readLines().filter { it.isNotBlank() }.toSet() else emptySet()
@@ -195,5 +265,9 @@ class PrivateVault(private val context: Context) {
     companion object {
         private const val COVER_FILE = ".cover"
         val ROOT = File(Environment.getExternalStorageDirectory(), ".vados-private")
+        val TRASH = File(ROOT, ".trash")
+        // Where a photo goes back to when the album it left is not known.
+        private const val RESTORED_GROUP = "Restored"
+        private const val TRASH_KEEP_MS = 30L * 24 * 60 * 60 * 1000
     }
 }

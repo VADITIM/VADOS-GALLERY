@@ -24,6 +24,7 @@ class GridMemories(
     val privateRecent = GridMemory(SettingsView.PRIVATE)
     // The trash keeps every shot on its own, since each one there is about to go.
     val trash = GridMemory(SettingsView.TRASH, isStacking = false)
+    val privateTrash = GridMemory(SettingsView.PRIVATE, isStacking = false)
     private val albums = mutableMapOf<Long, GridMemory>()
     private val locations = mutableMapOf<String, GridMemory>()
     private val privateGroups = mutableMapOf<String, GridMemory>()
@@ -38,7 +39,7 @@ class GridMemories(
 
     // Only the grids whose setting changed take the new count: the open album's alone, or the view's, and with Recent's every album that follows it.
     fun setColumns(view: SettingsView, folder: String?, columns: Int) {
-        (listOf(recent, favorites, privateFavorites, privateRecent, trash) + albums.values + privateGroups.values + favoriteAlbums.values + privateFavoriteGroups.values + locations.values)
+        (listOf(recent, favorites, privateFavorites, privateRecent, trash, privateTrash) + albums.values + privateGroups.values + favoriteAlbums.values + privateFavoriteGroups.values + locations.values)
             .filter { memory ->
                 when {
                     folder != null -> memory.folder == folder

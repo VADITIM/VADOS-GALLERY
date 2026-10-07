@@ -254,11 +254,11 @@ private fun PlacePills(controller: LibraryController, content: LibraryContent, s
         AnimatedVisibility(screen.isFolderLabelShown, enter = TOP_ENTER, exit = TOP_EXIT) {
             TypedLabel(lastFolderName, lastFolderAccent, Modifier.padding(bottom = 8.dp), maxWidth = FOLDER_LABEL_MAX_WIDTH)
         }
-        // Empties the whole trash for good, so it waits for Confirm.
-        AnimatedVisibility(screen.place is AlbumsPlace.Trash && content.trash.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
+        // Empties the whole trash for good, so it waits for Confirm; Private's trash, inside Private.
+        AnimatedVisibility(screen.isInTrash && screen.trashItems.isNotEmpty(), enter = TOP_ENTER, exit = TOP_EXIT) {
             Box(
                 Modifier.padding(bottom = 8.dp)
-                    .pressable(onClick = { selection.confirmThen { controller.actions.deleteForever(content.trash) } })
+                    .pressable(onClick = { selection.confirmThen { controller.actions.deleteForever(screen.trashItems) } })
                     .glass(Shapes.capsule)
                     .pendingMark(selection.pendingDelete != null)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -303,7 +303,7 @@ private fun ViewerActions(controller: LibraryController, item: MediaItem, source
     val deleteModifier = Modifier.pendingMark(bar.isPendingDelete)
     Row(Modifier.padding(5.dp)) {
         IconButton(onClick = { actions.share(listOf(item)) }) { ShareIcon(Palette.textBody) }
-        if (source == ViewerSource.Trash) {
+        if (source.isTrash) {
             IconButton(onClick = { actions.restore(listOf(item)) }) { RestoreIcon(LocalAccent.current) }
             IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
             return@Row
@@ -326,7 +326,7 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen, i
         val deleteModifier = Modifier.pendingMark(selection.pendingDelete != null)
         if (selectedGroups.isNotEmpty()) {
             IconButton(onClick = { sheets.show(AppSheet.GROUP_MOVE_OUT) }) { LockIcon(Palette.textBody, isOpen = true) }
-            // Private groups are outside the system trash, so deleting them waits for Confirm.
+            // Their photos go to Private's trash; whole albums at once, so it waits for Confirm.
             IconButton(onClick = {
                 selection.confirmThen {
                     selectedGroups.forEach { controller.actions.deleteGroup(it) }
@@ -377,7 +377,7 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
         }
     }
     Row(Modifier.padding(5.dp)) {
-        if (screen.place is AlbumsPlace.Trash) {
+        if (screen.isInTrash) {
             IconButton(onClick = { sheets.show(AppSheet.TRASH_RESTORE) }) { RestoreIcon(LocalAccent.current) }
             // Out of the trash there is no coming back.
             IconButton(onClick = { confirmDelete { actions.deleteForever(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
@@ -404,7 +404,7 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             // Private's Recent mixes every private album, so its photos only leave Private from there.
             if (screen.gridSource != ViewerSource.PrivateRecent) IconButton(onClick = { sheets.show(AppSheet.SELECTION_GROUP) }) { MoveIcon(Palette.textBody) }
             IconButton(onClick = { sheets.show(AppSheet.SELECTION_MOVE) }) { LockIcon(Palette.textBody, isOpen = true) }
-            IconButton(onClick = { confirmDelete { actions.deletePrivate(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
+            IconButton(onClick = { confirmDelete { actions.trashPrivate(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
         } else {
             // The same bar as in albums; inside Favorites, moving goes between its own albums.
             IconButton(onClick = { sheets.show(if (screen.section == Section.FAVORITES) AppSheet.FAVORITE_ALBUM_PICK else AppSheet.SELECTION_MOVE) }) { MoveIcon(Palette.textBody) }

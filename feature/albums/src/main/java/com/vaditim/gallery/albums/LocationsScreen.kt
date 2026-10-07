@@ -68,7 +68,7 @@ fun FolderEntries(onPrivate: () -> Unit, onLocations: () -> Unit, onTrash: () ->
 }
 
 // A little larger than the icons on buttons, so it holds the middle of a cover.
-private val FOLDER_ICON = 34.dp
+internal val FOLDER_ICON = 34.dp
 
 // A hairline with room under it between the albums and the rows after them, so the rows read as their own places; the new album buttons above bring their own room.
 @Composable
@@ -76,7 +76,7 @@ fun FolderDivider() {
     Box(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp).height(1.dp).background(Palette.border))
 }
 
-// Trashed photos, kept by Android for 30 days. A tap opens one like anywhere else; a long press selects.
+// Trashed photos, kept for 30 days: Android's (with Samsung's) in Albums, Private's own inside Private. A tap opens one like anywhere else; a long press selects.
 @Composable
 fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onOpen: (Int) -> Unit, onBack: () -> Unit, contentPadding: PaddingValues, selection: Selection) {
     BackHandler(enabled = selection.selectedIds.isEmpty(), onBack = onBack)
@@ -87,7 +87,7 @@ fun TrashScreen(items: List<MediaItem>, memory: GridMemory, onOpen: (Int) -> Uni
         contentPadding = contentPadding,
         selection = selection,
         emptyCaption = "Trash is empty.",
-        // Days until Android removes it for good.
+        // Days until it goes for good.
         badge = { item -> if (item.expiresMillis > 0) "${((item.expiresMillis - System.currentTimeMillis()) / 86_400_000L).coerceAtLeast(0) + 1}d" else null },
     )
 }
