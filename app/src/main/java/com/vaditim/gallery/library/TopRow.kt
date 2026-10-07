@@ -138,7 +138,7 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, isNeighbourShown: Boolean, ic
                 scaleX = pop.value
                 scaleY = pop.value
                 alpha = pop.value.coerceIn(0f, 1f)
-            }) { CompositionLocalProvider(LocalAccent provides ownAccent) { TopButton({ lastClick?.invoke() }, icon) } }
+            }) { CompositionLocalProvider(LocalAccent provides ownAccent) { TopButton({ lastClick?.invoke() }, icon = icon) } }
         },
     ) { measurables, constraints ->
         val button = measurables.first().measure(constraints.copy(minWidth = 0))
