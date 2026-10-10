@@ -181,7 +181,11 @@ Item {
         readonly property real pop: bar.popOf("covers")
         property real keptWidth: 0
         property bool isGroups: false
+        property bool isGrouping: false
+        property bool hasGrouped: false
         Binding on isGroups { when: bar.shown === "covers"; value: bar.gallery.isPrivateMode; restoreMode: Binding.RestoreNone }
+        Binding on isGrouping { when: bar.shown === "covers"; value: bar.gallery.isCoverGrouping; restoreMode: Binding.RestoreNone }
+        Binding on hasGrouped { when: bar.shown === "covers"; value: bar.gallery.isPickedCoverGrouped; restoreMode: Binding.RestoreNone }
         // Measured while it is the bar shown, and kept while it leaves.
         Binding on keptWidth { when: bar.shown === "covers" || covers.keptWidth === 0; value: covers.implicitWidth; restoreMode: Binding.RestoreNone }
         anchors.centerIn: parent
@@ -189,6 +193,8 @@ Item {
         // Hidden by opacity, never by visibility, so its buttons keep their room and the pill can measure it.
         opacity: pop > 0 ? 1 : 0
 
+        IconButton { visible: covers.isGrouping; glyph: "move"; pop: covers.pop; onClicked: bar.gallery.coverAction("group") }
+        OptionalButton { visible: covers.isGrouping; isShown: covers.hasGrouped; glyph: "close"; barPop: covers.pop; onClicked: bar.gallery.coverAction("ungroup") }
         IconButton { glyph: covers.isGroups ? "lock-open" : "lock"; pop: covers.pop; onClicked: bar.gallery.coverAction(covers.isGroups ? "unhide" : "private") }
         IconButton { glyph: "trash"; ink: Theme.danger; pop: covers.pop; isPending: bar.gallery.selection.pendingDelete !== null; onClicked: bar.gallery.coverAction("delete") }
     }

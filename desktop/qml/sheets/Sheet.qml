@@ -29,6 +29,7 @@ Item {
             return
         isOpen = false
         dismissed()
+        FocusHome.restore()
     }
 
     onIsOpenChanged: {

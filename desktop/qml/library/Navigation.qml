@@ -12,6 +12,8 @@ QtObject {
     property string albumsArgument: ""
     // Inside Private the sections show Private's own photos: Recent all of them, Favorites its favourites, Albums its groups.
     property bool isPrivateMode: false
+    // The album made inside Favorites that is open, by name.
+    property string favoriteAlbum: ""
     // Tapping the section already shown asks its grid to glide back to the newest photo.
     property int scrollToNewestRequest: 0
 
@@ -28,11 +30,18 @@ QtObject {
                     ++scrollToNewestRequest
                 albumsPlace = start
                 albumsArgument = ""
+            } else if (selected === "favorites" && favoriteAlbum.length > 0) {
+                favoriteAlbum = ""
             } else {
                 ++scrollToNewestRequest
             }
         }
         section = selected
+    }
+
+    function openFavoriteAlbum(name: string) {
+        section = "favorites"
+        favoriteAlbum = name
     }
 
     function openAlbum(folder: string) {
@@ -107,6 +116,10 @@ QtObject {
         if (section === "albums" && albumsPlace !== "folders") {
             albumsPlace = "folders"
             albumsArgument = ""
+            return true
+        }
+        if (section === "favorites" && favoriteAlbum.length > 0) {
+            favoriteAlbum = ""
             return true
         }
         return false

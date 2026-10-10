@@ -30,8 +30,13 @@ Item {
     readonly property string gridSource: {
         if (section === "recent")
             return isPrivateMode ? "private-recent" : "recent"
-        if (section === "favorites")
-            return isPrivateMode ? "private-favorites" : "favorites"
+        if (section === "favorites") {
+            if (isPrivateMode)
+                return "private-favorites"
+            if (navigation.favoriteAlbum.length > 0)
+                return "favorite-album:" + navigation.favoriteAlbum
+            return Settings.isFavoritesAsAlbums ? "" : "favorites"
+        }
         switch (place) {
         case "folder": return "album:" + navigation.albumsArgument
         case "private-folder": return "private:" + navigation.albumsArgument
@@ -40,7 +45,20 @@ Item {
         default: return ""
         }
     }
-    readonly property string openedAlbumKey: place === "folder" ? "album:" + navigation.albumsArgument : place === "private-folder" ? "private:" + navigation.albumsArgument : ""
+    readonly property string openedAlbumKey: place === "folder" ? "album:" + navigation.albumsArgument
+                                           : place === "private-folder" ? "private:" + navigation.albumsArgument
+                                           : section === "favorites" && !isPrivateMode && navigation.favoriteAlbum.length > 0 ? "favorite-album:" + navigation.favoriteAlbum : ""
+    readonly property bool isFavoriteAlbumsShown: section === "favorites" && !isPrivateMode && Settings.isFavoritesAsAlbums && navigation.favoriteAlbum.length === 0
+    // The cover grid on screen where covers can be grouped: Albums, or the albums inside Favorites.
+    readonly property string coverShelf: section === "albums" && place === "folders" ? "albums" : isFavoriteAlbumsShown ? "favorites" : place === "private-groups" ? "private" : ""
+    // Whether any picked album sits in a group, so the bar offers to take them out.
+    readonly property bool isPickedCoverGrouped: {
+        if (selection.revision < 0 || coverShelf.length === 0)
+            return false
+        const grid = coverShelf === "favorites" ? favoriteCovers : albumCovers
+        return selection.pickedCovers().some(key => grid.groupOfKey[key] !== undefined)
+    }
+    readonly property bool isCoverGrouping: coverShelf.length > 0 && coverShelf !== "private" && (Settings.revision >= 0 && Settings.viewValue(coverShelf, "groupedAlbums")) === true
     readonly property string settingsView: isPrivateMode ? "private" : section === "recent" ? "recent" : section === "favorites" ? "favorites" : place === "trash" ? "trash" : "albums"
     readonly property string settingsViewLabel: ({ private: "Private", recent: "Recent", favorites: "Favorites", trash: "Trash", albums: "Albums" })[settingsView]
     // Albums of any kind may keep photo settings of their own.
@@ -49,7 +67,7 @@ Item {
         if (section === "recent")
             return "RECENT"
         if (section === "favorites")
-            return "FAVORITES"
+            return isPrivateMode || navigation.favoriteAlbum.length === 0 ? (isFavoriteAlbumsShown ? "" : "FAVORITES") : navigation.favoriteAlbum.toUpperCase()
         if (place === "folder")
             return (Library.revision >= 0 && Settings.revision >= 0 && Library.displayName(navigation.albumsArgument)).toUpperCase()
         if (place === "private-folder")
@@ -59,12 +77,15 @@ Item {
     readonly property string placePill: isPrivateMode ? "PRIVATE" : place === "trash" ? "TRASH" : ""
     readonly property color accentTarget: isPrivateMode ? Theme.privateRed : section === "albums" && place === "trash" ? Theme.trashGray : Sections.find(section).accent
     readonly property string albumsGlyph: isPrivateMode ? "lock" : navigation.albumsPlace === "trash" ? "trash" : "albums"
-    readonly property bool canGoBack: isPrivateMode ? section === "albums" && (place === "private-folder" || place === "private-trash") : section === "albums" && place !== "folders"
-    readonly property bool canSetCover: place === "folder" || place === "private-folder"
-    readonly property bool canAddPhotos: (place === "folder" || place === "private-folder") && !selection.isSelectingPhotos
-    readonly property var activeGrid: section === "recent" ? recentGrid : section === "favorites" ? favoritesGrid : gridSource.length > 0 ? folderGrid : null
+    readonly property bool canGoBack: isPrivateMode ? section === "albums" && (place === "private-folder" || place === "private-trash")
+                                                    : (section === "albums" && place !== "folders") || (section === "favorites" && navigation.favoriteAlbum.length > 0)
+    readonly property bool canSetCover: openedAlbumKey.length > 0
+    readonly property bool canAddPhotos: openedAlbumKey.length > 0 && !selection.isSelectingPhotos
+    // Favorites switches between every favourite in one grid and the albums made inside it.
+    readonly property bool canToggleFavoritesView: section === "favorites" && !isPrivateMode && navigation.favoriteAlbum.length === 0
+    readonly property var activeGrid: section === "recent" ? recentGrid : section === "favorites" ? (gridSource.length > 0 ? favoritesGrid : null) : gridSource.length > 0 ? folderGrid : null
     readonly property string topPillText: Settings.isFolderLabelTop && folderName.length > 0 ? folderName
-                                        : activeGrid ? activeGrid.monthLabel : isPrivateMode ? "PRIVATE" : place === "folders" ? "ALBUMS" : ""
+                                        : activeGrid ? activeGrid.monthLabel : isPrivateMode ? "PRIVATE" : place === "folders" ? "ALBUMS" : isFavoriteAlbumsShown ? "FAVORITES" : ""
     readonly property bool isTopPillFilled: Settings.isFolderLabelTop || !activeGrid
     readonly property bool isSelectionAllFavorite: {
         if (selection.revision < 0)
@@ -100,6 +121,7 @@ Item {
     Component.onCompleted: {
         Theme.accentTarget = accentTarget
         Theme.accent = accentTarget
+        FocusHome.item = shell
     }
 
     // Where navigation lives on the desktop: the sidebar, the bubble, or both.
@@ -161,6 +183,8 @@ Item {
         selection.isFavoritesOnly = false
         if ((cover.key ?? "").startsWith("private:"))
             navigation.openGroup(cover.name)
+        else if ((cover.key ?? "").startsWith("favorite-album:"))
+            navigation.openFavoriteAlbum(cover.name)
         else
             navigation.openAlbum(cover.folder)
     }
@@ -228,7 +252,12 @@ Item {
             selection.clear()
             break
         case "move":
-            if (isPrivateMode)
+            if (section === "favorites" && !isPrivateMode)
+                sheets.pickFavoriteAlbum(paths, name => {
+                    Actions.addToFavoriteAlbum(paths, name)
+                    selection.clear()
+                })
+            else if (isPrivateMode)
                 sheets.pickAlbum("MOVE TO ALBUM", true, place === "private-folder" ? Vault.groupFolder(navigation.albumsArgument) : "", group => {
                     Actions.moveToGroup(paths, group)
                     selection.clear()
@@ -284,12 +313,29 @@ Item {
 
     function coverAction(name: string) {
         const keys = selection.pickedCovers()
-        const covers = (isPrivateMode ? Vault.groups() : Library.albums()).filter(cover => keys.indexOf(cover.key) >= 0)
+        const all = isPrivateMode ? Vault.groups() : coverShelf === "favorites" ? Library.favoriteAlbums() : Library.albums()
+        const covers = all.filter(cover => keys.indexOf(cover.key) >= 0)
+        const shelfGrid = coverShelf === "favorites" ? favoriteCovers : albumCovers
         switch (name) {
+        case "group":
+            sheets.pickGroup(coverShelf, group => {
+                shelfGrid.moveIntoGroup(keys, group)
+                selection.clear()
+            })
+            break
+        case "ungroup":
+            shelfGrid.removeFromGroups(keys)
+            selection.clear()
+            break
         case "private":
             sheets.pickAlbum("MOVE TO PRIVATE", true, "", group => selection.confirmThen(() => {
-                for (const cover of covers)
-                    Actions.hideAlbum(cover.folder, group)
+                for (const cover of covers) {
+                    // A Favorites album takes its photos into Private; a folder goes whole.
+                    if (cover.isFavoriteAlbum)
+                        Actions.hide(Library.pathsFor(cover.key), group)
+                    else
+                        Actions.hideAlbum(cover.folder, group)
+                }
                 selection.clear()
             }))
             break
@@ -305,6 +351,8 @@ Item {
                 for (const cover of covers) {
                     if (isPrivateMode)
                         Actions.deleteGroup(cover.name)
+                    else if (cover.isFavoriteAlbum)
+                        Actions.removeFavoriteAlbums([cover.name])
                     else
                         Actions.deleteAlbum(cover.folder)
                 }
@@ -318,9 +366,25 @@ Item {
         selection.confirmThen(() => {
             if ((cover.key ?? "").startsWith("private:"))
                 Actions.deleteGroup(cover.name)
+            // A Favorites album lets its photos be: only the album goes.
+            else if (cover.isFavoriteAlbum)
+                Actions.removeFavoriteAlbums([cover.name])
             else
                 Actions.deleteAlbum(cover.folder)
         })
+    }
+
+    // A group's menu acts on the shelf it lies on.
+    function shelfGridFor(cover: var): var {
+        return (cover.key ?? "").startsWith("favorite-album:") ? favoriteCovers : albumCovers
+    }
+
+    function newGroup(shelfName: string) {
+        const shelfGrid = shelfName === "favorites" ? favoriteCovers : albumCovers
+        sheets.askName("NEW GROUP", "", name => sheets.pickCovers("NEW GROUP · " + name.toUpperCase(), shelfGrid.looseAlbums, keys => {
+            if (keys.length > 0)
+                shelfGrid.moveIntoGroup(keys, name)
+        }))
     }
 
     function hideAlbum(cover: var) {
@@ -525,22 +589,57 @@ Item {
                 }
             }
 
+            // Favorites: every favourite in one grid, the albums made inside it, or one of those albums.
             SectionLayer {
                 anchors.fill: parent
                 isShown: shell.section === "favorites"
 
-                PhotoGrid {
-                    id: favoritesGrid
+                SectionLayer {
                     anchors.fill: parent
-                    source: shell.isPrivateMode ? "private-favorites" : "favorites"
-                    view: shell.isPrivateMode ? "private" : "favorites"
-                    selection: shell.selection
-                    memories: shell.memories
-                    isActive: shell.section === "favorites"
-                    topInset: shell.topInset
-                    bottomInset: shell.bottomInset
-                    timelineSlide: shell.viewerGrowth
-                    onOpened: index => shell.openViewer(favoritesGrid, index)
+                    isFolder: true
+                    isShown: shell.section === "favorites" && shell.gridSource.length > 0
+
+                    PhotoGrid {
+                        id: favoritesGrid
+                        property string keptSource: "favorites"
+                        Binding on keptSource { when: shell.section === "favorites" && shell.gridSource.length > 0; value: shell.gridSource; restoreMode: Binding.RestoreNone }
+                        anchors.fill: parent
+                        source: keptSource
+                        view: shell.isPrivateMode ? "private" : "favorites"
+                        folderKey: keptSource.startsWith("favorite-album:") ? keptSource : ""
+                        selection: shell.selection
+                        memories: shell.memories
+                        isActive: shell.section === "favorites" && shell.gridSource.length > 0
+                        topInset: shell.topInset
+                        bottomInset: shell.bottomInset
+                        timelineSlide: shell.viewerGrowth
+                        onOpened: index => shell.openViewer(favoritesGrid, index)
+                    }
+                }
+
+                SectionLayer {
+                    anchors.fill: parent
+                    isFolder: true
+                    isShown: shell.isFavoriteAlbumsShown
+
+                    CoverGrid {
+                        id: favoriteCovers
+                        anchors.fill: parent
+                        covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.favoriteAlbums())
+                        shelfName: "favorites"
+                        view: "favorites"
+                        isGrouping: (Settings.revision >= 0 && Settings.viewValue("favorites", "groupedAlbums")) === true
+                        selection: shell.selection
+                        memories: shell.memories
+                        isActive: shell.isFavoriteAlbumsShown
+                        topInset: shell.topInset
+                        bottomInset: shell.bottomInset
+                        onOpened: cover => shell.openCover(cover)
+                        onMenuAsked: cover => shell.showCoverMenu(cover)
+                        onGroupMenuAsked: name => shell.sheets.groupMenuFor(favoriteCovers, name)
+                        onNewAsked: shell.newFavoriteAlbum()
+                        onNewGroupAsked: shell.newGroup("favorites")
+                    }
                 }
             }
 
@@ -562,15 +661,20 @@ Item {
                             { key: "private", name: "Private", glyph: "lock", accent: Theme.privateRed, count: -1 },
                             { key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: Library.trashCount },
                         ]
+                        shelfName: "albums"
                         view: "albums"
+                        isGrouping: (Settings.revision >= 0 && Settings.viewValue("albums", "groupedAlbums")) === true
                         selection: shell.selection
+                        memories: shell.memories
                         isActive: shell.section === "albums" && shell.place === "folders"
                         topInset: shell.topInset
                         bottomInset: shell.bottomInset
                         onOpened: cover => shell.openCover(cover)
                         onMenuAsked: cover => shell.showCoverMenu(cover)
+                        onGroupMenuAsked: name => shell.sheets.groupMenuFor(albumCovers, name)
                         onPlaceOpened: key => shell.openPlace(key)
                         onNewAsked: shell.newAlbum(false)
+                        onNewGroupAsked: shell.newGroup("albums")
                     }
                 }
 
@@ -584,8 +688,10 @@ Item {
                         anchors.fill: parent
                         covers: (Vault.revision >= 0 && Vault.groups())
                         places: [{ key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: (Vault.revision >= 0 && Vault.trashCount()) }]
+                        shelfName: "private"
                         view: "private"
                         selection: shell.selection
+                        memories: shell.memories
                         isActive: shell.place === "private-groups"
                         topInset: shell.topInset
                         bottomInset: shell.bottomInset
@@ -683,14 +789,30 @@ Item {
         })
     }
 
+    // A new album inside Favorites: named, then filled from the favourites not in an album yet.
+    function newFavoriteAlbum() {
+        sheets.askName("NEW ALBUM", "", name => picker.openForFavorites(name))
+    }
+
+    function toggleFavoritesView() {
+        selection.clear()
+        Settings.isFavoritesAsAlbums = !Settings.isFavoritesAsAlbums
+    }
+
     function openPicker() {
         if (place === "folder")
             picker.openFor(navigation.albumsArgument, false, Library.displayName(navigation.albumsArgument))
         else if (place === "private-folder")
             picker.openFor(navigation.albumsArgument, true, navigation.albumsArgument)
+        else if (section === "favorites" && navigation.favoriteAlbum.length > 0)
+            picker.openForFavorites(navigation.favoriteAlbum)
     }
 
     function openPickerFor(cover: var) {
+        if (cover.isFavoriteAlbum) {
+            picker.openForFavorites(cover.name)
+            return
+        }
         const isGroup = (cover.key ?? "").startsWith("private:")
         picker.openFor(isGroup ? cover.name : cover.folder, isGroup, cover.name)
     }

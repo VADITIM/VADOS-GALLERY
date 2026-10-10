@@ -64,8 +64,11 @@ public:
     const MediaItem *find(const QString &path) const;
 
     Q_INVOKABLE QVariantList albums() const;
+    // The albums made inside Favorites, as covers: only their photos that are still favourites, and none left empty.
+    Q_INVOKABLE QVariantList favoriteAlbums() const;
     Q_INVOKABLE QVariantMap album(const QString &folder) const;
     Q_INVOKABLE int countFor(const QString &source) const;
+    Q_INVOKABLE QStringList pathsFor(const QString &source) const;
     Q_INVOKABLE QVariantMap item(const QString &path) const;
     Q_INVOKABLE QString displayName(const QString &folder) const;
     Q_INVOKABLE bool isAlbum(const QString &folder) const { return m_folders.contains(folder); }

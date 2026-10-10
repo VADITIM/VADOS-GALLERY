@@ -151,6 +151,15 @@ void MediaGridModel::setExcludedFolder(const QString &folder)
     scheduleRebuild();
 }
 
+void MediaGridModel::setOutsideFavoriteAlbums(bool isOutside)
+{
+    if (m_isOutsideFavoriteAlbums == isOutside)
+        return;
+    m_isOutsideFavoriteAlbums = isOutside;
+    emit layoutChanged();
+    scheduleRebuild();
+}
+
 void MediaGridModel::reload()
 {
     rebuild();
@@ -175,10 +184,15 @@ void MediaGridModel::rebuild()
     emit aboutToRebuild();
     beginResetModel();
     m_items = m_source.isEmpty() ? QVector<MediaItem>() : Library::instance()->itemsFor(m_source);
-    if (m_isFavoritesOnly || !m_excludedFolder.isEmpty()) {
+    if (m_isFavoritesOnly || !m_excludedFolder.isEmpty() || m_isOutsideFavoriteAlbums) {
+        QSet<QString> placed;
+        if (m_isOutsideFavoriteAlbums)
+            for (const QVariant &album : Settings::instance()->favoriteAlbums())
+                for (const QVariant &path : album.toMap().value(QStringLiteral("paths")).toList())
+                    placed.insert(path.toString());
         QVector<MediaItem> kept;
         for (const MediaItem &item : std::as_const(m_items))
-            if ((!m_isFavoritesOnly || item.isFavorite) && item.folder != m_excludedFolder)
+            if ((!m_isFavoritesOnly || item.isFavorite) && item.folder != m_excludedFolder && !placed.contains(item.path))
                 kept.append(item);
         m_items = kept;
     }

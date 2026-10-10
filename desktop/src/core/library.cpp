@@ -540,6 +540,19 @@ QVector<MediaItem> Library::itemsFor(const QString &source) const
         }
         return items;
     }
+    if (source.startsWith(QLatin1String("favorite-album:"))) {
+        const QString name = source.mid(15);
+        QSet<QString> paths;
+        for (const QVariant &album : Settings::instance()->favoriteAlbums())
+            if (album.toMap().value(QStringLiteral("name")).toString() == name)
+                for (const QVariant &path : album.toMap().value(QStringLiteral("paths")).toList())
+                    paths.insert(path.toString());
+        QVector<MediaItem> items;
+        for (const MediaItem &item : m_items)
+            if (item.isFavorite && paths.contains(item.path))
+                items.append(item);
+        return items;
+    }
     if (source.startsWith(QLatin1String("private")) && m_vault)
         return m_vault->itemsFor(source);
     return {};
@@ -558,6 +571,14 @@ int Library::countFor(const QString &source) const
     if (source.startsWith(QLatin1String("album:")))
         return int(m_folders.value(source.mid(6)).size());
     return int(itemsFor(source).size());
+}
+
+QStringList Library::pathsFor(const QString &source) const
+{
+    QStringList paths;
+    for (const MediaItem &item : itemsFor(source))
+        paths.append(item.path);
+    return paths;
 }
 
 QVariantMap Library::item(const QString &path) const
@@ -637,6 +658,41 @@ QVariantList Library::albums() const
     QVariantList list;
     for (const QVariantMap &album : albums)
         list.append(album);
+    return list;
+}
+
+QVariantList Library::favoriteAlbums() const
+{
+    QList<QVariantMap> covers;
+    for (const QVariant &stored : Settings::instance()->favoriteAlbums()) {
+        const QString name = stored.toMap().value(QStringLiteral("name")).toString();
+        const QString key = QStringLiteral("favorite-album:") + name;
+        const QVector<MediaItem> items = itemsFor(key);
+        if (items.isEmpty())
+            continue;
+        QString cover = Settings::instance()->cover(key);
+        bool isCoverVideo = items.last().isVideo;
+        bool isChosen = false;
+        for (const MediaItem &item : items)
+            if (item.path == cover) {
+                isChosen = true;
+                isCoverVideo = item.isVideo;
+            }
+        if (!isChosen)
+            cover = items.last().path;
+        covers.append({{QStringLiteral("key"), key}, {QStringLiteral("folder"), name}, {QStringLiteral("name"), name},
+                       {QStringLiteral("count"), int(items.size())}, {QStringLiteral("cover"), cover}, {QStringLiteral("isCoverVideo"), isCoverVideo},
+                       {QStringLiteral("newest"), items.last().timestamp}, {QStringLiteral("isFavoriteAlbum"), true}});
+    }
+    const QStringList order = Settings::instance()->order(QStringLiteral("favorites"));
+    std::stable_sort(covers.begin(), covers.end(), [&](const QVariantMap &left, const QVariantMap &right) {
+        const qsizetype leftAt = order.indexOf(left.value(QStringLiteral("name")).toString());
+        const qsizetype rightAt = order.indexOf(right.value(QStringLiteral("name")).toString());
+        return (leftAt < 0 ? order.size() : leftAt) < (rightAt < 0 ? order.size() : rightAt);
+    });
+    QVariantList list;
+    for (const QVariantMap &cover : covers)
+        list.append(cover);
     return list;
 }
 

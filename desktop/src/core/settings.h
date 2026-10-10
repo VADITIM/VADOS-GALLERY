@@ -78,6 +78,15 @@ public:
     Q_INVOKABLE void setCover(const QString &albumKey, const QString &path);
     Q_INVOKABLE QStringList albumOrder() const;
     Q_INVOKABLE void setAlbumOrder(const QStringList &order);
+    // The order dragged into on a shelf ("albums" by folder, "private" by group name, "favorites" by album name), groups and albums alike; what was never arranged keeps its default order after it.
+    Q_INVOKABLE QStringList order(const QString &shelf) const;
+    Q_INVOKABLE void setOrder(const QString &shelf, const QStringList &order);
+    // The groups of a shelf, kept while grouping is off so turning it back on restores them: [{ name, keys: [album key, …] }].
+    Q_INVOKABLE QVariantList stacks(const QString &shelf) const;
+    Q_INVOKABLE void setStacks(const QString &shelf, const QVariantList &stacks);
+    // The albums made inside Favorites, each holding favourites by path: [{ name, paths: […] }]. They never touch the folders.
+    Q_INVOKABLE QVariantList favoriteAlbums() const;
+    Q_INVOKABLE void setFavoriteAlbums(const QVariantList &albums);
 
     // Keeps names, covers and order with a folder that moved (into Private and back, or renamed on disk).
     void followMovedFolder(const QString &from, const QString &to);

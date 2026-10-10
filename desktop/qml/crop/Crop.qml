@@ -57,6 +57,7 @@ Item {
     function close() {
         if (!isOpen)
             return
+        FocusHome.restore()
         isOpen = false
         arriving.stop()
         leaving.restart()

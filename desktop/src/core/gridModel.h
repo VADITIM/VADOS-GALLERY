@@ -23,6 +23,8 @@ class MediaGridModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(bool isFavoritesOnly READ isFavoritesOnly WRITE setFavoritesOnly NOTIFY layoutChanged)
     // Leaves out what is already in a folder: adding to an album offers only what is not there yet.
     Q_PROPERTY(QString excludedFolder READ excludedFolder WRITE setExcludedFolder NOTIFY layoutChanged)
+    // Leaves out favourites already in an album made inside Favorites: a favourite is in one at most.
+    Q_PROPERTY(bool isOutsideFavoriteAlbums READ isOutsideFavoriteAlbums WRITE setOutsideFavoriteAlbums NOTIFY layoutChanged)
     // Similar shots fold into one tile; the stacks opened out are named by their newest shot.
     Q_PROPERTY(bool isStacking READ isStacking WRITE setStacking NOTIFY layoutChanged)
     Q_PROPERTY(QStringList openStacks READ openStacks WRITE setOpenStacks NOTIFY layoutChanged)
@@ -59,6 +61,8 @@ public:
     QStringList openStacks() const { return m_openStacks; }
     void setOpenStacks(const QStringList &stacks);
     QString excludedFolder() const { return m_excludedFolder; }
+    bool isOutsideFavoriteAlbums() const { return m_isOutsideFavoriteAlbums; }
+    void setOutsideFavoriteAlbums(bool isOutside);
     void setExcludedFolder(const QString &folder);
     int count() const { return int(m_items.size()); }
     int revision() const { return m_revision; }
@@ -119,6 +123,7 @@ private:
     bool m_isStacking = false;
     QStringList m_openStacks;
     QString m_excludedFolder;
+    bool m_isOutsideFavoriteAlbums = false;
     bool m_isComplete = false;
     bool m_isRebuildScheduled = false;
     int m_revision = 0;

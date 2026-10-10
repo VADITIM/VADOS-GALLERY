@@ -112,6 +112,26 @@ Item {
             }
         }
 
+        // Favorites: every favourite in one grid, or the albums made inside it; the icon pops to the other as it switches.
+        Pop {
+            isShown: !root.isSelecting && root.gallery.canToggleFavoritesView
+            delay: Motion.stateChange
+            TopButton {
+                id: viewToggle
+                property string shownGlyph: Settings.isFavoritesAsAlbums ? "grid" : "albums"
+                property string drawnGlyph: shownGlyph
+                glyph: drawnGlyph
+                onShownGlyphChanged: swap.restart()
+                onClicked: root.gallery.toggleFavoritesView()
+                SequentialAnimation {
+                    id: swap
+                    NumberAnimation { target: viewToggle; property: "scale"; to: 0; duration: Motion.stateChange; easing.type: Motion.backIn }
+                    ScriptAction { script: viewToggle.drawnGlyph = viewToggle.shownGlyph }
+                    NumberAnimation { target: viewToggle; property: "scale"; to: 1; duration: Motion.stateChange; easing.type: Motion.backOut }
+                }
+            }
+        }
+
         Pop {
             id: settingsButton
             isShown: !root.isSelecting && !root.gallery.isSettingsOpen

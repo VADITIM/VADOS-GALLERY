@@ -17,7 +17,7 @@ qt_add_executable(vados-gallery
 
 file(GLOB GALLERY_GLYPHS CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} assets/glyphs/*.svg)
 file(GLOB_RECURSE GALLERY_QML CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} qml/*.qml)
-set(GALLERY_SINGLETONS qml/design/Theme.qml qml/design/Motion.qml qml/design/GlassSource.qml qml/library/Sections.qml)
+set(GALLERY_SINGLETONS qml/design/Theme.qml qml/design/Motion.qml qml/design/GlassSource.qml qml/design/FocusHome.qml qml/library/Sections.qml)
 set_source_files_properties(${GALLERY_SINGLETONS} PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The inline video player is only part of the module when Qt Multimedia is there to compile it against.
 if(NOT Qt6Multimedia_FOUND)

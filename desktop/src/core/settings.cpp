@@ -1,6 +1,10 @@
 #include "settings.h"
 
 #include <QJSEngine>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
 
 namespace {
 
@@ -56,6 +60,9 @@ QVariant Settings::fallback(const QString &view, const QString &key) const
         return false;
     if (key == QLatin1String("albumColumns"))
         return 3;
+    // With grouping on, the albums outside the groups have a count of their own, 1–3 a row, starting at 1.
+    if (key == QLatin1String("looseColumns"))
+        return 1;
     if (key == QLatin1String("groupedAlbums"))
         return view == QLatin1String("favorites");
     return {};
@@ -160,12 +167,55 @@ void Settings::setCover(const QString &albumKey, const QString &path)
 
 QStringList Settings::albumOrder() const
 {
-    return m_store.value(ORDER).toStringList();
+    return order(QStringLiteral("albums"));
 }
 
 void Settings::setAlbumOrder(const QStringList &order)
 {
-    m_store.setValue(ORDER, order);
+    setOrder(QStringLiteral("albums"), order);
+}
+
+QStringList Settings::order(const QString &shelf) const
+{
+    return m_store.value(shelf == QLatin1String("albums") ? ORDER : QStringLiteral("order/") + shelf).toStringList();
+}
+
+void Settings::setOrder(const QString &shelf, const QStringList &order)
+{
+    m_store.setValue(shelf == QLatin1String("albums") ? ORDER : QStringLiteral("order/") + shelf, order);
+    bump();
+}
+
+// Stored as JSON text: QSettings flattens nested lists of maps unreliably in its INI format.
+QVariantList Settings::stacks(const QString &shelf) const
+{
+    return QJsonDocument::fromJson(m_store.value(QStringLiteral("stacks/") + shelf).toString().toUtf8()).array().toVariantList();
+}
+
+void Settings::setStacks(const QString &shelf, const QVariantList &stacks)
+{
+    // A group left empty is gone.
+    QJsonArray kept;
+    for (const QVariant &stack : stacks)
+        if (!stack.toMap().value(QStringLiteral("keys")).toList().isEmpty())
+            kept.append(QJsonObject::fromVariantMap(stack.toMap()));
+    m_store.setValue(QStringLiteral("stacks/") + shelf, QString::fromUtf8(QJsonDocument(kept).toJson(QJsonDocument::Compact)));
+    bump();
+}
+
+QVariantList Settings::favoriteAlbums() const
+{
+    return QJsonDocument::fromJson(m_store.value(QStringLiteral("favoriteAlbums")).toString().toUtf8()).array().toVariantList();
+}
+
+void Settings::setFavoriteAlbums(const QVariantList &albums)
+{
+    // An album emptied of favourites is gone.
+    QJsonArray kept;
+    for (const QVariant &album : albums)
+        if (!album.toMap().value(QStringLiteral("paths")).toList().isEmpty())
+            kept.append(QJsonObject::fromVariantMap(album.toMap()));
+    m_store.setValue(QStringLiteral("favoriteAlbums"), QString::fromUtf8(QJsonDocument(kept).toJson(QJsonDocument::Compact)));
     bump();
 }
 
@@ -180,7 +230,15 @@ void Settings::followMovedFolder(const QString &from, const QString &to)
     if (at >= 0)
         order[at] = to;
     m_store.setValue(ORDER, order);
-    bump();
+    QVariantList stacks = this->stacks(QStringLiteral("albums"));
+    for (QVariant &stack : stacks) {
+        QVariantMap map = stack.toMap();
+        QStringList keys = map.value(QStringLiteral("keys")).toStringList();
+        keys.replaceInStrings(QRegularExpression(QStringLiteral("^album:") + QRegularExpression::escape(from) + QStringLiteral("$")), QStringLiteral("album:") + to);
+        map.insert(QStringLiteral("keys"), keys);
+        stack = map;
+    }
+    setStacks(QStringLiteral("albums"), stacks);
 }
 
 // #endregion ─────────────────────────────────────────────────────────────────────────────────

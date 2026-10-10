@@ -1,6 +1,7 @@
 #include "privateVault.h"
 
 #include "mediaFacts.h"
+#include "settings.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -206,6 +207,13 @@ QStringList PrivateVault::groupNames() const
 {
     QStringList names = m_groups.keys();
     names.sort(Qt::CaseInsensitive);
+    // Groups dragged into an order come in it; ones never arranged keep theirs after them.
+    const QStringList order = Settings::instance()->order(QStringLiteral("private"));
+    std::stable_sort(names.begin(), names.end(), [&](const QString &left, const QString &right) {
+        const qsizetype leftAt = order.indexOf(left);
+        const qsizetype rightAt = order.indexOf(right);
+        return (leftAt < 0 ? order.size() : leftAt) < (rightAt < 0 ? order.size() : rightAt);
+    });
     return names;
 }
 

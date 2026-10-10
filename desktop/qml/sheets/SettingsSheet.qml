@@ -35,6 +35,7 @@ Item {
     function close() {
         if (!isOpen)
             return
+        FocusHome.restore()
         isOpen = false
         opening.stop()
         closing.restart()
@@ -449,13 +450,40 @@ Item {
                 visible: !root.hasPhotos
                 title: "Albums"
                 order: 2
+                readonly property bool canGroup: root.view === "albums" || root.view === "favorites"
+                readonly property bool isGrouped: canGroup && (Settings.revision >= 0 && Settings.viewValue(root.view, "groupedAlbums")) === true
 
-                Name { text: "Album columns" }
-                SegmentedTrack {
+                SwitchRow {
+                    visible: parent.parent.canGroup
+                    label: "Grouped albums"
+                    isOn: parent.parent.isGrouped
+                    onToggled: Settings.setViewValue(root.view, "groupedAlbums", !isOn)
+                }
+                // Greyed while grouping is on: the albums outside the groups then have a count of their own, below.
+                Column {
                     width: parent.width
-                    options: ["1", "2", "3", "4"]
-                    currentIndex: (Settings.revision >= 0 && Settings.viewValue(root.view, "albumColumns")) - 1
-                    onPicked: index => Settings.setViewValue(root.view, "albumColumns", index + 1)
+                    spacing: 8 * Theme.dp
+                    opacity: parent.parent.isGrouped ? 0.38 : 1
+                    enabled: !parent.parent.isGrouped
+                    Name { text: "Album columns" }
+                    SegmentedTrack {
+                        width: parent.width
+                        options: ["1", "2", "3", "4"]
+                        currentIndex: (Settings.revision >= 0 && Settings.viewValue(root.view, "albumColumns")) - 1
+                        onPicked: index => Settings.setViewValue(root.view, "albumColumns", index + 1)
+                    }
+                }
+                Column {
+                    visible: parent.parent.isGrouped
+                    width: parent.width
+                    spacing: 8 * Theme.dp
+                    Name { text: "Albums outside groups" }
+                    SegmentedTrack {
+                        width: parent.width
+                        options: ["1", "2", "3"]
+                        currentIndex: (Settings.revision >= 0 && Settings.viewValue(root.view, "looseColumns")) - 1
+                        onPicked: index => Settings.setViewValue(root.view, "looseColumns", index + 1)
+                    }
                 }
             }
 

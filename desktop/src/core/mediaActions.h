@@ -37,6 +37,10 @@ public:
     Q_INVOKABLE void deleteAlbum(const QString &folder);
     Q_INVOKABLE void renameAlbum(const QString &folder, const QString &name);
     Q_INVOKABLE void setCover(const QString &albumKey, const QString &path);
+    // Favorites' own albums: a photo is in one at most, so adding to one takes it out of any other.
+    Q_INVOKABLE void addToFavoriteAlbum(const QStringList &paths, const QString &name);
+    Q_INVOKABLE void removeFavoriteAlbums(const QStringList &names);
+    Q_INVOKABLE void renameFavoriteAlbum(const QString &from, const QString &to);
 
     Q_INVOKABLE void hide(const QStringList &paths, const QString &group);
     Q_INVOKABLE void hideAlbum(const QString &folder, const QString &group);
@@ -66,6 +70,8 @@ private:
     void offer(const QString &message, std::function<void()> undo);
     void afterLibraryChange(const QStringList &folders);
     void afterVaultChange();
+    // A favourite moved on disk stays in the Favorites album it was in.
+    static void followMovedPaths(const QList<QPair<QString, QString>> &moved);
 
     std::function<void()> m_undo;
 

@@ -10,13 +10,21 @@ Item {
     property bool isOpen: false
     property string target: ""
     property bool isGroup: false
+    // Filling an album made inside Favorites: only favourites, and only those in no album yet.
+    property bool isFavoriteAlbum: false
     property string title: ""
     property real shown: 0
 
     visible: shown > 0
     z: 60
 
+    function openForFavorites(name: string) {
+        openFor(name, false, name)
+        isFavoriteAlbum = true
+    }
+
     function openFor(folderOrGroup: string, toGroup: bool, name: string) {
+        isFavoriteAlbum = false
         target = folderOrGroup
         isGroup = toGroup
         title = name
@@ -32,6 +40,13 @@ Item {
     }
     function add() {
         const paths = picks.pickedPhotos()
+        if (isFavoriteAlbum) {
+            if (paths.length > 0)
+                Actions.addToFavoriteAlbum(paths, target)
+            close()
+            gallery.navigation.openFavoriteAlbum(target)
+            return
+        }
         if (paths.length > 0) {
             if (isGroup)
                 Actions.hide(paths, target)
@@ -63,9 +78,10 @@ Item {
         PhotoGrid {
             id: grid
             anchors.fill: parent
-            source: root.isOpen || root.shown > 0 ? "recent" : ""
-            view: "recent"
-            excludedFolder: root.isGroup ? "" : root.target
+            source: root.isOpen || root.shown > 0 ? (root.isFavoriteAlbum ? "favorites" : "recent") : ""
+            view: root.isFavoriteAlbum ? "favorites" : "recent"
+            excludedFolder: root.isGroup || root.isFavoriteAlbum ? "" : root.target
+            isOutsideFavoriteAlbums: root.isFavoriteAlbum
             selection: picks
             memories: ({})
             topInset: 64 * Theme.dp
@@ -84,7 +100,7 @@ Item {
             }
             TypedLabel {
                 height: 42 * Theme.dp
-                text: ((root.isGroup ? "ADD TO PRIVATE · " : "ADD TO ") + root.title).toUpperCase()
+                text: ((root.isGroup ? "ADD TO PRIVATE · " : root.isFavoriteAlbum ? "ADD TO FAVORITES · " : "ADD TO ") + root.title).toUpperCase()
                 maximumWidth: root.width - 120 * Theme.dp
             }
         }

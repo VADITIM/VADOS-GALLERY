@@ -12,6 +12,7 @@ Item {
     property string folderKey: ""
     // The photo picker leaves out what is already in the album it adds to.
     property string excludedFolder: ""
+    property bool isOutsideFavoriteAlbums: false
     required property var selection
     required property var memories
     property bool isActive: true
@@ -51,6 +52,7 @@ Item {
         hasDayStamps: Settings.hasDayStamps
         isFavoritesOnly: photoGrid.selection.isFavoritesOnly && photoGrid.view !== "favorites" && !gridModel.isTrash
         excludedFolder: photoGrid.excludedFolder
+        isOutsideFavoriteAlbums: photoGrid.isOutsideFavoriteAlbums
         isStacking: (Settings.revision >= 0 && Settings.viewValue(photoGrid.view, "stackSimilar")) === true && photoGrid.excludedFolder.length === 0
         openStacks: photoGrid.openStacks
 

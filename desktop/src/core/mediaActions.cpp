@@ -12,6 +12,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QRegularExpression>
 #include <QUrl>
 
 #include <unistd.h>
@@ -275,6 +276,7 @@ void MediaActions::move(const QStringList &paths, const QString &folder)
     QStringList sources;
     for (const auto &pair : moved)
         sources.append(pair.first);
+    followMovedPaths(moved);
     Library::instance()->forget(sources);
     afterLibraryChange(foldersOf(sources) << folder);
     offer(QStringLiteral("%1 moved to %2").arg(countText(int(moved.size())), Library::instance()->displayName(folder)), [this, moved] {
@@ -330,6 +332,83 @@ void MediaActions::setCover(const QString &albumKey, const QString &path)
         Library::instance()->notifyChanged();
     }
     offer(QStringLiteral("Set as cover"), nullptr);
+}
+
+void MediaActions::addToFavoriteAlbum(const QStringList &paths, const QString &name)
+{
+    const QSet<QString> adding(paths.cbegin(), paths.cend());
+    QVariantList albums = Settings::instance()->favoriteAlbums();
+    bool isFound = false;
+    for (QVariant &album : albums) {
+        QVariantMap map = album.toMap();
+        QStringList kept;
+        for (const QVariant &path : map.value(QStringLiteral("paths")).toList())
+            if (!adding.contains(path.toString()))
+                kept.append(path.toString());
+        if (map.value(QStringLiteral("name")).toString() == name) {
+            kept.append(paths);
+            isFound = true;
+        }
+        map.insert(QStringLiteral("paths"), kept);
+        album = map;
+    }
+    if (!isFound)
+        albums.append(QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("paths"), paths}});
+    Settings::instance()->setFavoriteAlbums(albums);
+    Library::instance()->notifyChanged();
+    offer(QStringLiteral("%1 added to %2").arg(countText(int(paths.size())), name), nullptr);
+}
+
+void MediaActions::removeFavoriteAlbums(const QStringList &names)
+{
+    QVariantList albums;
+    for (const QVariant &album : Settings::instance()->favoriteAlbums())
+        if (!names.contains(album.toMap().value(QStringLiteral("name")).toString()))
+            albums.append(album);
+    Settings::instance()->setFavoriteAlbums(albums);
+    Library::instance()->notifyChanged();
+}
+
+void MediaActions::renameFavoriteAlbum(const QString &from, const QString &to)
+{
+    const QString clean = to.trimmed();
+    if (clean.isEmpty())
+        return;
+    QVariantList albums = Settings::instance()->favoriteAlbums();
+    for (QVariant &album : albums) {
+        QVariantMap map = album.toMap();
+        if (map.value(QStringLiteral("name")).toString() == from)
+            map.insert(QStringLiteral("name"), clean);
+        album = map;
+    }
+    Settings::instance()->setFavoriteAlbums(albums);
+    // It keeps its place and its group.
+    QStringList order = Settings::instance()->order(QStringLiteral("favorites"));
+    order.replaceInStrings(QRegularExpression(QStringLiteral("^") + QRegularExpression::escape(from) + QStringLiteral("$")), clean);
+    Settings::instance()->setOrder(QStringLiteral("favorites"), order);
+    Library::instance()->notifyChanged();
+}
+
+void MediaActions::followMovedPaths(const QList<QPair<QString, QString>> &moved)
+{
+    QHash<QString, QString> renamed;
+    for (const auto &pair : moved)
+        renamed.insert(pair.first, pair.second);
+    QVariantList albums = Settings::instance()->favoriteAlbums();
+    bool isChanged = false;
+    for (QVariant &album : albums) {
+        QVariantMap map = album.toMap();
+        QStringList paths;
+        for (const QVariant &path : map.value(QStringLiteral("paths")).toList()) {
+            const QString next = renamed.value(path.toString(), path.toString());
+            isChanged = isChanged || next != path.toString();
+            paths.append(next);
+        }
+        map.insert(QStringLiteral("paths"), paths);
+        album = map;
+    }
+    if (isChanged)
+        Settings::instance()->setFavoriteAlbums(albums);
 }
 
 // #endregion ─────────────────────────────────────────────────────────────────────────────────
