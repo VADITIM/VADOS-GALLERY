@@ -6,11 +6,12 @@ import Gallery
 Item {
     id: tile
 
-    required property int itemIndex
+    required property int tileIndex
     required property var grid
-    readonly property var facts: grid.model.revision, grid.model.tile(itemIndex)
+    readonly property var facts: grid.model.revision >= 0 && grid.model.tile(tileIndex)
+    readonly property bool isFoldedStack: (facts.stackSize ?? 0) > 0 && facts.stackPosition === 0
     readonly property string path: facts.path ?? ""
-    readonly property bool isSelected: grid.selection.revision, grid.selection.has(path)
+    readonly property bool isSelected: grid.selection.revision >= 0 && grid.selection.has(path)
     readonly property bool isSmall: grid.columns >= 5
     property real entrance: 1
 
@@ -93,15 +94,51 @@ Item {
             styleColor: Qt.rgba(0, 0, 0, 0.7)
         }
 
-        Glyph {
-            visible: tile.facts.isFavorite === true
+        // Top right: a favourite's heart, then a stack's count or a laid-out shot's place.
+        Row {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 5 * Theme.dp
-            width: (tile.isSmall ? 11 : 14) * Theme.dp
-            height: width
-            name: "heart-filled"
-            ink: Theme.favorite
+            spacing: 4 * Theme.dp
+            layoutDirection: Qt.RightToLeft
+
+            Rectangle {
+                visible: (tile.facts.stackSize ?? 0) > 0
+                anchors.verticalCenter: parent.verticalCenter
+                width: stackRow.implicitWidth + 10 * Theme.dp
+                height: 18 * Theme.dp
+                radius: height / 2
+                color: tile.isFoldedStack ? Qt.rgba(0, 0, 0, 0.55) : Theme.accent
+                Row {
+                    id: stackRow
+                    anchors.centerIn: parent
+                    spacing: 3 * Theme.dp
+                    Glyph {
+                        visible: tile.isFoldedStack
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 11 * Theme.dp
+                        height: width
+                        name: "duplicates"
+                        ink: Theme.textBright
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: tile.isFoldedStack ? tile.facts.stackSize : tile.facts.stackPosition + "/" + tile.facts.stackSize
+                        color: tile.isFoldedStack ? Theme.textBright : Theme.sunkenDeep
+                        font.family: Theme.mono
+                        font.pixelSize: 9 * Theme.dp
+                    }
+                }
+            }
+
+            Glyph {
+                visible: tile.facts.isFavorite === true
+                anchors.verticalCenter: parent.verticalCenter
+                width: (tile.isSmall ? 11 : 14) * Theme.dp
+                height: width
+                name: "heart-filled"
+                ink: Theme.favorite
+            }
         }
 
         Text {

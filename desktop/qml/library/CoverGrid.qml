@@ -16,7 +16,7 @@ Item {
     property real topInset: 0
     property real bottomInset: 0
     property var header: null
-    readonly property int columns: (Settings.revision, Settings.viewValue(view, "albumColumns"))
+    readonly property int columns: (Settings.revision >= 0 && Settings.viewValue(view, "albumColumns"))
     readonly property real sideInset: 14 * Theme.dp
     readonly property real gap: 12 * Theme.dp
     readonly property real cell: Math.max(40, (width - sideInset * 2 - gap * (columns - 1)) / columns)

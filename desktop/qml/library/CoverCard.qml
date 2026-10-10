@@ -10,7 +10,7 @@ Pressable {
     required property var grid
     readonly property bool isList: grid.columns === 1
     readonly property real edge: isList ? 56 * Theme.dp : grid.cell
-    readonly property bool isSelected: grid.selection.revision, grid.selection.hasCover(cover.key)
+    readonly property bool isSelected: grid.selection.revision >= 0 && grid.selection.hasCover(cover.key)
     property real entrance: 1
 
     width: isList ? grid.width - grid.sideInset * 2 : grid.cell

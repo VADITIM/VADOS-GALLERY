@@ -31,7 +31,7 @@ Item {
     readonly property real growth: progress * (1 - pull)
     readonly property bool isSettled: progress >= 1 && pull === 0 && !isClosing
     readonly property bool isChromeVisible: isChromeShown && progress >= 0.85 && !isClosing && pull === 0
-    readonly property var facts: (items.revision, items.item(index))
+    readonly property var facts: (items.revision >= 0 && items.item(index))
     readonly property bool isTrash: source === "trash" || source === "private-trash"
     readonly property bool isPrivate: source.startsWith("private")
     readonly property var page: currentPage
@@ -174,7 +174,7 @@ Item {
 
     ViewerPage {
         id: previousPage
-        readonly property var facts: (items.revision, items.item(viewer.index - 1))
+        readonly property var facts: (items.revision >= 0 && items.item(viewer.index - 1))
         readonly property rect fit: viewer.fitRect(viewer.aspectOf(facts, previousPage))
         visible: viewer.isSettled && viewer.index > 0
         isNear: viewer.isSettled
@@ -188,7 +188,7 @@ Item {
 
     ViewerPage {
         id: nextPage
-        readonly property var facts: (items.revision, items.item(viewer.index + 1))
+        readonly property var facts: (items.revision >= 0 && items.item(viewer.index + 1))
         readonly property rect fit: viewer.fitRect(viewer.aspectOf(facts, nextPage))
         visible: viewer.isSettled && viewer.index < items.count - 1
         isNear: viewer.isSettled

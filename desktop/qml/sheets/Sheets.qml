@@ -46,7 +46,7 @@ Item {
         property string exclude: ""
         property var onPicked: null
         readonly property var choices: {
-            const all = isGroups ? (Vault.revision, Vault.groups()) : (Library.revision, Settings.revision, Library.albums())
+            const all = isGroups ? (Vault.revision >= 0 && Vault.groups()) : (Library.revision >= 0 && Settings.revision >= 0 && Library.albums())
             return all.filter(album => album.folder !== exclude)
         }
         contentHeight: pickerColumn.implicitHeight

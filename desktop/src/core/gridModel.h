@@ -23,6 +23,9 @@ class MediaGridModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(bool isFavoritesOnly READ isFavoritesOnly WRITE setFavoritesOnly NOTIFY layoutChanged)
     // Leaves out what is already in a folder: adding to an album offers only what is not there yet.
     Q_PROPERTY(QString excludedFolder READ excludedFolder WRITE setExcludedFolder NOTIFY layoutChanged)
+    // Similar shots fold into one tile; the stacks opened out are named by their newest shot.
+    Q_PROPERTY(bool isStacking READ isStacking WRITE setStacking NOTIFY layoutChanged)
+    Q_PROPERTY(QStringList openStacks READ openStacks WRITE setOpenStacks NOTIFY layoutChanged)
     Q_PROPERTY(int count READ count NOTIFY rebuilt)
     Q_PROPERTY(int revision READ revision NOTIFY rebuilt)
     Q_PROPERTY(bool isTrash READ isTrash NOTIFY sourceChanged)
@@ -51,6 +54,10 @@ public:
     void setHasDayStamps(bool hasDayStamps);
     bool isFavoritesOnly() const { return m_isFavoritesOnly; }
     void setFavoritesOnly(bool isFavoritesOnly);
+    bool isStacking() const { return m_isStacking; }
+    void setStacking(bool isStacking);
+    QStringList openStacks() const { return m_openStacks; }
+    void setOpenStacks(const QStringList &stacks);
     QString excludedFolder() const { return m_excludedFolder; }
     void setExcludedFolder(const QString &folder);
     int count() const { return int(m_items.size()); }
@@ -59,7 +66,11 @@ public:
 
     const QVector<MediaItem> &items() const { return m_items; }
 
-    Q_INVOKABLE QVariantMap tile(int index) const;
+    // A tile is one photo, or a folded stack of similar shots standing for all of them; rows hold tiles, the viewer and the selection hold items.
+    Q_INVOKABLE QVariantMap tile(int tileIndex) const;
+    Q_INVOKABLE int itemOfTile(int tileIndex) const;
+    Q_INVOKABLE int tileOfItem(int index) const;
+    Q_INVOKABLE QStringList stackPaths(const QString &stackKey) const;
     Q_INVOKABLE QVariantMap item(int index) const;
     Q_INVOKABLE QString pathAt(int index) const;
     Q_INVOKABLE int indexOfPath(const QString &path) const;
@@ -81,6 +92,13 @@ signals:
     void rebuilt();
 
 private:
+    struct Tile {
+        int item = 0;
+        int stackSize = 0;
+        // 0 for a folded stack's cover (or a photo in no stack); 1 to n for the shots of a stack opened out.
+        int stackPosition = 0;
+        QString stackKey;
+    };
     struct Row {
         int kind = 0;
         QString level;
@@ -98,6 +116,8 @@ private:
     bool m_hasHeaders = true;
     bool m_hasDayStamps = false;
     bool m_isFavoritesOnly = false;
+    bool m_isStacking = false;
+    QStringList m_openStacks;
     QString m_excludedFolder;
     bool m_isComplete = false;
     bool m_isRebuildScheduled = false;
@@ -105,7 +125,10 @@ private:
 
     QVector<MediaItem> m_items;
     QVector<Row> m_rows;
-    QVector<int> m_rowOfItem;
+    QVector<Tile> m_tiles;
+    QVector<int> m_tileOfItem;
+    QVector<int> m_rowOfTile;
+    QHash<QString, QStringList> m_stackPaths;
     QVector<QDate> m_stampOfItem;
     QHash<QString, int> m_indexOfPath;
     QHash<int, int> m_monthCounts;

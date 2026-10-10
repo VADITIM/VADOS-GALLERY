@@ -23,7 +23,7 @@ Item {
     property real timelineSlide: 0
     readonly property alias model: gridModel
     readonly property alias list: list
-    readonly property int columns: (Settings.revision, Settings.gridValue(view, folderKey, "columns"))
+    readonly property int columns: (Settings.revision >= 0 && Settings.gridValue(view, folderKey, "columns"))
     readonly property real gap: 3 * Theme.dp
     readonly property real cell: Math.max(8, (width - sideInset - Math.max(sideInset, timelineInset) - gap * (columns - 1)) / columns)
     // The month of the photos at the top, and how many of this grid were taken in it.
@@ -31,18 +31,28 @@ Item {
     property int monthCount: 0
     property int monthKey: 0
 
+    // The stacks of similar shots laid out in place, by their newest shot.
+    property var openStacks: []
+
     signal opened(int index)
+
+    function toggleStack(stackKey: string) {
+        const at = openStacks.indexOf(stackKey)
+        openStacks = at >= 0 ? openStacks.filter(key => key !== stackKey) : openStacks.concat([stackKey])
+    }
 
     // #region ── model ─────────────────────────────────────────────────────────────────────────
     MediaGridModel {
         id: gridModel
         source: photoGrid.source
         columns: photoGrid.columns
-        dateGroups: (Settings.revision, Settings.gridValue(photoGrid.view, photoGrid.folderKey, "dateGroups"))
-        hasHeaders: (Settings.revision, Settings.gridValue(photoGrid.view, photoGrid.folderKey, "headers"))
+        dateGroups: (Settings.revision >= 0 && Settings.gridValue(photoGrid.view, photoGrid.folderKey, "dateGroups"))
+        hasHeaders: (Settings.revision >= 0 && Settings.gridValue(photoGrid.view, photoGrid.folderKey, "headers"))
         hasDayStamps: Settings.hasDayStamps
         isFavoritesOnly: photoGrid.selection.isFavoritesOnly && photoGrid.view !== "favorites" && !gridModel.isTrash
         excludedFolder: photoGrid.excludedFolder
+        isStacking: (Settings.revision >= 0 && Settings.viewValue(photoGrid.view, "stackSimilar")) === true && photoGrid.excludedFolder.length === 0
+        openStacks: photoGrid.openStacks
 
         onAboutToRebuild: photoGrid.remember()
         onRebuilt: {
@@ -126,8 +136,13 @@ Item {
         }
     }
 
-    // The item under a point of the grid, or -1.
+    // The item under a point of the grid, or -1; a folded stack answers its newest shot.
     function itemAt(x: real, y: real): int {
+        return gridModel.itemOfTile(tileAt(x, y))
+    }
+
+    // The tile under a point of the grid, or -1.
+    function tileAt(x: real, y: real): int {
         const row = list.indexAt(x, y + list.contentY)
         if (row < 0)
             return -1
@@ -156,7 +171,7 @@ Item {
             if (!item)
                 return null
         }
-        const column = index - gridModel.data(gridModel.index(row, 0), MediaGridModel.FirstRole)
+        const column = gridModel.tileOfItem(index) - gridModel.data(gridModel.index(row, 0), MediaGridModel.FirstRole)
         const local = Qt.point(sideInset + column * (cell + gap), item.y - list.contentY)
         const at = list.mapToItem(null, local.x, local.y)
         return Qt.rect(at.x, at.y, cell, cell)
@@ -248,7 +263,7 @@ Item {
                 Tile {
                     required property int index
                     x: photoGrid.sideInset + index * (photoGrid.cell + photoGrid.gap)
-                    itemIndex: row.first + index
+                    tileIndex: row.first + index
                     grid: photoGrid
                 }
             }
@@ -294,6 +309,26 @@ Item {
                 stepScale = 1
             }
         }
+    }
+
+    // Picks or lets go a tile: one photo, or every shot of a folded stack.
+    function pick(tile: var, isPicked: bool) {
+        if (tile.stackSize > 0 && tile.stackPosition === 0)
+            selection.setPhotos(gridModel.stackPaths(tile.stackKey), isPicked)
+        else
+            selection.setPhoto(tile.path, isPicked)
+    }
+
+    // The top right corner of a tile, where a laid-out shot's place (2/5) stands.
+    function isOnStackMark(x: real, y: real, tileIndex: int): bool {
+        const row = gridModel.rowOfItem(gridModel.itemOfTile(tileIndex))
+        const item = list.itemAtIndex(row)
+        if (!item)
+            return false
+        const column = tileIndex - gridModel.data(gridModel.index(row, 0), MediaGridModel.FirstRole)
+        const left = sideInset + column * (cell + gap)
+        const top = item.y - list.contentY
+        return x > left + cell - 46 * Theme.dp && y < top + 30 * Theme.dp
     }
 
     function stepColumns(step: int) {
@@ -357,13 +392,16 @@ Item {
                 isDragging = false
                 return
             }
-            const index = photoGrid.itemAt(mouse.x, mouse.y)
+            const tileIndex = photoGrid.tileAt(mouse.x, mouse.y)
+            const index = gridModel.itemOfTile(tileIndex)
             if (index < 0 || index !== pressedIndex)
                 return
             const path = gridModel.pathAt(index)
+            const tile = gridModel.tile(tileIndex)
+            const isFoldedStack = tile.stackSize > 0 && tile.stackPosition === 0
             if (mouse.button === Qt.RightButton) {
-                // The desktop's long press: picks the photo.
-                photoGrid.selection.togglePhoto(path)
+                // The desktop's long press: picks the photo, or every shot of a folded stack.
+                photoGrid.pick(tile, !photoGrid.selection.has(path))
                 photoGrid.selection.anchorIndex = index
                 return
             }
@@ -377,20 +415,29 @@ Item {
                 return
             }
             if (mouse.modifiers & Qt.ControlModifier || photoGrid.selection.isSelectingPhotos) {
-                photoGrid.selection.togglePhoto(path)
+                photoGrid.pick(tile, !photoGrid.selection.has(path))
                 photoGrid.selection.anchorIndex = index
+                return
+            }
+            // A folded stack lays its shots out in place; the place mark of a shot laid out folds it back.
+            if (isFoldedStack) {
+                photoGrid.toggleStack(tile.stackKey)
+                return
+            }
+            if (tile.stackPosition > 0 && photoGrid.isOnStackMark(mouse.x, mouse.y, tileIndex)) {
+                photoGrid.toggleStack(tile.stackKey)
                 return
             }
             photoGrid.opened(index)
         }
 
         function slideOver(x: real, y: real) {
-            const index = photoGrid.itemAt(x, y)
-            if (index < 0 || visited[index])
+            const tileIndex = photoGrid.tileAt(x, y)
+            if (tileIndex < 0 || visited[tileIndex])
                 return
-            visited[index] = true
-            // Each photo reached toggles once per stroke, to what the first one became.
-            photoGrid.selection.setPhoto(gridModel.pathAt(index), isAdding)
+            visited[tileIndex] = true
+            // Each photo reached toggles once per stroke, to what the first one became; a folded stack goes in or out as one.
+            photoGrid.pick(gridModel.tile(tileIndex), isAdding)
             if (y < 90 * Theme.dp + photoGrid.topInset || y > photoGrid.height - 90 * Theme.dp - photoGrid.bottomInset)
                 edgeScroll.start()
         }

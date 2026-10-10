@@ -117,7 +117,7 @@ Item {
     Item {
         id: details
         readonly property var facts: chrome.viewer.facts
-        readonly property var file: (chrome.viewer.items.revision, System.details(chrome.viewer.currentPath))
+        readonly property var file: (chrome.viewer.items.revision >= 0 && System.details(chrome.viewer.currentPath))
         width: Math.min(chrome.width - 32 * Theme.dp, 560 * Theme.dp)
         height: rows.implicitHeight + 40 * Theme.dp
         x: (chrome.width - width) / 2

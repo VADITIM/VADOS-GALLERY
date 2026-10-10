@@ -16,7 +16,7 @@ Item {
     readonly property string view: gallery.settingsView
     readonly property string folderKey: gallery.settingsFolderKey
     readonly property bool hasPhotos: gallery.gridSource.length > 0
-    readonly property bool isOwn: (Settings.revision, Settings.hasOwnSettings(folderKey))
+    readonly property bool isOwn: (Settings.revision >= 0 && Settings.hasOwnSettings(folderKey))
     // Inside an album that follows Recent, its photo settings show greyed.
     readonly property bool isFollowing: folderKey.length > 0 && !isOwn
 
@@ -360,7 +360,7 @@ Item {
                     SegmentedTrack {
                         width: parent.width
                         options: ["1", "2", "3", "4", "5", "6"]
-                        currentIndex: (Settings.revision, Settings.gridValue(root.view, root.folderKey, "columns")) - 1
+                        currentIndex: (Settings.revision >= 0 && Settings.gridValue(root.view, root.folderKey, "columns")) - 1
                         onPicked: index => Settings.setGridValue(root.view, root.folderKey, "columns", index + 1)
                     }
                 }
@@ -368,8 +368,8 @@ Item {
                 Column {
                     width: parent.width
                     spacing: 8 * Theme.dp
-                    readonly property var groups: (Settings.revision, Settings.gridValue(root.view, root.folderKey, "dateGroups"))
-                    readonly property bool hasHeaders: (Settings.revision, Settings.gridValue(root.view, root.folderKey, "headers"))
+                    readonly property var groups: (Settings.revision >= 0 && Settings.gridValue(root.view, root.folderKey, "dateGroups"))
+                    readonly property bool hasHeaders: (Settings.revision >= 0 && Settings.gridValue(root.view, root.folderKey, "headers"))
                     readonly property bool isByDeletion: root.gallery.isInTrash && Settings.isTrashByDeletion
                     opacity: root.isFollowing || isByDeletion ? 0.38 : 1
                     enabled: !root.isFollowing && !isByDeletion
@@ -424,6 +424,13 @@ Item {
                 }
 
                 SwitchRow {
+                    visible: !root.gallery.isInTrash
+                    label: "Stack similar shots"
+                    isOn: (Settings.revision >= 0 && Settings.viewValue(root.view, "stackSimilar")) === true
+                    onToggled: Settings.setViewValue(root.view, "stackSimilar", !isOn)
+                }
+
+                SwitchRow {
                     visible: root.gallery.isInTrash
                     label: "Order by deletion"
                     isOn: Settings.isTrashByDeletion
@@ -447,7 +454,7 @@ Item {
                 SegmentedTrack {
                     width: parent.width
                     options: ["1", "2", "3", "4"]
-                    currentIndex: (Settings.revision, Settings.viewValue(root.view, "albumColumns")) - 1
+                    currentIndex: (Settings.revision >= 0 && Settings.viewValue(root.view, "albumColumns")) - 1
                     onPicked: index => Settings.setViewValue(root.view, "albumColumns", index + 1)
                 }
             }
@@ -548,7 +555,7 @@ Item {
                     }
                 }
                 Text {
-                    visible: (Settings.revision, Settings.viewValue("backup", "lastSaved") ?? 0) > 0
+                    visible: ((Settings.revision >= 0 && Settings.viewValue("backup", "lastSaved")) || 0) > 0
                     text: "Last saved " + System.formatDate(Settings.viewValue("backup", "lastSaved") ?? 0)
                     color: Theme.textMuted
                     font.family: Theme.mono

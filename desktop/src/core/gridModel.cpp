@@ -3,6 +3,7 @@
 #include "library.h"
 #include "privateVault.h"
 #include "settings.h"
+#include "similarShots.h"
 
 #include <QDateTime>
 #include <QLocale>
@@ -45,6 +46,10 @@ MediaGridModel::MediaGridModel(QObject *parent)
     connect(Library::instance(), &Library::changed, this, &MediaGridModel::scheduleRebuild);
     connect(Settings::instance(), &Settings::isTrashByDeletionChanged, this, [this] {
         if (isTrash())
+            scheduleRebuild();
+    });
+    connect(SimilarShots::instance(), &SimilarShots::changed, this, [this] {
+        if (m_isStacking)
             scheduleRebuild();
     });
     connect(PrivateVault::instance(), &PrivateVault::changed, this, [this] {
@@ -119,6 +124,24 @@ void MediaGridModel::setFavoritesOnly(bool isFavoritesOnly)
         rebuild();
 }
 
+void MediaGridModel::setStacking(bool isStacking)
+{
+    if (m_isStacking == isStacking)
+        return;
+    m_isStacking = isStacking;
+    emit layoutChanged();
+    scheduleRebuild();
+}
+
+void MediaGridModel::setOpenStacks(const QStringList &stacks)
+{
+    if (m_openStacks == stacks)
+        return;
+    m_openStacks = stacks;
+    emit layoutChanged();
+    scheduleRebuild();
+}
+
 void MediaGridModel::setExcludedFolder(const QString &folder)
 {
     if (m_excludedFolder == folder)
@@ -160,7 +183,10 @@ void MediaGridModel::rebuild()
         m_items = kept;
     }
     m_rows.clear();
-    m_rowOfItem.assign(m_items.size(), 0);
+    m_tiles.clear();
+    m_rowOfTile.clear();
+    m_stackPaths.clear();
+    m_tileOfItem.assign(m_items.size(), -1);
     m_stampOfItem.assign(m_items.size(), QDate());
     m_indexOfPath.clear();
     m_indexOfPath.reserve(m_items.size());
@@ -177,6 +203,21 @@ void MediaGridModel::rebuild()
     const bool isDays = groups.contains(QLatin1String("days"));
     const bool isStamping = m_hasDayStamps && m_hasHeaders && !isWeeks && !isDays && m_columns <= 3 && !isTrash();
 
+    // Every grid but the trash folds similar shots, when the view asks for it; a folded stack shows only its newest shot.
+    QVector<int> runOfItem(m_items.size(), -1);
+    QVector<QPair<int, int>> runs;
+    if (m_isStacking && !isTrash()) {
+        runs = SimilarShots::instance()->runsOf(m_items);
+        for (int run = 0; run < runs.size(); ++run) {
+            QStringList paths;
+            for (int index = runs.at(run).first; index <= runs.at(run).second; ++index) {
+                runOfItem[index] = run;
+                paths.append(m_items.at(index).path);
+            }
+            m_stackPaths.insert(m_items.at(runs.at(run).second).path, paths);
+        }
+    }
+
     int currentYear = -1;
     int currentMonth = -1;
     int currentWeek = -1;
@@ -185,12 +226,17 @@ void MediaGridModel::rebuild()
         m_rows.append({0, level, label, key, 0, 0});
     };
     int line = -1;
-    const auto closeLine = [&line] { line = -1; };
     for (int index = 0; index < m_items.size(); ++index) {
         const MediaItem &item = m_items.at(index);
         m_indexOfPath.insert(item.path, index);
         const QDate day = dayOf(item.timestamp);
         const int monthKey = day.year() * 12 + day.month();
+        ++m_monthCounts[monthKey];
+        const int run = runOfItem.at(index);
+        const QString stackKey = run >= 0 ? m_items.at(runs.at(run).second).path : QString();
+        const bool isOpenStack = run >= 0 && m_openStacks.contains(stackKey);
+        if (run >= 0 && !isOpenStack && index != runs.at(run).second)
+            continue;
         int weekYear = 0;
         const int week = day.weekNumber(&weekYear) + weekYear * 100;
         // A week is cut where a larger group starts, so a header never stands inside a week.
@@ -222,14 +268,29 @@ void MediaGridModel::rebuild()
             m_stampOfItem[index] = day;
         currentDay = day;
         if (isCut)
-            closeLine();
-        ++m_monthCounts[monthKey];
+            line = -1;
         if (line < 0 || m_rows.at(line).tileCount >= m_columns || line != m_rows.size() - 1) {
-            m_rows.append({1, QString(), QString(), item.path, index, 0});
+            m_rows.append({1, QString(), QString(), item.path, int(m_tiles.size()), 0});
             line = int(m_rows.size() - 1);
         }
+        Tile tile;
+        tile.item = index;
+        if (run >= 0) {
+            tile.stackSize = runs.at(run).second - runs.at(run).first + 1;
+            tile.stackPosition = isOpenStack ? index - runs.at(run).first + 1 : 0;
+            tile.stackKey = stackKey;
+        }
+        m_tileOfItem[index] = int(m_tiles.size());
+        m_tiles.append(tile);
+        m_rowOfTile.append(line);
         ++m_rows[line].tileCount;
-        m_rowOfItem[index] = int(m_rows.size() - 1);
+    }
+    // The shots of a folded stack stand at its cover's tile.
+    for (const auto &run : std::as_const(runs)) {
+        const int cover = m_tileOfItem.at(run.second);
+        for (int index = run.first; index < run.second; ++index)
+            if (m_tileOfItem.at(index) < 0)
+                m_tileOfItem[index] = cover;
     }
     endResetModel();
     ++m_revision;
@@ -265,13 +326,18 @@ QHash<int, QByteArray> MediaGridModel::roleNames() const
     return {{KindRole, "kind"}, {LevelRole, "level"}, {LabelRole, "label"}, {FirstRole, "first"}, {TileCountRole, "tileCount"}, {KeyRole, "key"}};
 }
 
-QVariantMap MediaGridModel::tile(int index) const
+QVariantMap MediaGridModel::tile(int tileIndex) const
 {
-    if (index < 0 || index >= m_items.size())
+    if (tileIndex < 0 || tileIndex >= m_tiles.size())
         return {};
+    const Tile &shown = m_tiles.at(tileIndex);
+    const int index = shown.item;
     const MediaItem &item = m_items.at(index);
     QVariantMap tile = item.toVariant();
     tile.insert(QStringLiteral("index"), index);
+    tile.insert(QStringLiteral("stackSize"), shown.stackSize);
+    tile.insert(QStringLiteral("stackPosition"), shown.stackPosition);
+    tile.insert(QStringLiteral("stackKey"), shown.stackKey);
     tile.insert(QStringLiteral("duration"), item.isVideo && item.durationMs > 0 ? durationText(item.durationMs) : QString());
     const QDate stamp = m_stampOfItem.value(index);
     tile.insert(QStringLiteral("stamp"), stamp.isValid() ? dayStamp(stamp) : QString());
@@ -300,7 +366,23 @@ int MediaGridModel::indexOfPath(const QString &path) const
 
 int MediaGridModel::rowOfItem(int index) const
 {
-    return index < 0 || index >= m_rowOfItem.size() ? -1 : m_rowOfItem.at(index);
+    const int tile = tileOfItem(index);
+    return tile < 0 ? -1 : m_rowOfTile.at(tile);
+}
+
+int MediaGridModel::itemOfTile(int tileIndex) const
+{
+    return tileIndex < 0 || tileIndex >= m_tiles.size() ? -1 : m_tiles.at(tileIndex).item;
+}
+
+int MediaGridModel::tileOfItem(int index) const
+{
+    return index < 0 || index >= m_tileOfItem.size() ? -1 : m_tileOfItem.at(index);
+}
+
+QStringList MediaGridModel::stackPaths(const QString &stackKey) const
+{
+    return m_stackPaths.value(stackKey);
 }
 
 QStringList MediaGridModel::paths(const QVariantList &indexes) const
@@ -331,8 +413,8 @@ QVariantMap MediaGridModel::monthAtRow(int row) const
     // A header at the top belongs to the photos under it.
     while (row < m_rows.size() - 1 && m_rows.at(row).kind == 0)
         ++row;
-    const int first = m_rows.at(row).first;
-    const QDate day = dayOf(m_items.at(first).timestamp);
+    const int first = m_tiles.value(m_rows.at(row).first).item;
+    const QDate day = dayOf(m_items.value(first).timestamp);
     const int count = m_monthCounts.value(day.year() * 12 + day.month());
     return {{QStringLiteral("label"), QLocale(QLocale::English).toString(day, QStringLiteral("MMMM yy"))},
             {QStringLiteral("count"), count},
@@ -350,7 +432,9 @@ QVariantList MediaGridModel::months() const
             continue;
         current = key;
         // A month header and a week header can both stand in front of the month's first photo; a jump lands with them in view.
-        int row = m_rowOfItem.value(index);
+        int row = rowOfItem(index);
+        if (row < 0)
+            continue;
         while (row > 0 && m_rows.at(row - 1).kind == 0)
             --row;
         list.append(QVariantMap{{QStringLiteral("year"), day.year()}, {QStringLiteral("month"), day.month()},

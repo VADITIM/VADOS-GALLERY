@@ -9,7 +9,7 @@ Item {
 
     required property var grid
     readonly property var list: grid.list
-    readonly property var marks: (grid.model.revision, grid.model.months())
+    readonly property var marks: (grid.model.revision >= 0 && grid.model.months())
     readonly property bool isShown: marks.length > 0 && grid.model.count > 0
 
     readonly property real stripWidth: 24 * Theme.dp

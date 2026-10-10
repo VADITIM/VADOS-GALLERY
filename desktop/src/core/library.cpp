@@ -3,6 +3,7 @@
 #include "mediaFacts.h"
 #include "privateVault.h"
 #include "settings.h"
+#include "similarShots.h"
 
 #include <QDataStream>
 #include <QDateTime>
@@ -332,6 +333,7 @@ void Library::onScanned()
     emit scanningChanged();
     notifyChanged();
     probeVideos();
+    SimilarShots::instance()->index(m_items);
 }
 
 void Library::rescan(const QStringList &folders)

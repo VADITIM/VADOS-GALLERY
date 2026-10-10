@@ -8,7 +8,7 @@ Item {
 
     required property var gallery
     readonly property real rowHeight: 40 * Theme.dp
-    readonly property var albums: gallery.isPrivateMode ? (Vault.revision, Vault.groups()) : (Library.revision, Settings.revision, Library.albums())
+    readonly property var albums: gallery.isPrivateMode ? (Vault.revision >= 0 && Vault.groups()) : (Library.revision >= 0 && Settings.revision >= 0 && Library.albums())
 
     // #region ── the sections ──────────────────────────────────────────────────────────────────
     property string inkActive: gallery.section
@@ -177,7 +177,7 @@ Item {
                 width: places.width
                 glyph: "trash"
                 label: root.gallery.isPrivateMode ? "PRIVATE TRASH" : "TRASH"
-                count: root.gallery.isPrivateMode ? (Vault.revision, Vault.trashCount()) : Library.trashCount
+                count: root.gallery.isPrivateMode ? (Vault.revision >= 0 && Vault.trashCount()) : Library.trashCount
                 accent: Theme.trashGray
                 isChosen: root.gallery.section === "albums" && (root.gallery.navigation.albumsPlace === "trash" || root.gallery.navigation.albumsPlace === "private-trash")
                 onClicked: root.gallery.openTrash()

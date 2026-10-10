@@ -51,7 +51,7 @@ Item {
         if (section === "favorites")
             return "FAVORITES"
         if (place === "folder")
-            return (Library.revision, Settings.revision, Library.displayName(navigation.albumsArgument)).toUpperCase()
+            return (Library.revision >= 0 && Settings.revision >= 0 && Library.displayName(navigation.albumsArgument)).toUpperCase()
         if (place === "private-folder")
             return navigation.albumsArgument.toUpperCase()
         return ""
@@ -67,12 +67,13 @@ Item {
                                         : activeGrid ? activeGrid.monthLabel : isPrivateMode ? "PRIVATE" : place === "folders" ? "ALBUMS" : ""
     readonly property bool isTopPillFilled: Settings.isFolderLabelTop || !activeGrid
     readonly property bool isSelectionAllFavorite: {
-        selection.revision
+        if (selection.revision < 0)
+            return false
         const picked = selection.pickedPhotos()
         if (picked.length === 0)
             return false
         for (const path of picked)
-            if (!(Library.revision, Vault.revision, Library.item(path).isFavorite))
+            if (!(Library.revision >= 0 && Vault.revision >= 0 && Library.item(path).isFavorite))
                 return false
         return true
     }
@@ -556,7 +557,7 @@ Item {
                     CoverGrid {
                         id: albumCovers
                         anchors.fill: parent
-                        covers: (Library.revision, Settings.revision, Library.albums())
+                        covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.albums())
                         places: [
                             { key: "private", name: "Private", glyph: "lock", accent: Theme.privateRed, count: -1 },
                             { key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: Library.trashCount },
@@ -581,8 +582,8 @@ Item {
                     CoverGrid {
                         id: groupCovers
                         anchors.fill: parent
-                        covers: (Vault.revision, Vault.groups())
-                        places: [{ key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: (Vault.revision, Vault.trashCount()) }]
+                        covers: (Vault.revision >= 0 && Vault.groups())
+                        places: [{ key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: (Vault.revision >= 0 && Vault.trashCount()) }]
                         view: "private"
                         selection: shell.selection
                         isActive: shell.place === "private-groups"
@@ -638,7 +639,7 @@ Item {
         id: todaysSelection
         Item {
             id: todaysCard
-            readonly property var pick: (Vault.revision, Vault.todaysSelection())
+            readonly property var pick: (Vault.revision >= 0 && Vault.todaysSelection())
             width: parent ? parent.width : 0
             height: (pick.path ?? "").length > 0 ? Math.min(width * 0.6, 420 * Theme.dp) + 20 * Theme.dp : 0
             visible: height > 0
@@ -770,7 +771,7 @@ Item {
                     id: originPill
                     anchors.horizontalCenter: parent.horizontalCenter
                     isShown: viewer.isSettled && viewer.isTrash && origin.length > 0
-                    readonly property string origin: viewer.isTrash ? (Library.revision, Library.originalAlbumName(viewer.currentPath)) : ""
+                    readonly property string origin: viewer.isTrash ? (Library.revision >= 0 && Library.originalAlbumName(viewer.currentPath)) : ""
                     Item {
                         width: Math.min(originText.implicitWidth + 28 * Theme.dp, 320 * Theme.dp)
                         height: 30 * Theme.dp
@@ -789,7 +790,7 @@ Item {
                 // Empties the whole trash for good, so it waits for Confirm.
                 Pop {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    isShown: places.isNavigation && !viewer.isOpen && shell.isInTrash && (Library.revision, Vault.revision, Library.countFor(shell.gridSource)) > 0
+                    isShown: places.isNavigation && !viewer.isOpen && shell.isInTrash && (Library.revision >= 0 && Vault.revision >= 0 && Library.countFor(shell.gridSource)) > 0
                     Pressable {
                         width: deleteNow.implicitWidth + 28 * Theme.dp
                         height: 32 * Theme.dp

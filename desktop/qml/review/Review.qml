@@ -24,7 +24,7 @@ Item {
     readonly property int total: items.count
     readonly property bool isAtEnd: position >= total
     readonly property string currentPath: isAtEnd ? "" : items.pathAt(total - 1 - position)
-    readonly property var currentFacts: (items.revision, items.item(total - 1 - position))
+    readonly property var currentFacts: (items.revision >= 0 && items.item(total - 1 - position))
 
     visible: shown > 0
     z: 70
