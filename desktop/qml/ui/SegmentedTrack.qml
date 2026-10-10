@@ -30,6 +30,13 @@ Item {
     function slideTo(index: int) {
         const toLeft = 4 * Theme.dp + index * slotWidth
         const toRight = toLeft + slotWidth
+        // Before the track is laid out there is nothing to slide from: the pill is simply there.
+        if (width <= 0 || !visible) {
+            slide.stop()
+            washLeft = toLeft
+            washRight = toRight
+            return
+        }
         const isMovingRight = toRight > washRight
         leftEdge.to = toLeft
         rightEdge.to = toRight
@@ -40,6 +47,7 @@ Item {
 
     onCurrentIndexChanged: if (!isDragging) slideTo(currentIndex)
     onWidthChanged: {
+        slide.stop()
         washLeft = 4 * Theme.dp + currentIndex * slotWidth
         washRight = washLeft + slotWidth
     }

@@ -563,6 +563,14 @@ Item {
                     label: "ADD FOLDER"
                     onClicked: folderDialog.open()
                 }
+                Outlined {
+                    width: parent.width
+                    label: "FIND DUPLICATES"
+                    onClicked: {
+                        root.close()
+                        root.gallery.openDuplicates()
+                    }
+                }
             }
 
             Card {

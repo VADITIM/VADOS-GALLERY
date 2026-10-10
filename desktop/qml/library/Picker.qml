@@ -35,6 +35,7 @@ Item {
     }
     function close() {
         isOpen = false
+        FocusHome.restore()
         riseIn.stop()
         sink.restart()
     }

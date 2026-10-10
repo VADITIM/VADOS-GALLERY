@@ -38,6 +38,8 @@ qt_add_qml_module(vados-gallery
         src/core/gridModel.h src/core/gridModel.cpp
         src/core/mediaEditor.h src/core/mediaEditor.cpp
         src/core/similarShots.h src/core/similarShots.cpp
+        src/core/imagePrint.h src/core/imagePrint.cpp
+        src/core/duplicateFinder.h src/core/duplicateFinder.cpp
         src/core/system.h src/core/system.cpp
         src/core/imageProviders.h src/core/imageProviders.cpp
         src/core/galleryService.h src/core/galleryService.cpp

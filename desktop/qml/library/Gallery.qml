@@ -817,6 +817,11 @@ Item {
         picker.openFor(isGroup ? cover.name : cover.folder, isGroup, cover.name)
     }
 
+    // Opened inside Private, duplicates are looked for among the private photos alone; anywhere else, across the whole library.
+    function openDuplicates() {
+        duplicates.open(isPrivateMode)
+    }
+
     function openReview() {
         if (activeGrid)
             review.open(activeGrid.source, isPrivateMode)
@@ -987,6 +992,12 @@ Item {
         gallery: shell
     }
 
+    DuplicatesScreen {
+        id: duplicates
+        anchors.fill: parent
+        gallery: shell
+    }
+
     Crop {
         id: crop
         anchors.fill: parent
@@ -1028,6 +1039,8 @@ Item {
                 return
             else if (crop.isOpen)
                 crop.close()
+            else if (duplicates.isOpen)
+                duplicates.close()
             else if (review.isOpen)
                 review.close()
             else if (picker.isOpen)

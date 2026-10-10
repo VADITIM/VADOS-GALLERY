@@ -81,6 +81,7 @@ Item {
         }
         save()
         isOpen = false
+        FocusHome.restore()
         riseIn.stop()
         sink.restart()
     }
@@ -112,6 +113,7 @@ Item {
         isSummaryShown = false
         save()
         isOpen = false
+        FocusHome.restore()
         riseIn.stop()
         sink.restart()
     }
