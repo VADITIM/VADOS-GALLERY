@@ -1,8 +1,15 @@
 name: build
 
 on:
+  # The desktop port builds on its own machine; a push touching only it publishes no APK.
   push:
+    paths-ignore:
+      - 'desktop/**'
+      - 'docs/DESKTOP.md'
   pull_request:
+    paths-ignore:
+      - 'desktop/**'
+      - 'docs/DESKTOP.md'
   workflow_dispatch:
 
 # Two pushes in quick succession both publish the same release; without this the older run can finish last and overwrite the newer APK.

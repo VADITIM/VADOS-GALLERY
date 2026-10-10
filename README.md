@@ -24,6 +24,11 @@ removes the confirmation popup from favourite, move and delete).
 
 To make it the default: open any photo from a file manager or chat and choose *Gallery → Always*.
 
+## On Arch
+
+`desktop/` is the same gallery as a native Qt 6 app for Arch under Hyprland, opening the photos VAD/OS Files
+opens: see [`desktop/README.md`](desktop/README.md) and [`docs/DESKTOP.md`](docs/DESKTOP.md).
+
 ## Build locally
 
 ```bash

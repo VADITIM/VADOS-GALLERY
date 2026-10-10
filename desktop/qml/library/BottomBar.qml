@@ -26,8 +26,15 @@ Item {
     }
 
     function change(kind: string) {
-        if (kind === shown && progress >= 1)
+        // Already heading there (a pull let go past the point): the change carries on from where it is.
+        if (kind === shown) {
+            if (progress < 1 && !run.running) {
+                run.from = progress
+                run.duration = (1 - progress) * Motion.stateChange * 2
+                run.restart()
+            }
             return
+        }
         if (kind === previous && progress < 1) {
             // Turning back mid-change runs the same change in reverse from where it is.
             const swapped = shown

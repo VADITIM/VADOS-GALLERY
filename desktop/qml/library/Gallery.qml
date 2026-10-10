@@ -138,7 +138,7 @@ Item {
     readonly property bool hasSidebar: Settings.navigation !== "bubble"
     readonly property bool hasBubble: Settings.navigation !== "sidebar"
 
-    readonly property string barKind: viewer.isRequested ? "viewer"
+    readonly property string barKind: viewer.isRequested && !viewer.isClosing ? "viewer"
                                     : selection.isRearranging ? "rearranging"
                                     : selection.isSelectingCovers ? "covers"
                                     : selection.isSelectingPhotos ? "photos"
@@ -147,7 +147,7 @@ Item {
     readonly property bool isViewerSettled: viewer.isSettled
     readonly property var viewerPhoto: viewerFacts.kept
     readonly property bool isViewerDeletePending: selection.pendingDelete !== null && viewer.isOpen
-    readonly property string viewerCoverKey: viewer.source.startsWith("album:") || (viewer.source.startsWith("private:")) ? viewer.source : ""
+    readonly property string viewerCoverKey: viewer.source.startsWith("album:") || viewer.source.startsWith("private:") || viewer.source.startsWith("favorite-album:") ? viewer.source : ""
     readonly property bool isSettingsOpen: settingsSheet.isOpen
 
     // The open photo and where it came from, kept after it closes, so its buttons pop away showing what they had.
@@ -517,8 +517,12 @@ Item {
     Connections {
         target: viewer
         function onPullChanged() {
-            if (viewer.pull > 0 && !viewer.isClosing)
+            if (viewer.isClosing)
+                return
+            if (viewer.pull > 0)
                 bottomBar.seek(shell.barUnderPhoto, viewer.pull / Motion.chromePullShare)
+            else
+                bottomBar.settleBack()
         }
         function onIsClosingChanged() {
             if (viewer.isClosing)
@@ -539,7 +543,7 @@ Item {
 
     // #region ── backup ────────────────────────────────────────────────────────────────────────
     function backUp(path: string) {
-        if (System.writeTextFile(path, JSON.stringify({ app: "vados-shell", settings: Settings.snapshot() }, null, 1))) {
+        if (System.writeTextFile(path, JSON.stringify({ app: "vados-gallery", settings: Settings.snapshot() }, null, 1))) {
             Settings.setViewValue("backup", "lastSaved", Date.now())
             undo.offer("Backed up", false)
         }
@@ -549,7 +553,7 @@ Item {
     function restoreBackup(path: string) {
         try {
             const backup = JSON.parse(System.readTextFile(path))
-            if (backup.app !== "vados-shell" || !backup.settings)
+            if (backup.app !== "vados-gallery" || !backup.settings)
                 return
             Settings.restoreSnapshot(backup.settings)
             Library.refresh()
@@ -891,6 +895,18 @@ Item {
             visible: y > -height
         }
 
+        // Anything but Confirm lets a waiting delete go: it lies over everything but the bottom controls, where Confirm stands.
+        MouseArea {
+            anchors.fill: parent
+            enabled: selection.pendingDelete !== null
+            acceptedButtons: Qt.AllButtons
+            onPressed: mouse => {
+                selection.pendingDelete = null
+                mouse.accepted = true
+            }
+            onWheel: wheel => wheel.accepted = false
+        }
+
         // The bottom controls: Confirm, the pills that name the place, and the one pill. Over an open photo they hold its buttons.
         Item {
             id: bottomControls
@@ -1077,16 +1093,6 @@ Item {
         gallery: shell
     }
 
-    // Anything but Confirm lets a waiting delete go.
-    MouseArea {
-        anchors.fill: parent
-        z: 4
-        enabled: selection.pendingDelete !== null
-        onPressed: mouse => {
-            selection.pendingDelete = null
-            mouse.accepted = true
-        }
-    }
     // #endregion ───────────────────────────────────────────────────────────────────────────────
 
     // #region ── keys ──────────────────────────────────────────────────────────────────────────

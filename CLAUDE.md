@@ -26,3 +26,15 @@ the APK as the release `v<versionName>`.
 
 Every change raises `versionName` in `app/build.gradle.kts` (and `versionCode`): 1.0.0, 1.0.1, and so on. The release tag comes from it.
 Every change also rewrites `RELEASE_NOTES.md`: a short changelog of that version, a few plain bullets of what changed for the user. It is the release's text.
+
+## The desktop port (`desktop/`)
+
+VADOS Gallery for Arch under Hyprland, in Qt 6 (QML + C++), the stack of VAD/OS Files. `docs/DESKTOP.md` says what it does
+differently from the phone and where things live; `docs/SPEC.md` and `docs/DESIGN.md` hold for it as for the APK.
+
+- Build and run here: `cmake -B desktop/build -G Ninja desktop && cmake --build desktop/build && desktop/build/vados-gallery`. Unlike the APK, the compiler is local.
+- The rules above hold in it, by its own files: sections are `qml/library/Sections.qml`; every change to a photo goes through `src/core/mediaActions.cpp`; durations and curves come from `qml/design/Motion.qml`; leaves read `Theme.accent`; the bubble is VAS's pop bar, taken whole.
+- A desktop-only change raises `project(vados-gallery VERSION …)` in `desktop/CMakeLists.txt`, not `versionName`, and leaves `RELEASE_NOTES.md` alone: the workflow ignores `desktop/`, so it publishes no APK.
+- A binding that must re-run when a store changes reads its revision as `Store.revision >= 0 && …`, never `(Store.revision, …)`: compiled bindings drop the comma's left side, and the dependency with it.
+- A child handed `gallery: gallery` (or `grid: grid`, `shelf: shelf`) binds the property to itself. The roots are `shell`, `photoGrid` and `coverShelf` for that reason.
+- Content of a `Pressable` lies inside its inner face, so `parent` there is not the pressable; reach it by id.
