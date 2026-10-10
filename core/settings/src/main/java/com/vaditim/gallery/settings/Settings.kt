@@ -13,6 +13,8 @@ object Settings {
     const val MIN_COLUMNS = 1
     const val MAX_COLUMNS = 6
     const val MAX_ALBUM_COLUMNS = 4
+    // Outside the groups, the albums of the grouped view sit one to three in a row; a group's own cards always take the full row.
+    const val MAX_GROUPED_COLUMNS = 3
     // The ground's grey, as a share of the lightest it may go.
     const val MAX_GROUND_LEVEL = 64f
 
@@ -83,6 +85,14 @@ object Settings {
         write = { key, value -> putInt(key, value) },
     )
 
+    // The grouped view keeps its own count, so turning grouping off and on never changes the other's.
+    private val groupedColumns = PerViewSetting(
+        "groupedColumns",
+        default = { MIN_COLUMNS },
+        read = { _, key -> getInt(key, MIN_COLUMNS) },
+        write = { key, value -> putInt(key, value) },
+    )
+
     var blurDp by mutableFloatStateOf(DEFAULT_BLUR_DP)
         private set
     var glassOpacity by mutableFloatStateOf(DEFAULT_OPACITY)
@@ -122,7 +132,7 @@ object Settings {
     fun init(store: PreferenceStore) {
         this.store = store
         val preferences = store.preferences
-        listOf(columns, dateGroups, headers, stackSimilar, groupedAlbums, albumColumns).forEach { it.load(store) }
+        listOf(columns, dateGroups, headers, stackSimilar, groupedAlbums, albumColumns, groupedColumns).forEach { it.load(store) }
         blurDp = preferences.getFloat("blur", DEFAULT_BLUR_DP)
         glassOpacity = preferences.getFloat("opacity", DEFAULT_OPACITY)
         groundBrightness = preferences.getFloat("groundBrightness", DEFAULT_GROUND_BRIGHTNESS)
@@ -191,8 +201,9 @@ object Settings {
     fun stackSimilarIn(view: SettingsView): Boolean = stackSimilar[view]
     fun groupedAlbumsIn(view: SettingsView): Boolean = groupedAlbums[view]
     fun albumColumnsIn(view: SettingsView): Int = albumColumns[view]
-    // With Grouped albums on, the albums lie as rows beside the groups, so the column count only applies with it off.
-    fun coverColumnsIn(view: SettingsView): Int = if (groupedAlbumsIn(view) && view.canGroup) 1 else albumColumnsIn(view)
+    fun isGroupedIn(view: SettingsView): Boolean = groupedAlbumsIn(view) && view.canGroup
+    // With Grouped albums on, the albums outside the groups follow their own count, one to three in a row.
+    fun coverColumnsIn(view: SettingsView): Int = if (isGroupedIn(view)) groupedColumns[view].coerceIn(MIN_COLUMNS, MAX_GROUPED_COLUMNS) else albumColumnsIn(view)
 
     val defaultColumns: Int get() = columnsFor(view, folder)
     val dateGroupsInView: Set<DateGroup> get() = dateGroupsFor(view, folder)
@@ -248,6 +259,10 @@ object Settings {
     fun updateStackSimilar(value: Boolean) = stackSimilar.set(store, view, value)
     fun updateGroupedAlbums(value: Boolean) = groupedAlbums.set(store, view, value)
     fun updateAlbumColumns(value: Int) = albumColumns.set(store, view, value.coerceIn(MIN_COLUMNS, MAX_ALBUM_COLUMNS))
+    // Changes the count the view on screen is showing, whichever of the two it is.
+    fun updateCoverColumns(value: Int) {
+        if (isGroupedIn(view)) groupedColumns.set(store, view, value.coerceIn(MIN_COLUMNS, MAX_GROUPED_COLUMNS)) else updateAlbumColumns(value)
+    }
 
     fun updateBlur(value: Float) {
         blurDp = value.coerceIn(0f, MAX_BLUR_DP)

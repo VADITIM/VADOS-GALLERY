@@ -143,7 +143,7 @@ private fun SpinningGear(isSettingsOpen: Boolean) {
 
 private const val GEAR_TURN = 180f
 
-// The back button takes its room and gives it back in two steps: leaving, it pops away and then the month slides into its place; arriving, the month slides over and then it pops in, unless the month arrives with it, when the room is taken at once.
+// The back button takes its room and gives it back while it pops, in one step as long as the add button's: the month slides over as it pops in, and slides into its place as it pops away.
 @Composable
 private fun MakeRoomButton(onClick: (() -> Unit)?, isNeighbourShown: Boolean, icon: @Composable () -> Unit) {
     var lastClick by remember { mutableStateOf(onClick) }
@@ -154,11 +154,11 @@ private fun MakeRoomButton(onClick: (() -> Unit)?, isNeighbourShown: Boolean, ic
     val pop = remember { Animatable(if (isShown) 1f else 0f) }
     LaunchedEffect(isShown) {
         if (isShown) {
-            if (isNeighbourShown) room.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut)) else room.snapTo(1f)
+            if (isNeighbourShown) launch { room.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut)) } else room.snapTo(1f)
             pop.animateTo(1f, tween(Motion.STATE_MS, easing = Motion.backOut))
         } else {
+            launch { room.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut)) }
             pop.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.backIn))
-            room.animateTo(0f, tween(Motion.STATE_MS, easing = Motion.powerThreeInOut))
         }
     }
     if (room.value == 0f && pop.value == 0f && !isShown) return

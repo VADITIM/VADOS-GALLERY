@@ -1,4 +1,3 @@
-# 1.3.8
+# 1.3.13
 
-- While rearranging, the tick that ends it is inverted: a dark tick on the section colour, easy to find.
-- A group peeked open by a hovering album pushes the groups and albums below it down instead of lying over them.
+- A photo opened in the trash says "Was originally in" its album, above the nav.

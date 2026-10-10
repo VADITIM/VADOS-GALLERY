@@ -61,6 +61,8 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
     // Whether the held cover goes into the one under it (an album into a group) instead of trading places.
     var canDropInto: (held: Any, target: Any) -> Boolean = { _, _ -> false }
     var onDropInto: (held: Any, target: Any) -> Unit = { _, _ -> }
+    // Whether letting go over this target puts the cover in; one held over it only briefly is let go back to its place instead.
+    var isReadyToDrop: (target: Any) -> Boolean = { true }
     var isRearranging: () -> Boolean = { false }
     // Null where a drag cannot turn rearranging on (while picking covers).
     var onStartRearranging: (() -> Unit)? = null
@@ -91,7 +93,7 @@ class Reorder(private val state: LazyGridState, private val haptic: HapticFeedba
 
     internal fun end() {
         val held = draggedKey
-        val target = dropTargetKey
+        val target = dropTargetKey?.takeIf(isReadyToDrop)
         // Let go, the card glides the rest of the way into its slot from where the finger left it.
         if (held != null && target == null) settle(held, translation())
         draggedKey = null

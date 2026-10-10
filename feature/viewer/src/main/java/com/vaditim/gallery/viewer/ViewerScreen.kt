@@ -80,6 +80,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.media3.exoplayer.SeekParameters
+import com.vaditim.gallery.components.FadingOverflow
 import com.vaditim.gallery.components.formatSize
 import com.vaditim.gallery.components.AlbumPickerSheet
 import com.vaditim.gallery.components.CloseIcon
@@ -264,6 +265,12 @@ fun BoxScope.ViewerScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                 ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 2, pull = { maxOf(pull, lift) }) { ConfirmPill(pendingDelete, onDone = { pendingDelete = null }) }
+                // A trashed photo says which album it left.
+                if (isTrash) ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 1, pull = { maxOf(pull, lift) }) {
+                    Box(Modifier.padding(horizontal = 16.dp).glass(Shapes.capsule, Palette.viewerGround).padding(horizontal = 18.dp, vertical = 10.dp)) {
+                        FadingOverflow { BasicText("Was originally in ${current.bucketName}", style = Type.value.copy(color = Palette.textBright), maxLines = 1, softWrap = false) }
+                    }
+                }
                 if (video != null) ChromePiece(isChromeAllowed, isChromeVisible, isFromTop = false, order = 0, pull = { maxOf(pull, lift) }) { VideoControls(video, Modifier.padding(horizontal = 16.dp)) }
                 // The buttons are the library's nav, which changes into them as it does for a selection; the viewer only answers what they ask of it.
                 SideEffect {

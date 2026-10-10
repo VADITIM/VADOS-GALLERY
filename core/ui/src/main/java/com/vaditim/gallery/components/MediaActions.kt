@@ -154,7 +154,7 @@ class MediaActions(
         startRequest(MediaStore.createTrashRequest(context.contentResolver, uris, true)) { isDone ->
             if (isDone) {
                 Haptics.confirm(context)
-                undoOffer = UndoOffer(summary(items.size, items.size, "Moved to trash"), Motion.TRASH_UNDO_MS) {
+                undoOffer = UndoOffer(summary(items.size, items.size, "Moved to trash")) {
                     startRequest(MediaStore.createTrashRequest(context.contentResolver, uris, false)) { isRestored -> if (isRestored) Haptics.confirm(context) }
                 }
             } else {
@@ -313,7 +313,7 @@ class MediaActions(
             return
         }
         Haptics.confirm(context)
-        undoOffer = UndoOffer(summary(trashed.size, total, success), Motion.TRASH_UNDO_MS) {
+        undoOffer = UndoOffer(summary(trashed.size, total, success)) {
             scope.launch {
                 val restored = trashed.count { runCatching { vault.restoreFile(it) }.getOrDefault(false) }
                 onPrivateChanged()

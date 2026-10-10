@@ -59,6 +59,8 @@ object Shapes {
     // A card holding a group of settings (components/03-panel-and-field.md §2).
     val field = SquircleShape(18.dp)
     val tile = RoundedCornerShape(8.dp)
-    val viewerPhoto = RoundedCornerShape(24.dp)
+    // The open photo's rounding, which the crop screen runs down to square corners as the photo travels into it.
+    val viewerPhotoCorner = 24.dp
+    val viewerPhoto = RoundedCornerShape(viewerPhotoCorner)
     val capsule = RoundedCornerShape(percent = 50)
 }

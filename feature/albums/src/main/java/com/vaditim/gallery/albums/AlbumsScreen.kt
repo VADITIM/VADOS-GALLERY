@@ -157,8 +157,8 @@ fun AlbumsScreen(
     val entries = remember(albums, stacks) { entriesOf(albums, stacks) }
     val picturesWidth = with(LocalDensity.current) { (LIST_COVER + stackShift(STACK_DEPTH) + GROUP_LABEL_GAP / 2).toPx() }
     // Several groups can be open at once; opening one leaves the others as they are. The set lives above this screen so it survives opening an album and coming back.
-    // While rearranging, back ends rearranging (the app root handles that) rather than closing groups.
-    BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging) { onOpenStacksChange(emptySet()) }
+    // While rearranging, back ends rearranging, and while picking it lets the picks go (the app root handles both) rather than closing groups.
+    BackHandler(enabled = openStacks.isNotEmpty() && !isRearranging && !isPicking) { onOpenStacksChange(emptySet()) }
 
     fun arrange(moved: List<AlbumEntry>, group: String? = null, groupAlbums: List<Album> = emptyList()) = onArrange(
         moved.flatMap { entry ->
@@ -191,6 +191,8 @@ fun AlbumsScreen(
         movingGroups = movingGroups + name
         currentOnOpenStacksChange(if (open) currentOpenStacks + name else currentOpenStacks - name)
     }
+    // A shut group takes the album only once it has opened under it, so passing over one and letting go never drops the album in by accident.
+    reorder.isReadyToDrop = { target -> target is String && target.removePrefix(STACK_KEY_PREFIX).let { it == peeked || it in currentOpenStacks } }
     val hovered = (reorder.dropTargetKey as? String)?.removePrefix(STACK_KEY_PREFIX)
     LaunchedEffect(hovered) {
         // A peek opening or folding pushes the rows below it frame by frame, as an opening group does.
