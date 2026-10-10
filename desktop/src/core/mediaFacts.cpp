@@ -1,11 +1,13 @@
 #include "mediaFacts.h"
 
 #include <QDateTime>
+#include <QFile>
 #include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTimeZone>
 
@@ -85,6 +87,52 @@ void readExif(const QString &path, MediaItem &item)
     exif_data_unref(data);
 }
 
+// The XMP that marks a motion photo sits near the start of the file, so only this much is read to know.
+constexpr qint64 MOTION_HEAD_BYTES = 128 * 1024;
+
+bool readMotionMark(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray head = file.read(MOTION_HEAD_BYTES);
+    return head.contains("MotionPhoto") || head.contains("MicroVideo");
+}
+
+quint64 readUnsigned(const QByteArray &bytes, qint64 at)
+{
+    if (at < 0 || at + 4 > bytes.size())
+        return quint64(-1);
+    quint64 value = 0;
+    for (int index = 0; index < 4; ++index)
+        value = (value << 8) | uchar(bytes[at + index]);
+    return value;
+}
+
+// Walks the MP4's top-level boxes; whatever follows the last whole box (Samsung's own trailer) is not part of the clip.
+qint64 boxesLength(const QByteArray &bytes, qint64 start)
+{
+    qint64 position = start;
+    while (position + 8 <= bytes.size()) {
+        bool isType = true;
+        for (int index = 4; index < 8; ++index) {
+            const uchar letter = uchar(bytes[position + index]);
+            isType = isType && ((letter >= 0x20 && letter <= 0x7E) || letter == 0xA9);
+        }
+        if (!isType)
+            break;
+        quint64 size = readUnsigned(bytes, position);
+        if (size == 1 && position + 16 <= bytes.size())
+            size = (readUnsigned(bytes, position + 8) << 32) | readUnsigned(bytes, position + 12);
+        if (size == 0)
+            size = quint64(bytes.size() - position);
+        if (size < 8 || position + qint64(size) > bytes.size())
+            break;
+        position += qint64(size);
+    }
+    return position - start;
+}
+
 QStringList readTags(const QString &path)
 {
     char buffer[1024];
@@ -127,6 +175,8 @@ MediaItem read(const QFileInfo &info)
         const QString suffix = suffixOf(info.fileName());
         if (suffix == QLatin1String("jpg") || suffix == QLatin1String("jpeg") || suffix == QLatin1String("tif") || suffix == QLatin1String("tiff"))
             readExif(item.path, item);
+        if (suffix == QLatin1String("jpg") || suffix == QLatin1String("jpeg") || suffix == QLatin1String("heic") || suffix == QLatin1String("heif"))
+            item.isMotion = readMotionMark(item.path);
     }
     item.isFavorite = readFavorite(item.path);
     return item;
@@ -140,14 +190,25 @@ bool probeVideo(MediaItem &item)
     QProcess process;
     process.start(ffprobe, {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-print_format"), QStringLiteral("json"),
                             QStringLiteral("-select_streams"), QStringLiteral("v:0"),
-                            QStringLiteral("-show_entries"), QStringLiteral("format=duration:format_tags=creation_time:stream=width,height:stream_tags=rotate:stream_side_data=rotation"),
+                            QStringLiteral("-show_entries"), QStringLiteral("format=duration:format_tags=creation_time,location,com.apple.quicktime.location.ISO6709:stream=width,height:stream_tags=rotate:stream_side_data=rotation"),
                             item.path});
     if (!process.waitForFinished(6000) || process.exitCode() != 0)
         return false;
     const QJsonObject root = QJsonDocument::fromJson(process.readAllStandardOutput()).object();
     const QJsonObject format = root.value(QStringLiteral("format")).toObject();
     item.durationMs = qint64(format.value(QStringLiteral("duration")).toString().toDouble() * 1000.0);
-    const QDateTime created = QDateTime::fromString(format.value(QStringLiteral("tags")).toObject().value(QStringLiteral("creation_time")).toString(), Qt::ISODateWithMs);
+    const QJsonObject tags = format.value(QStringLiteral("tags")).toObject();
+    const QDateTime created = QDateTime::fromString(tags.value(QStringLiteral("creation_time")).toString(), Qt::ISODateWithMs);
+    // Videos keep where they were taken as ISO 6709, e.g. "+52.5200+013.4050/".
+    QString location = tags.value(QStringLiteral("location")).toString();
+    if (location.isEmpty())
+        location = tags.value(QStringLiteral("com.apple.quicktime.location.ISO6709")).toString();
+    static const QRegularExpression iso6709(QStringLiteral("^([+-]\\d+(?:\\.\\d+)?)([+-]\\d+(?:\\.\\d+)?)"));
+    const QRegularExpressionMatch match = iso6709.match(location);
+    if (match.hasMatch() && (match.captured(1).toDouble() != 0 || match.captured(2).toDouble() != 0)) {
+        item.latitude = match.captured(1).toDouble();
+        item.longitude = match.captured(2).toDouble();
+    }
     // A creation time of the epoch is a camera that never set its clock.
     if (created.isValid() && created.toSecsSinceEpoch() > 86400)
         item.timestamp = created.toMSecsSinceEpoch();
@@ -165,6 +226,35 @@ bool probeVideo(MediaItem &item)
         item.height = isTurned ? width : height;
     }
     return true;
+}
+
+Clip findClip(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    const QByteArray bytes = file.readAll();
+    // Samsung writes this name right before the clip.
+    static const QByteArray samsungMarker("MotionPhoto_Data");
+    static const QByteArray fileType("ftyp");
+    const qint64 marker = bytes.indexOf(samsungMarker);
+    qint64 start = -1;
+    if (marker >= 0 && bytes.mid(marker + samsungMarker.size() + 4, 4) == fileType)
+        start = marker + samsungMarker.size();
+    // The clip starts with an MP4 "ftyp" box; a HEIC still opens with its own at byte 4, so the search starts past that.
+    for (qint64 from = 16; start < 0;) {
+        const qint64 found = bytes.indexOf(fileType, from);
+        if (found < 0)
+            break;
+        const quint64 size = readUnsigned(bytes, found - 4);
+        if (size >= 8 && size <= 64)
+            start = found - 4;
+        from = found + 1;
+    }
+    if (start < 0)
+        return {};
+    const qint64 length = boxesLength(bytes, start);
+    return length > 0 ? Clip{start, length} : Clip{};
 }
 
 bool readFavorite(const QString &path)

@@ -37,6 +37,8 @@ public:
     // A still of a video at a position, saved beside it as a full-size JPEG dated at the video's time plus the position.
     Q_INVOKABLE QString saveFrame(const QString &videoPath, qint64 positionMs, qint64 videoTimestamp);
     Q_INVOKABLE bool writeTextFile(const QString &path, const QString &text) const;
+    // Hands a motion photo's clip to a MediaPlayer, read straight out of the photo's file; false when there is no clip or no player.
+    Q_INVOKABLE bool playClip(QObject *player, const QString &path);
     Q_INVOKABLE QString readTextFile(const QString &path) const;
 
 private:

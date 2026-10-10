@@ -227,6 +227,21 @@ Item {
         }
     }
 
+    // A motion photo held plays its clip on a loop over the still; letting go returns to the still.
+    property bool isMotionHeld: false
+    Loader {
+        x: currentPage.x
+        y: currentPage.y
+        width: currentPage.width
+        height: currentPage.height
+        active: viewer.isMotionHeld && viewer.facts.isMotion === true && System.hasVideoPlayback
+        source: active ? "MotionClip.qml" : ""
+        onLoaded: {
+            item.path = viewer.currentPath
+            item.isMuted = viewer.gallery.isVideoMuted
+        }
+    }
+
     // Without Qt Multimedia a video opens in the system's player.
     Pressable {
         anchors.centerIn: currentPage
@@ -383,6 +398,13 @@ Item {
         property real velocityX: 0
         property real startLift: 0
 
+        pressAndHoldInterval: 300
+        onPressAndHold: {
+            if (mode === "" && viewer.isSettled && viewer.facts.isMotion === true) {
+                mode = "motion"
+                viewer.isMotionHeld = true
+            }
+        }
         onPressed: mouse => {
             pressedAt = Qt.point(mouse.x, mouse.y)
             lastAt = pressedAt
@@ -403,6 +425,8 @@ Item {
             velocityX = moveX / Math.max(1, now - lastMoveTime) * 1000
             lastMoveTime = now
             lastAt = Qt.point(mouse.x, mouse.y)
+            if (mode === "motion")
+                return
             if (mode === "") {
                 if (Math.hypot(dx, dy) < 8 * Theme.dp)
                     return
@@ -442,6 +466,9 @@ Item {
             const dx = mouse.x - pressedAt.x
             const dy = mouse.y - pressedAt.y
             switch (mode) {
+            case "motion":
+                viewer.isMotionHeld = false
+                break
             case "":
                 clickTimer.at = Qt.point(mouse.x, mouse.y)
                 if (clickTimer.running) {

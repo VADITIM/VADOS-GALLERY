@@ -40,6 +40,7 @@ Item {
         switch (place) {
         case "folder": return "album:" + navigation.albumsArgument
         case "private-folder": return "private:" + navigation.albumsArgument
+        case "location": return "location:" + navigation.albumsArgument
         case "trash": return "trash"
         case "private-trash": return "private-trash"
         default: return ""
@@ -59,8 +60,8 @@ Item {
         return selection.pickedCovers().some(key => grid.groupOfKey[key] !== undefined)
     }
     readonly property bool isCoverGrouping: coverShelf.length > 0 && coverShelf !== "private" && (Settings.revision >= 0 && Settings.viewValue(coverShelf, "groupedAlbums")) === true
-    readonly property string settingsView: isPrivateMode ? "private" : section === "recent" ? "recent" : section === "favorites" ? "favorites" : place === "trash" ? "trash" : "albums"
-    readonly property string settingsViewLabel: ({ private: "Private", recent: "Recent", favorites: "Favorites", trash: "Trash", albums: "Albums" })[settingsView]
+    readonly property string settingsView: isPrivateMode ? "private" : section === "recent" ? "recent" : section === "favorites" ? "favorites" : place === "trash" ? "trash" : navigation.isInLocations && section === "albums" ? "locations" : "albums"
+    readonly property string settingsViewLabel: ({ private: "Private", recent: "Recent", favorites: "Favorites", trash: "Trash", albums: "Albums", locations: "Locations" })[settingsView]
     // Albums of any kind may keep photo settings of their own.
     readonly property string settingsFolderKey: openedAlbumKey
     readonly property string folderName: {
@@ -72,11 +73,17 @@ Item {
             return (Library.revision >= 0 && Settings.revision >= 0 && Library.displayName(navigation.albumsArgument)).toUpperCase()
         if (place === "private-folder")
             return navigation.albumsArgument.toUpperCase()
+        if (place === "location")
+            return (Library.revision >= 0 && (Library.locations().find(each => each.folder === navigation.albumsArgument) ?? { name: "" }).name).toUpperCase()
         return ""
     }
-    readonly property string placePill: isPrivateMode ? "PRIVATE" : place === "trash" ? "TRASH" : ""
-    readonly property color accentTarget: isPrivateMode ? Theme.privateRed : section === "albums" && place === "trash" ? Theme.trashGray : Sections.find(section).accent
-    readonly property string albumsGlyph: isPrivateMode ? "lock" : navigation.albumsPlace === "trash" ? "trash" : "albums"
+    readonly property string placePill: isPrivateMode ? "PRIVATE" : place === "trash" ? "TRASH" : navigation.isInLocations && section === "albums" ? "LOCATIONS" : ""
+    // Private, Locations and the trash each take their own colour in their own views.
+    readonly property color accentTarget: isPrivateMode ? Theme.privateRed
+                                        : section === "albums" && place === "trash" ? Theme.trashGray
+                                        : section === "albums" && navigation.isInLocations ? Theme.locationBlue
+                                        : Sections.find(section).accent
+    readonly property string albumsGlyph: isPrivateMode ? "lock" : navigation.albumsPlace === "trash" ? "trash" : navigation.isInLocations ? "pin" : "albums"
     readonly property bool canGoBack: isPrivateMode ? section === "albums" && (place === "private-folder" || place === "private-trash")
                                                     : (section === "albums" && place !== "folders") || (section === "favorites" && navigation.favoriteAlbum.length > 0)
     readonly property bool canSetCover: openedAlbumKey.length > 0
@@ -109,6 +116,8 @@ Item {
             return Theme.privateRed
         if (key === "albums" && navigation.albumsPlace === "trash")
             return Theme.trashGray
+        if (key === "albums" && navigation.isInLocations)
+            return Theme.locationBlue
         return Sections.find(key).accent
     }
 
@@ -185,12 +194,17 @@ Item {
             navigation.openGroup(cover.name)
         else if ((cover.key ?? "").startsWith("favorite-album:"))
             navigation.openFavoriteAlbum(cover.name)
+        else if (cover.isLocation)
+            navigation.openLocation(cover.folder)
         else
             navigation.openAlbum(cover.folder)
     }
 
     function openPlace(key: string) {
-        if (key === "trash")
+        if (key === "locations") {
+            selection.clear()
+            navigation.openLocations()
+        } else if (key === "trash")
             openTrash()
         else if (key === "private")
             openPrivate()
@@ -659,6 +673,7 @@ Item {
                         covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.albums())
                         places: [
                             { key: "private", name: "Private", glyph: "lock", accent: Theme.privateRed, count: -1 },
+                            { key: "locations", name: "Locations", glyph: "pin", accent: Theme.locationBlue, count: -1 },
                             { key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: Library.trashCount },
                         ]
                         shelfName: "albums"
@@ -703,7 +718,29 @@ Item {
                     }
                 }
 
-                // The photo grid of the place open inside Albums: an album, a private album, either trash. It keeps its source while it leaves.
+                // Every place photos were taken, by city, most photos first.
+                SectionLayer {
+                    anchors.fill: parent
+                    isFolder: true
+                    isShown: shell.place === "locations"
+
+                    CoverGrid {
+                        id: locationCovers
+                        anchors.fill: parent
+                        covers: (Library.revision >= 0 && Library.locations())
+                        shelfName: "locations"
+                        view: "locations"
+                        selection: shell.selection
+                        memories: shell.memories
+                        isActive: shell.place === "locations"
+                        topInset: shell.topInset
+                        bottomInset: shell.bottomInset
+                        hasNewRow: false
+                        onOpened: cover => shell.openCover(cover)
+                    }
+                }
+
+                // The photo grid of the place open inside Albums: an album, a private album, a location, either trash. It keeps its source while it leaves.
                 SectionLayer {
                     anchors.fill: parent
                     isFolder: true

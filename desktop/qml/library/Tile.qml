@@ -141,6 +141,18 @@ Item {
             }
         }
 
+        // A motion photo's mark stays at the bottom right.
+        Glyph {
+            visible: tile.facts.isMotion === true
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 5 * Theme.dp
+            width: (tile.isSmall ? 12 : 15) * Theme.dp
+            height: width
+            name: "motion"
+            ink: Theme.textBright
+        }
+
         Text {
             visible: (tile.facts.duration ?? "").length > 0
             anchors.horizontalCenter: parent.horizontalCenter

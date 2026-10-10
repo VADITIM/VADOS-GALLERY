@@ -14,6 +14,8 @@ Item {
     property bool isGrouping: false
     property var places: []
     property string newLabel: "NEW ALBUM"
+    // Locations have no New album: a place is where photos were taken, not something made.
+    property bool hasNewRow: true
     required property var selection
     required property var memories
     property bool isActive: true
@@ -139,7 +141,8 @@ Item {
         if (columns !== 1 && looseAlbums.length > 0)
             y += cell + labelRoom + rowGap
         result.newY = y
-        y += 56 * Theme.dp
+        if (hasNewRow)
+            y += 56 * Theme.dp
         result.placesY = y
         if (places.length > 0)
             y += 32 * Theme.dp + Math.min(cell, 150 * Theme.dp) + 46 * Theme.dp
@@ -407,6 +410,7 @@ Item {
         Row {
             x: (flick.width - width) / 2
             y: coverShelf.layout.newY
+            visible: coverShelf.hasNewRow
             spacing: 28 * Theme.dp
 
             Pressable {

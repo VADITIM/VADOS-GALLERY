@@ -109,7 +109,8 @@ Item {
                 width: parent.width
                 text: card.cover.name ?? ""
                 // The albums made inside Favorites wear its colour, apart from real folders.
-                color: card.cover.isFavoriteAlbum === true ? Theme.accent : Theme.textBright
+                // The albums made inside Favorites and the places in Locations wear their view's colour, apart from real folders.
+                color: card.cover.isFavoriteAlbum === true || card.cover.isLocation === true ? Theme.accent : Theme.textBright
                 font.family: Theme.heading
                 // At three or four to a row the name shrinks until it fits, down to 9, then fades at its end.
                 font.pixelSize: card.isList ? 20 * Theme.dp : Math.max(9 * Theme.dp, Math.min(Theme.cardTitleSize, Theme.cardTitleSize * parent.width / Math.max(1, naturalName.implicitWidth)))

@@ -96,6 +96,18 @@ Item {
             font.letterSpacing: Theme.labelSpacing * 0.5
         }
 
+        // A motion photo carries its mark beside the date.
+        Glyph {
+            anchors.left: parent.right
+            anchors.leftMargin: 8 * Theme.dp
+            anchors.verticalCenter: parent.verticalCenter
+            width: 20 * Theme.dp
+            height: width
+            name: "motion"
+            ink: chrome.viewer.isMotionHeld ? Theme.accent : Theme.textBright
+            visible: chrome.viewer.facts.isMotion === true && datePill.widen >= 1
+        }
+
         Item {
             anchors.fill: parent
             anchors.leftMargin: 14 * Theme.dp
@@ -118,6 +130,7 @@ Item {
         id: details
         readonly property var facts: chrome.viewer.facts
         readonly property var file: (chrome.viewer.items.revision >= 0 && System.details(chrome.viewer.currentPath))
+        readonly property var place: (chrome.viewer.items.revision >= 0 && Library.placeOf(chrome.viewer.currentPath))
         width: Math.min(chrome.width - 32 * Theme.dp, 560 * Theme.dp)
         height: rows.implicitHeight + 40 * Theme.dp
         x: (chrome.width - width) / 2
@@ -152,6 +165,8 @@ Item {
                     { label: "SIZE", value: details.file.size ?? "" },
                     { label: "LENGTH", value: details.facts.isVideo && details.facts.durationMs > 0 ? System.formatDuration(details.facts.durationMs) : "" },
                     { label: "FOLDER", value: details.file.folder ?? "" },
+                    { label: "PLACE", value: [details.place.city ?? "", details.place.country ?? ""].filter(part => part.length > 0).join(", ") },
+                    { label: "COORDINATES", value: details.place.latitude !== undefined ? details.place.latitude.toFixed(5) + ", " + details.place.longitude.toFixed(5) : "" },
                 ]
 
                 Item {

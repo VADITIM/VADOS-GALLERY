@@ -89,11 +89,20 @@ Item {
         }
     }
 
+    // Opened at the newest end; a grid shorter than the screen simply starts at its top.
+    function toEnd() {
+        list.positionViewAtEnd()
+        const top = list.originY - list.topMargin
+        if (list.contentHeight + list.topMargin + list.bottomMargin <= list.height || list.contentY < top)
+            list.contentY = top
+        readMonth()
+    }
+
     function restore() {
         const memory = memories[source]
         rememberedSource = source
         if (!memory || memory.isAtEnd) {
-            list.positionViewAtEnd()
+            toEnd()
             return
         }
         // The row that holds the photo that was at the top; it may have moved if photos came or went.
@@ -213,7 +222,7 @@ Item {
             list.contentY = Math.max(list.contentY, startY + (end - startY) * Motion.powerThreeInOutAt(progress))
             if (progress >= 1) {
                 stop()
-                list.positionViewAtEnd()
+                photoGrid.toEnd()
             }
         }
     }

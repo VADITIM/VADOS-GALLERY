@@ -27,6 +27,7 @@ struct CachedFacts {
     double longitude = 0;
     bool hasLocation = false;
     bool isProbed = false;
+    bool isMotion = false;
 };
 
 // Everything the gallery shows, in one place: every photo and video under the library folders (the desktop's MediaStore), its albums, the trash, and lists of files opened from other apps.
@@ -64,6 +65,9 @@ public:
     const MediaItem *find(const QString &path) const;
 
     Q_INVOKABLE QVariantList albums() const;
+    // Every place photos were taken, by city, most photos first: [{ key: "location:…", name, country, count, cover, … }].
+    Q_INVOKABLE QVariantList locations() const;
+    Q_INVOKABLE QVariantMap placeOf(const QString &path) const;
     // The albums made inside Favorites, as covers: only their photos that are still favourites, and none left empty.
     Q_INVOKABLE QVariantList favoriteAlbums() const;
     Q_INVOKABLE QVariantMap album(const QString &folder) const;

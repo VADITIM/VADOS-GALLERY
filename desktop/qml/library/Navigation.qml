@@ -2,7 +2,7 @@ import QtQuick
 import Gallery
 
 // Where the user stands (LibraryNavigation.kt): the section, the place inside Albums, and Private.
-// Places inside Albums: "folders" (the albums), "folder" (one album), "trash", and inside Private "private-groups", "private-folder", "private-trash".
+// Places inside Albums: "folders" (the albums), "folder" (one album), "locations" and "location" (one place), "trash", and inside Private "private-groups", "private-folder", "private-trash".
 QtObject {
     id: navigation
 
@@ -20,12 +20,13 @@ QtObject {
     readonly property string place: section === "albums" ? albumsPlace : ""
     readonly property bool isPrivatePlace: albumsPlace.startsWith("private")
     readonly property bool isTrashPlace: albumsPlace === "trash" || albumsPlace === "private-trash"
+    readonly property bool isInLocations: albumsPlace === "locations" || albumsPlace === "location"
 
     function select(selected: string) {
         if (selected === section) {
             if (selected === "albums") {
                 // Back to the start of the place it is in, not out to the albums; from there, to the newest.
-                const start = isPrivateMode ? "private-groups" : albumsPlace === "trash" ? "trash" : "folders"
+                const start = isPrivateMode ? "private-groups" : albumsPlace === "trash" ? "trash" : isInLocations ? "locations" : "folders"
                 if (albumsPlace === start)
                     ++scrollToNewestRequest
                 albumsPlace = start
@@ -48,6 +49,18 @@ QtObject {
         section = "albums"
         albumsPlace = "folder"
         albumsArgument = folder
+    }
+
+    function openLocations() {
+        section = "albums"
+        albumsPlace = "locations"
+        albumsArgument = ""
+    }
+
+    function openLocation(key: string) {
+        section = "albums"
+        albumsPlace = "location"
+        albumsArgument = key
     }
 
     function openTrash() {
@@ -111,6 +124,12 @@ QtObject {
                 return true
             }
             leavePrivate()
+            return true
+        }
+        // Back from a place goes to the list of places, and from there out to the albums.
+        if (section === "albums" && albumsPlace === "location") {
+            albumsPlace = "locations"
+            albumsArgument = ""
             return true
         }
         if (section === "albums" && albumsPlace !== "folders") {

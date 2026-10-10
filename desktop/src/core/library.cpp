@@ -1,6 +1,7 @@
 #include "library.h"
 
 #include "mediaFacts.h"
+#include "placeNames.h"
 #include "privateVault.h"
 #include "settings.h"
 #include "similarShots.h"
@@ -26,18 +27,18 @@
 QDataStream &operator<<(QDataStream &stream, const CachedFacts &facts)
 {
     return stream << facts.size << facts.modified << facts.timestamp << facts.width << facts.height << facts.durationMs
-                  << facts.latitude << facts.longitude << facts.hasLocation << facts.isProbed;
+                  << facts.latitude << facts.longitude << facts.hasLocation << facts.isProbed << facts.isMotion;
 }
 
 QDataStream &operator>>(QDataStream &stream, CachedFacts &facts)
 {
     return stream >> facts.size >> facts.modified >> facts.timestamp >> facts.width >> facts.height >> facts.durationMs
-                  >> facts.latitude >> facts.longitude >> facts.hasLocation >> facts.isProbed;
+                  >> facts.latitude >> facts.longitude >> facts.hasLocation >> facts.isProbed >> facts.isMotion;
 }
 
 namespace {
 
-constexpr quint32 CACHE_MAGIC = 0x56474931; // "VGI1"
+constexpr quint32 CACHE_MAGIC = 0x56474932; // "VGI2"
 constexpr int RESCAN_DELAY_MS = 350;
 constexpr int SAVE_DELAY_MS = 2000;
 
@@ -71,6 +72,7 @@ CachedFacts factsOf(const MediaItem &item, bool isProbed)
     facts.latitude = facts.hasLocation ? item.latitude : 0;
     facts.longitude = facts.hasLocation ? item.longitude : 0;
     facts.isProbed = isProbed;
+    facts.isMotion = item.isMotion;
     return facts;
 }
 
@@ -89,6 +91,7 @@ MediaItem itemFrom(const QFileInfo &info, const QHash<QString, CachedFacts> &cac
         item.height = cached->height;
         item.durationMs = cached->durationMs;
         item.isVideo = MediaFacts::isVideo(info.fileName());
+        item.isMotion = cached->isMotion;
         if (cached->hasLocation) {
             item.latitude = cached->latitude;
             item.longitude = cached->longitude;
@@ -391,6 +394,8 @@ void Library::onProbed()
         item.timestamp = video.timestamp;
         item.width = video.width;
         item.height = video.height;
+        item.latitude = video.latitude;
+        item.longitude = video.longitude;
     }
     std::sort(m_items.begin(), m_items.end(), isOlder);
     rebuildIndexes();
@@ -540,6 +545,14 @@ QVector<MediaItem> Library::itemsFor(const QString &source) const
         }
         return items;
     }
+    if (source.startsWith(QLatin1String("location:"))) {
+        const QString key = source.mid(9);
+        QVector<MediaItem> items;
+        for (const MediaItem &item : m_items)
+            if (item.hasLocation() && PlaceNames::shared().placeOf(item.latitude, item.longitude).key == key)
+                items.append(item);
+        return items;
+    }
     if (source.startsWith(QLatin1String("favorite-album:"))) {
         const QString name = source.mid(15);
         QSet<QString> paths;
@@ -659,6 +672,51 @@ QVariantList Library::albums() const
     for (const QVariantMap &album : albums)
         list.append(album);
     return list;
+}
+
+QVariantList Library::locations() const
+{
+    struct Gathered {
+        PlaceNames::Place place;
+        int count = 0;
+        const MediaItem *newest = nullptr;
+    };
+    QHash<QString, Gathered> places;
+    for (const MediaItem &item : m_items) {
+        if (!item.hasLocation())
+            continue;
+        const PlaceNames::Place place = PlaceNames::shared().placeOf(item.latitude, item.longitude);
+        Gathered &gathered = places[place.key];
+        gathered.place = place;
+        ++gathered.count;
+        gathered.newest = &item;
+    }
+    QList<Gathered> sorted = places.values();
+    std::sort(sorted.begin(), sorted.end(), [](const Gathered &left, const Gathered &right) { return left.count > right.count; });
+    QVariantList list;
+    for (const Gathered &gathered : sorted)
+        list.append(QVariantMap{
+            {QStringLiteral("key"), QStringLiteral("location:") + gathered.place.key},
+            {QStringLiteral("folder"), gathered.place.key},
+            {QStringLiteral("name"), gathered.place.city},
+            {QStringLiteral("country"), gathered.place.country},
+            {QStringLiteral("count"), gathered.count},
+            {QStringLiteral("cover"), gathered.newest->path},
+            {QStringLiteral("isCoverVideo"), gathered.newest->isVideo},
+            {QStringLiteral("newest"), gathered.newest->timestamp},
+            {QStringLiteral("isLocation"), true},
+        });
+    return list;
+}
+
+QVariantMap Library::placeOf(const QString &path) const
+{
+    const MediaItem *item = find(path);
+    if (!item || !item->hasLocation())
+        return {};
+    const PlaceNames::Place place = PlaceNames::shared().placeOf(item->latitude, item->longitude);
+    return {{QStringLiteral("city"), place.city}, {QStringLiteral("country"), place.country},
+            {QStringLiteral("latitude"), item->latitude}, {QStringLiteral("longitude"), item->longitude}};
 }
 
 QVariantList Library::favoriteAlbums() const

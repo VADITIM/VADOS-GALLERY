@@ -21,7 +21,7 @@ set(GALLERY_SINGLETONS qml/design/Theme.qml qml/design/Motion.qml qml/design/Gla
 set_source_files_properties(${GALLERY_SINGLETONS} PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The inline video player is only part of the module when Qt Multimedia is there to compile it against.
 if(NOT Qt6Multimedia_FOUND)
-    list(FILTER GALLERY_QML EXCLUDE REGEX "qml/viewer/VideoPlayer\\.qml$")
+    list(FILTER GALLERY_QML EXCLUDE REGEX "qml/viewer/(VideoPlayer|MotionClip)\\.qml$")
 endif()
 
 qt_add_qml_module(vados-gallery
@@ -40,6 +40,8 @@ qt_add_qml_module(vados-gallery
         src/core/similarShots.h src/core/similarShots.cpp
         src/core/imagePrint.h src/core/imagePrint.cpp
         src/core/duplicateFinder.h src/core/duplicateFinder.cpp
+        src/core/clipDevice.h src/core/clipDevice.cpp
+        src/core/placeNames.h src/core/placeNames.cpp
         src/core/system.h src/core/system.cpp
         src/core/imageProviders.h src/core/imageProviders.cpp
         src/core/galleryService.h src/core/galleryService.cpp

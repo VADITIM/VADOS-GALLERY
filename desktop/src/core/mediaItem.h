@@ -22,6 +22,8 @@ struct MediaItem {
     qint64 durationMs = 0;
     bool isVideo = false;
     bool isFavorite = false;
+    // A still with a short MP4 appended to the same file, Samsung's and Google's format alike.
+    bool isMotion = false;
     // Only for something in a trash: when it went there and where it came from.
     qint64 trashedAt = 0;
     QString originalPath;
@@ -42,6 +44,7 @@ struct MediaItem {
             {QStringLiteral("durationMs"), durationMs},
             {QStringLiteral("isVideo"), isVideo},
             {QStringLiteral("isFavorite"), isFavorite},
+            {QStringLiteral("isMotion"), isMotion},
             {QStringLiteral("trashedAt"), trashedAt},
             {QStringLiteral("originalPath"), originalPath},
         };

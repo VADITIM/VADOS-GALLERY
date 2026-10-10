@@ -185,6 +185,18 @@ Item {
 
             SidebarRow {
                 width: places.width
+                visible: !root.gallery.isPrivateMode
+                height: visible ? 38 * Theme.dp : 0
+                glyph: "pin"
+                label: "LOCATIONS"
+                count: -1
+                accent: Theme.locationBlue
+                isChosen: root.gallery.section === "albums" && root.gallery.navigation.isInLocations
+                onClicked: root.gallery.openPlace("locations")
+            }
+
+            SidebarRow {
+                width: places.width
                 glyph: root.gallery.isPrivateMode ? "lock-open" : "lock"
                 label: root.gallery.isPrivateMode ? "LEAVE PRIVATE" : "PRIVATE"
                 count: -1

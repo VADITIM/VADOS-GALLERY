@@ -1,5 +1,8 @@
 #include "system.h"
 
+#include "clipDevice.h"
+#include "mediaFacts.h"
+
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -20,6 +23,10 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
+
+#ifdef GALLERY_HAS_MULTIMEDIA
+#include <QMediaPlayer>
+#endif
 
 System::System(QObject *parent)
     : QObject(parent)
@@ -192,6 +199,30 @@ QString System::saveFrame(const QString &videoPath, qint64 positionMs, qint64 vi
         file.close();
     }
     return target;
+}
+
+bool System::playClip(QObject *player, const QString &path)
+{
+#ifdef GALLERY_HAS_MULTIMEDIA
+    auto *mediaPlayer = qobject_cast<QMediaPlayer *>(player);
+    if (!mediaPlayer)
+        return false;
+    const MediaFacts::Clip clip = MediaFacts::findClip(path);
+    if (clip.length <= 0)
+        return false;
+    auto *device = new ClipDevice(path, clip.start, clip.length, mediaPlayer);
+    if (!device->open(QIODevice::ReadOnly)) {
+        delete device;
+        return false;
+    }
+    mediaPlayer->setSourceDevice(device, QUrl(QStringLiteral("clip.mp4")));
+    mediaPlayer->play();
+    return true;
+#else
+    Q_UNUSED(player)
+    Q_UNUSED(path)
+    return false;
+#endif
 }
 
 bool System::writeTextFile(const QString &path, const QString &text) const
