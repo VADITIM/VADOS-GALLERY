@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Gallery
 
 // The library shell (GalleryApp.kt, LibraryController.kt, LibraryScreen.kt): where the user stands, what is on screen worked out from it once,
@@ -566,217 +567,6 @@ Item {
     readonly property real topInset: 10 * Theme.dp + topRow.height + 8 * Theme.dp
     readonly property real bottomInset: bottomControls.height + 24 * Theme.dp
 
-    // Everything the glass blurs: the grids and the photo in flight.
-    Item {
-        id: scene
-        anchors.fill: parent
-        Component.onCompleted: GlassSource.item = scene
-
-        // The ground is part of what the glass blurs, so an empty stretch blurs to it rather than to black.
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.ground
-        }
-
-        Item {
-            id: stage
-            x: shell.contentLeft
-            width: parent.width - x
-            height: parent.height
-
-            SectionLayer {
-                anchors.fill: parent
-                isShown: shell.section === "recent"
-
-                PhotoGrid {
-                    id: recentGrid
-                    anchors.fill: parent
-                    source: shell.isPrivateMode ? "private-recent" : "recent"
-                    view: shell.isPrivateMode ? "private" : "recent"
-                    selection: shell.selection
-                    memories: shell.memories
-                    isActive: shell.section === "recent"
-                    topInset: shell.topInset
-                    bottomInset: shell.bottomInset
-                    timelineSlide: shell.viewerGrowth
-                    onOpened: index => shell.openViewer(recentGrid, index)
-                }
-            }
-
-            // Favorites: every favourite in one grid, the albums made inside it, or one of those albums.
-            SectionLayer {
-                anchors.fill: parent
-                isShown: shell.section === "favorites"
-
-                SectionLayer {
-                    anchors.fill: parent
-                    isFolder: true
-                    isShown: shell.section === "favorites" && shell.gridSource.length > 0
-
-                    PhotoGrid {
-                        id: favoritesGrid
-                        property string keptSource: "favorites"
-                        Binding on keptSource { when: shell.section === "favorites" && shell.gridSource.length > 0; value: shell.gridSource; restoreMode: Binding.RestoreNone }
-                        anchors.fill: parent
-                        source: keptSource
-                        view: shell.isPrivateMode ? "private" : "favorites"
-                        folderKey: keptSource.startsWith("favorite-album:") ? keptSource : ""
-                        selection: shell.selection
-                        memories: shell.memories
-                        isActive: shell.section === "favorites" && shell.gridSource.length > 0
-                        topInset: shell.topInset
-                        bottomInset: shell.bottomInset
-                        timelineSlide: shell.viewerGrowth
-                        onOpened: index => shell.openViewer(favoritesGrid, index)
-                    }
-                }
-
-                SectionLayer {
-                    anchors.fill: parent
-                    isFolder: true
-                    isShown: shell.isFavoriteAlbumsShown
-
-                    CoverGrid {
-                        id: favoriteCovers
-                        anchors.fill: parent
-                        covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.favoriteAlbums())
-                        shelfName: "favorites"
-                        view: "favorites"
-                        isGrouping: (Settings.revision >= 0 && Settings.viewValue("favorites", "groupedAlbums")) === true
-                        selection: shell.selection
-                        memories: shell.memories
-                        isActive: shell.isFavoriteAlbumsShown
-                        topInset: shell.topInset
-                        bottomInset: shell.bottomInset
-                        onOpened: cover => shell.openCover(cover)
-                        onMenuAsked: cover => shell.showCoverMenu(cover)
-                        onGroupMenuAsked: name => shell.sheets.groupMenuFor(favoriteCovers, name)
-                        onNewAsked: shell.newFavoriteAlbum()
-                        onNewGroupAsked: shell.newGroup("favorites")
-                    }
-                }
-            }
-
-            SectionLayer {
-                id: albumsLayer
-                anchors.fill: parent
-                isShown: shell.section === "albums"
-
-                SectionLayer {
-                    anchors.fill: parent
-                    isFolder: true
-                    isShown: shell.place === "folders"
-
-                    CoverGrid {
-                        id: albumCovers
-                        anchors.fill: parent
-                        covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.albums())
-                        places: [
-                            { key: "private", name: "Private", glyph: "lock", accent: Theme.privateRed, count: -1 },
-                            { key: "locations", name: "Locations", glyph: "pin", accent: Theme.locationBlue, count: -1 },
-                            { key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: Library.trashCount },
-                        ]
-                        shelfName: "albums"
-                        view: "albums"
-                        isGrouping: (Settings.revision >= 0 && Settings.viewValue("albums", "groupedAlbums")) === true
-                        selection: shell.selection
-                        memories: shell.memories
-                        isActive: shell.section === "albums" && shell.place === "folders"
-                        topInset: shell.topInset
-                        bottomInset: shell.bottomInset
-                        onOpened: cover => shell.openCover(cover)
-                        onMenuAsked: cover => shell.showCoverMenu(cover)
-                        onGroupMenuAsked: name => shell.sheets.groupMenuFor(albumCovers, name)
-                        onPlaceOpened: key => shell.openPlace(key)
-                        onNewAsked: shell.newAlbum(false)
-                        onNewGroupAsked: shell.newGroup("albums")
-                    }
-                }
-
-                SectionLayer {
-                    anchors.fill: parent
-                    isFolder: true
-                    isShown: shell.place === "private-groups"
-
-                    CoverGrid {
-                        id: groupCovers
-                        anchors.fill: parent
-                        covers: (Vault.revision >= 0 && Vault.groups())
-                        places: [{ key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: (Vault.revision >= 0 && Vault.trashCount()) }]
-                        shelfName: "private"
-                        view: "private"
-                        selection: shell.selection
-                        memories: shell.memories
-                        isActive: shell.place === "private-groups"
-                        topInset: shell.topInset
-                        bottomInset: shell.bottomInset
-                        header: Settings.hasTodaysSelection ? todaysSelection : null
-                        onOpened: cover => shell.openCover(cover)
-                        onMenuAsked: cover => shell.showCoverMenu(cover)
-                        onPlaceOpened: key => shell.openTrash()
-                        onNewAsked: shell.newAlbum(true)
-                    }
-                }
-
-                // Every place photos were taken, by city, most photos first.
-                SectionLayer {
-                    anchors.fill: parent
-                    isFolder: true
-                    isShown: shell.place === "locations"
-
-                    CoverGrid {
-                        id: locationCovers
-                        anchors.fill: parent
-                        covers: (Library.revision >= 0 && Library.locations())
-                        shelfName: "locations"
-                        view: "locations"
-                        selection: shell.selection
-                        memories: shell.memories
-                        isActive: shell.place === "locations"
-                        topInset: shell.topInset
-                        bottomInset: shell.bottomInset
-                        hasNewRow: false
-                        onOpened: cover => shell.openCover(cover)
-                    }
-                }
-
-                // The photo grid of the place open inside Albums: an album, a private album, a location, either trash. It keeps its source while it leaves.
-                SectionLayer {
-                    anchors.fill: parent
-                    isFolder: true
-                    isShown: shell.section === "albums" && shell.gridSource.length > 0
-
-                    PhotoGrid {
-                        id: folderGrid
-                        property string keptSource: ""
-                        property string keptView: "albums"
-                        property string keptFolderKey: ""
-                        Binding on keptSource { when: shell.section === "albums" && shell.gridSource.length > 0; value: shell.gridSource; restoreMode: Binding.RestoreNone }
-                        Binding on keptView { when: shell.section === "albums" && shell.gridSource.length > 0; value: shell.settingsView; restoreMode: Binding.RestoreNone }
-                        Binding on keptFolderKey { when: shell.section === "albums" && shell.gridSource.length > 0; value: shell.settingsFolderKey; restoreMode: Binding.RestoreNone }
-                        anchors.fill: parent
-                        source: keptSource
-                        view: keptView
-                        folderKey: keptFolderKey
-                        selection: shell.selection
-                        memories: shell.memories
-                        isActive: shell.section === "albums" && shell.gridSource.length > 0
-                        topInset: shell.topInset
-                        bottomInset: shell.bottomInset
-                        timelineSlide: shell.viewerGrowth
-                        onOpened: index => shell.openViewer(folderGrid, index)
-                    }
-                }
-            }
-        }
-
-        Viewer {
-            id: viewer
-            anchors.fill: parent
-            gallery: shell
-        }
-    }
-
     // Today's selection: one random private favourite, a new pick every time Private is entered.
     Component {
         id: todaysSelection
@@ -864,157 +654,374 @@ Item {
             review.open(activeGrid.source, isPrivateMode)
     }
 
-    Sidebar {
-        id: sidebar
-        gallery: shell
-        x: 10 * Theme.dp - (width + 20 * Theme.dp) * shell.viewerGrowth
-        y: 10 * Theme.dp
-        width: Math.max(1, shell.sidebarWidth - 4 * Theme.dp)
-        height: parent.height - 20 * Theme.dp
-        visible: shell.hasSidebar && x > -width
-        opacity: shell.hasSidebar ? 1 : 0
-    }
-
-    // The top row slides off the top as a photo grows, following it frame by frame.
-    TopRow {
-        id: topRow
-        gallery: shell
-        x: shell.contentLeft + 12 * Theme.dp
-        y: 10 * Theme.dp - (height + 20 * Theme.dp) * shell.viewerGrowth
-        width: parent.width - x - 12 * Theme.dp
-        visible: y > -height
-    }
-
-    // The bottom controls: Confirm, the pills that name the place, and the one pill. Over an open photo they hold its buttons.
+    // Everything under the sheets: the scene the glass blurs, and the controls standing on it. The settings sheet blurs all of it.
     Item {
-        id: bottomControls
-        readonly property real centreX: shell.contentLeft + (shell.width - shell.contentLeft) / 2
-        readonly property real hiddenShare: viewer.isOpen ? (viewer.isChromeVisible || viewer.pull > 0 ? 0 : 1) : 0
-        property real slide: 0
-        Behavior on slide { NumberAnimation { duration: shell.viewer.isChromeVisible ? Motion.overlayEnter : Motion.overlayLeave; easing.type: shell.viewer.isChromeVisible ? Motion.backOut : Motion.powerTwoIn } }
-        Binding on slide { value: Math.max(bottomControls.hiddenShare, shell.viewer.lift) }
-        width: parent.width
-        height: column.height
-        y: parent.height - height - 16 * Theme.dp + slide * (bottomBar.height + 40 * Theme.dp)
-
-        Column {
-            id: column
-            x: bottomControls.centreX - width / 2
-            width: Math.max(bottomBar.width, places.width, undo.width)
-            spacing: 8 * Theme.dp
-
-            UndoPill {
-                id: undo
-                anchors.horizontalCenter: parent.horizontalCenter
-                Connections {
-                    target: Actions
-                    function onOffered(message, isUndoable) { undo.offer(message, isUndoable) }
-                    function onFailed(message) { undo.offer(message, false) }
-                }
-            }
-
-            // The pills above the nav go with it, popping away as a selection's bar comes.
-            Column {
-                id: places
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 8 * Theme.dp
-                readonly property bool isNavigation: shell.barKind === "navigation" || shell.barKind === "none"
-
-                Pop {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    isShown: places.isNavigation && !Settings.isFolderLabelTop && shell.folderName.length > 0
-                    OwnAccent { id: folderAccent; isShown: !Settings.isFolderLabelTop && shell.folderName.length > 0 }
-                    TypedLabel {
-                        text: shell.folderName
-                        accent: folderAccent.color
-                    }
-                }
-
-                // A photo opened in the trash says where it was.
-                Pop {
-                    id: originPill
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    isShown: viewer.isSettled && viewer.isTrash && origin.length > 0
-                    readonly property string origin: viewer.isTrash ? (Library.revision >= 0 && Library.originalAlbumName(viewer.currentPath)) : ""
-                    Item {
-                        width: Math.min(originText.implicitWidth + 28 * Theme.dp, 320 * Theme.dp)
-                        height: 30 * Theme.dp
-                        Glass { anchors.fill: parent }
-                        FadeText {
-                            id: originText
-                            anchors.centerIn: parent
-                            width: Math.min(implicitWidth, parent.width - 28 * Theme.dp)
-                            text: "Was originally in " + originPill.origin
-                            color: Theme.textBright
-                            font.pixelSize: Theme.labelSize * 1.1
-                        }
-                    }
-                }
-
-                // Empties the whole trash for good, so it waits for Confirm.
-                Pop {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    isShown: places.isNavigation && !viewer.isOpen && shell.isInTrash && (Library.revision >= 0 && Vault.revision >= 0 && Library.countFor(shell.gridSource)) > 0
-                    Pressable {
-                        width: deleteNow.implicitWidth + 28 * Theme.dp
-                        height: 32 * Theme.dp
-                        onClicked: shell.selection.confirmThen(() => shell.place === "private-trash" ? Actions.emptyPrivateTrash() : Actions.emptyTrash())
-                        Glass { anchors.fill: parent }
-                        Text {
-                            id: deleteNow
-                            anchors.centerIn: parent
-                            text: "DELETE NOW"
-                            color: Theme.danger
-                            font.family: Theme.mono
-                            font.pixelSize: Theme.labelSize
-                            font.letterSpacing: Theme.labelSpacing
-                        }
-                    }
-                }
-
-                Pop {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    isShown: places.isNavigation && !viewer.isOpen && shell.placePill.length > 0
-                    property string kept: ""
-                    Binding on kept { when: shell.placePill.length > 0; value: shell.placePill; restoreMode: Binding.RestoreNone }
-                    OwnAccent { id: placeAccent; isShown: shell.placePill.length > 0 }
-                    PlacePill {
-                        label: parent.parent.kept
-                        accent: placeAccent.color
-                        onExited: shell.leavePlace()
-                    }
-                }
-            }
-
-            BottomBar {
-                id: bottomBar
-                anchors.horizontalCenter: parent.horizontalCenter
-                gallery: shell
-                wanted: shell.barKind
-            }
-        }
-
-        // Every delete waits here, above the bar, over anything already there.
-        ConfirmPill {
-            selection: shell.selection
-            x: bottomControls.centreX - width / 2
-            y: bottomControls.height - bottomBar.height - height - 14 * Theme.dp
-            z: 5
-        }
-
-        // In the room right of the nav: the favourites-only heart, and the month's count under it.
-        FavoritesCorner {
-            gallery: shell
-            anchors.bottom: parent.bottom
-            x: bottomControls.centreX + bottomBar.width / 2 + ((shell.width - (bottomControls.centreX + bottomBar.width / 2)) - width) / 2
-            height: bottomBar.height
-        }
-    }
-
-    ViewerChrome {
+        id: backdrop
         anchors.fill: parent
-        viewer: shell.viewer
-        gallery: shell
+
+        // Everything the glass blurs: the grids and the photo in flight.
+        Item {
+            id: scene
+            anchors.fill: parent
+            Component.onCompleted: GlassSource.item = scene
+
+            // The ground is part of what the glass blurs, so an empty stretch blurs to it rather than to black.
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.ground
+            }
+
+            Item {
+                id: stage
+                x: shell.contentLeft
+                width: parent.width - x
+                height: parent.height
+
+                SectionLayer {
+                    anchors.fill: parent
+                    isShown: shell.section === "recent"
+
+                    PhotoGrid {
+                        id: recentGrid
+                        anchors.fill: parent
+                        source: shell.isPrivateMode ? "private-recent" : "recent"
+                        view: shell.isPrivateMode ? "private" : "recent"
+                        selection: shell.selection
+                        memories: shell.memories
+                        isActive: shell.section === "recent"
+                        topInset: shell.topInset
+                        bottomInset: shell.bottomInset
+                        timelineSlide: shell.viewerGrowth
+                        onOpened: index => shell.openViewer(recentGrid, index)
+                    }
+                }
+
+                // Favorites: every favourite in one grid, the albums made inside it, or one of those albums.
+                SectionLayer {
+                    anchors.fill: parent
+                    isShown: shell.section === "favorites"
+
+                    SectionLayer {
+                        anchors.fill: parent
+                        isFolder: true
+                        isShown: shell.section === "favorites" && shell.gridSource.length > 0
+
+                        PhotoGrid {
+                            id: favoritesGrid
+                            property string keptSource: "favorites"
+                            Binding on keptSource { when: shell.section === "favorites" && shell.gridSource.length > 0; value: shell.gridSource; restoreMode: Binding.RestoreNone }
+                            anchors.fill: parent
+                            source: keptSource
+                            view: shell.isPrivateMode ? "private" : "favorites"
+                            folderKey: keptSource.startsWith("favorite-album:") ? keptSource : ""
+                            selection: shell.selection
+                            memories: shell.memories
+                            isActive: shell.section === "favorites" && shell.gridSource.length > 0
+                            topInset: shell.topInset
+                            bottomInset: shell.bottomInset
+                            timelineSlide: shell.viewerGrowth
+                            onOpened: index => shell.openViewer(favoritesGrid, index)
+                        }
+                    }
+
+                    SectionLayer {
+                        anchors.fill: parent
+                        isFolder: true
+                        isShown: shell.isFavoriteAlbumsShown
+
+                        CoverGrid {
+                            id: favoriteCovers
+                            anchors.fill: parent
+                            covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.favoriteAlbums())
+                            shelfName: "favorites"
+                            view: "favorites"
+                            isGrouping: (Settings.revision >= 0 && Settings.viewValue("favorites", "groupedAlbums")) === true
+                            selection: shell.selection
+                            memories: shell.memories
+                            isActive: shell.isFavoriteAlbumsShown
+                            topInset: shell.topInset
+                            bottomInset: shell.bottomInset
+                            onOpened: cover => shell.openCover(cover)
+                            onMenuAsked: cover => shell.showCoverMenu(cover)
+                            onGroupMenuAsked: name => shell.sheets.groupMenuFor(favoriteCovers, name)
+                            onNewAsked: shell.newFavoriteAlbum()
+                            onNewGroupAsked: shell.newGroup("favorites")
+                        }
+                    }
+                }
+
+                SectionLayer {
+                    id: albumsLayer
+                    anchors.fill: parent
+                    isShown: shell.section === "albums"
+
+                    SectionLayer {
+                        anchors.fill: parent
+                        isFolder: true
+                        isShown: shell.place === "folders"
+
+                        CoverGrid {
+                            id: albumCovers
+                            anchors.fill: parent
+                            covers: (Library.revision >= 0 && Settings.revision >= 0 && Library.albums())
+                            places: [
+                                { key: "private", name: "Private", glyph: "lock", accent: Theme.privateRed, count: -1 },
+                                { key: "locations", name: "Locations", glyph: "pin", accent: Theme.locationBlue, count: -1 },
+                                { key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: Library.trashCount },
+                            ]
+                            shelfName: "albums"
+                            view: "albums"
+                            isGrouping: (Settings.revision >= 0 && Settings.viewValue("albums", "groupedAlbums")) === true
+                            selection: shell.selection
+                            memories: shell.memories
+                            isActive: shell.section === "albums" && shell.place === "folders"
+                            topInset: shell.topInset
+                            bottomInset: shell.bottomInset
+                            onOpened: cover => shell.openCover(cover)
+                            onMenuAsked: cover => shell.showCoverMenu(cover)
+                            onGroupMenuAsked: name => shell.sheets.groupMenuFor(albumCovers, name)
+                            onPlaceOpened: key => shell.openPlace(key)
+                            onNewAsked: shell.newAlbum(false)
+                            onNewGroupAsked: shell.newGroup("albums")
+                        }
+                    }
+
+                    SectionLayer {
+                        anchors.fill: parent
+                        isFolder: true
+                        isShown: shell.place === "private-groups"
+
+                        CoverGrid {
+                            id: groupCovers
+                            anchors.fill: parent
+                            covers: (Vault.revision >= 0 && Vault.groups())
+                            places: [{ key: "trash", name: "Trash", glyph: "trash", accent: Theme.trashGray, count: (Vault.revision >= 0 && Vault.trashCount()) }]
+                            shelfName: "private"
+                            view: "private"
+                            selection: shell.selection
+                            memories: shell.memories
+                            isActive: shell.place === "private-groups"
+                            topInset: shell.topInset
+                            bottomInset: shell.bottomInset
+                            header: Settings.hasTodaysSelection ? todaysSelection : null
+                            onOpened: cover => shell.openCover(cover)
+                            onMenuAsked: cover => shell.showCoverMenu(cover)
+                            onPlaceOpened: key => shell.openTrash()
+                            onNewAsked: shell.newAlbum(true)
+                        }
+                    }
+
+                    // Every place photos were taken, by city, most photos first.
+                    SectionLayer {
+                        anchors.fill: parent
+                        isFolder: true
+                        isShown: shell.place === "locations"
+
+                        CoverGrid {
+                            id: locationCovers
+                            anchors.fill: parent
+                            covers: (Library.revision >= 0 && Library.locations())
+                            shelfName: "locations"
+                            view: "locations"
+                            selection: shell.selection
+                            memories: shell.memories
+                            isActive: shell.place === "locations"
+                            topInset: shell.topInset
+                            bottomInset: shell.bottomInset
+                            hasNewRow: false
+                            onOpened: cover => shell.openCover(cover)
+                        }
+                    }
+
+                    // The photo grid of the place open inside Albums: an album, a private album, a location, either trash. It keeps its source while it leaves.
+                    SectionLayer {
+                        anchors.fill: parent
+                        isFolder: true
+                        isShown: shell.section === "albums" && shell.gridSource.length > 0
+
+                        PhotoGrid {
+                            id: folderGrid
+                            property string keptSource: ""
+                            property string keptView: "albums"
+                            property string keptFolderKey: ""
+                            Binding on keptSource { when: shell.section === "albums" && shell.gridSource.length > 0; value: shell.gridSource; restoreMode: Binding.RestoreNone }
+                            Binding on keptView { when: shell.section === "albums" && shell.gridSource.length > 0; value: shell.settingsView; restoreMode: Binding.RestoreNone }
+                            Binding on keptFolderKey { when: shell.section === "albums" && shell.gridSource.length > 0; value: shell.settingsFolderKey; restoreMode: Binding.RestoreNone }
+                            anchors.fill: parent
+                            source: keptSource
+                            view: keptView
+                            folderKey: keptFolderKey
+                            selection: shell.selection
+                            memories: shell.memories
+                            isActive: shell.section === "albums" && shell.gridSource.length > 0
+                            topInset: shell.topInset
+                            bottomInset: shell.bottomInset
+                            timelineSlide: shell.viewerGrowth
+                            onOpened: index => shell.openViewer(folderGrid, index)
+                        }
+                    }
+                }
+            }
+
+            Viewer {
+                id: viewer
+                anchors.fill: parent
+                gallery: shell
+            }
+        }
+
+        Sidebar {
+            id: sidebar
+            gallery: shell
+            x: 10 * Theme.dp - (width + 20 * Theme.dp) * shell.viewerGrowth
+            y: 10 * Theme.dp
+            width: Math.max(1, shell.sidebarWidth - 4 * Theme.dp)
+            height: parent.height - 20 * Theme.dp
+            visible: shell.hasSidebar && x > -width
+            opacity: shell.hasSidebar ? 1 : 0
+        }
+
+        // The top row slides off the top as a photo grows, following it frame by frame.
+        TopRow {
+            id: topRow
+            gallery: shell
+            x: shell.contentLeft + 12 * Theme.dp
+            y: 10 * Theme.dp - (height + 20 * Theme.dp) * shell.viewerGrowth
+            width: parent.width - x - 12 * Theme.dp
+            visible: y > -height
+        }
+
+        // The bottom controls: Confirm, the pills that name the place, and the one pill. Over an open photo they hold its buttons.
+        Item {
+            id: bottomControls
+            readonly property real centreX: shell.contentLeft + (shell.width - shell.contentLeft) / 2
+            readonly property real hiddenShare: viewer.isOpen ? (viewer.isChromeVisible || viewer.pull > 0 ? 0 : 1) : 0
+            property real slide: 0
+            Behavior on slide { NumberAnimation { duration: shell.viewer.isChromeVisible ? Motion.overlayEnter : Motion.overlayLeave; easing.type: shell.viewer.isChromeVisible ? Motion.backOut : Motion.powerTwoIn } }
+            Binding on slide { value: Math.max(bottomControls.hiddenShare, shell.viewer.lift) }
+            width: parent.width
+            height: column.height
+            y: parent.height - height - 16 * Theme.dp + slide * (bottomBar.height + 40 * Theme.dp)
+
+            Column {
+                id: column
+                x: bottomControls.centreX - width / 2
+                width: Math.max(bottomBar.width, places.width, undo.width)
+                spacing: 8 * Theme.dp
+
+                UndoPill {
+                    id: undo
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    Connections {
+                        target: Actions
+                        function onOffered(message, isUndoable) { undo.offer(message, isUndoable) }
+                        function onFailed(message) { undo.offer(message, false) }
+                    }
+                }
+
+                // The pills above the nav go with it, popping away as a selection's bar comes.
+                Column {
+                    id: places
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 8 * Theme.dp
+                    readonly property bool isNavigation: shell.barKind === "navigation" || shell.barKind === "none"
+
+                    Pop {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        isShown: places.isNavigation && !Settings.isFolderLabelTop && shell.folderName.length > 0
+                        OwnAccent { id: folderAccent; isShown: !Settings.isFolderLabelTop && shell.folderName.length > 0 }
+                        TypedLabel {
+                            text: shell.folderName
+                            accent: folderAccent.color
+                        }
+                    }
+
+                    // A photo opened in the trash says where it was.
+                    Pop {
+                        id: originPill
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        isShown: viewer.isSettled && viewer.isTrash && origin.length > 0
+                        readonly property string origin: viewer.isTrash ? (Library.revision >= 0 && Library.originalAlbumName(viewer.currentPath)) : ""
+                        Item {
+                            width: Math.min(originText.implicitWidth + 28 * Theme.dp, 320 * Theme.dp)
+                            height: 30 * Theme.dp
+                            Glass { anchors.fill: parent }
+                            FadeText {
+                                id: originText
+                                anchors.centerIn: parent
+                                width: Math.min(implicitWidth, parent.width - 28 * Theme.dp)
+                                text: "Was originally in " + originPill.origin
+                                color: Theme.textBright
+                                font.pixelSize: Theme.labelSize * 1.1
+                            }
+                        }
+                    }
+
+                    // Empties the whole trash for good, so it waits for Confirm.
+                    Pop {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        isShown: places.isNavigation && !viewer.isOpen && shell.isInTrash && (Library.revision >= 0 && Vault.revision >= 0 && Library.countFor(shell.gridSource)) > 0
+                        Pressable {
+                            width: deleteNow.implicitWidth + 28 * Theme.dp
+                            height: 32 * Theme.dp
+                            onClicked: shell.selection.confirmThen(() => shell.place === "private-trash" ? Actions.emptyPrivateTrash() : Actions.emptyTrash())
+                            Glass { anchors.fill: parent }
+                            Text {
+                                id: deleteNow
+                                anchors.centerIn: parent
+                                text: "DELETE NOW"
+                                color: Theme.danger
+                                font.family: Theme.mono
+                                font.pixelSize: Theme.labelSize
+                                font.letterSpacing: Theme.labelSpacing
+                            }
+                        }
+                    }
+
+                    Pop {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        isShown: places.isNavigation && !viewer.isOpen && shell.placePill.length > 0
+                        property string kept: ""
+                        Binding on kept { when: shell.placePill.length > 0; value: shell.placePill; restoreMode: Binding.RestoreNone }
+                        OwnAccent { id: placeAccent; isShown: shell.placePill.length > 0 }
+                        PlacePill {
+                            label: parent.parent.kept
+                            accent: placeAccent.color
+                            onExited: shell.leavePlace()
+                        }
+                    }
+                }
+
+                BottomBar {
+                    id: bottomBar
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    gallery: shell
+                    wanted: shell.barKind
+                }
+            }
+
+            // Every delete waits here, above the bar, over anything already there.
+            ConfirmPill {
+                selection: shell.selection
+                x: bottomControls.centreX - width / 2
+                y: bottomControls.height - bottomBar.height - height - 14 * Theme.dp
+                z: 5
+            }
+
+            // In the room right of the nav: the favourites-only heart, and the month's count under it.
+            FavoritesCorner {
+                gallery: shell
+                anchors.bottom: parent.bottom
+                x: bottomControls.centreX + bottomBar.width / 2 + ((shell.width - (bottomControls.centreX + bottomBar.width / 2)) - width) / 2
+                height: bottomBar.height
+            }
+        }
+
+        ViewerChrome {
+            anchors.fill: parent
+            viewer: shell.viewer
+            gallery: shell
+        }
     }
 
     Picker {
@@ -1039,6 +1046,25 @@ Item {
         id: crop
         anchors.fill: parent
         gallery: shell
+    }
+
+    // The screen behind the settings blurs slightly while they are open, and clears as they close.
+    ShaderEffectSource {
+        id: sceneUnderSettings
+        visible: false
+        sourceItem: settingsSheet.growth > 0 ? backdrop : null
+        live: true
+    }
+    MultiEffect {
+        anchors.fill: parent
+        z: 89
+        visible: settingsSheet.growth > 0
+        opacity: settingsSheet.growth
+        source: sceneUnderSettings
+        blurEnabled: true
+        blur: 0.5
+        blurMax: 24
+        autoPaddingEnabled: false
     }
 
     SettingsSheet {
