@@ -2,6 +2,18 @@
 
 What changed in each feature version. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
 
+## Planned
+
+Ideas for coming minor patches; nothing here is built yet.
+
+- **Pinterest view:** a grid layout where each photo keeps its own size and aspect ratio, shown dynamically. With headers the rows align under them; without headers it is a plain Pinterest-style masonry.
+- **Settings overhaul:**
+  - The tabs use the main nav at the bottom and mutate into the settings tabs.
+  - The settings button moves to the bottom, within easy reach, since some features are used regularly. The space freed at the top goes to the folder pill and the like.
+  - Settings keep most of their look, refined. Review Photos stays as it is; Own settings take on Review Photos' style; Find duplicates moves out of its Library container.
+  - More and different colours to set real features apart from settings, layouts and interface.
+- **White mode and OLED:** Background brightness is replaced by a white mode, with 25% as its new default value. A new OLED setting turns the background entirely black.
+
 ## 1.3: duplicates and Private's trash (1.3.0 – 1.3.5)
 
 - **Duplicates:** Settings → General → Find duplicates scans every photo and groups copies of the same picture by their pixels, whatever their names, sizes, dates or compression. Exact, Close and Loose set how alike they must be; the best copy of each set is kept and the rest are marked, deleted to the trash after Confirm. Its own feature module (`feature/duplicates`); the matching (`ImagePrint.kt`) is plain Kotlin, tested on a desktop against real photos.
