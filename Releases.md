@@ -1,18 +1,6 @@
 # Releases
 
-What changed in each feature version. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
-
-## Planned
-
-Ideas for coming minor patches; nothing here is built yet.
-
-- **Pinterest view:** a grid layout where each photo keeps its own size and aspect ratio, shown dynamically. With headers the rows align under them; without headers it is a plain Pinterest-style masonry.
-- **Settings overhaul:**
-  - The tabs use the main nav at the bottom and mutate into the settings tabs.
-  - The settings button moves to the bottom, within easy reach, since some features are used regularly. The space freed at the top goes to the folder pill and the like.
-  - Settings keep most of their look, refined. Review Photos stays as it is; Own settings take on Review Photos' style; Find duplicates moves out of its Library container.
-  - More and different colours to set real features apart from settings, layouts and interface.
-- **White mode and OLED:** Background brightness is replaced by a white mode, with 25% as its new default value. A new OLED setting turns the background entirely black.
+What changed in each feature version. Planned work is in `.claude/docs/roadmap.md`. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
 
 ## 1.3: duplicates and Private's trash (1.3.0 – 1.3.5)
 
@@ -57,15 +45,3 @@ Everything up to 1.0 is the basic feature set of a gallery app, built natively i
 - **Editing:** crop photos, crop and trim videos, save a video frame as a photo, always saved as a copy.
 - **Review mode:** swipe through a folder newest first, mark photos, delete at the end, progress kept per folder.
 - **Other:** motion photos (hold to play), stacks of similar shots, Today's selection, undo for delete and move, a Confirm pill for every delete, haptics on every action, glass blur over floating UI, settings sheet (per-view grid and album settings), backup and restore of settings, covers and progress, launcher icon, signed releases.
-
-## Planned
-
-Future minor releases, not yet assigned a version.
-
-### Search
-
-- **Search:** find photos by describing them. Samsung only for now: Galaxy AI ships Gemini built in, and this feature may fork that to power the search here. Other phones do not get it yet.
-
-### Customization
-
-- **Customization:** change values, UI components, general interactions and how long UI elements are displayed, among other things.

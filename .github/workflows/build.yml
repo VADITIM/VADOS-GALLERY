@@ -5,11 +5,11 @@ on:
   push:
     paths-ignore:
       - 'desktop/**'
-      - 'docs/DESKTOP.md'
+      - '.claude/**'
   pull_request:
     paths-ignore:
       - 'desktop/**'
-      - 'docs/DESKTOP.md'
+      - '.claude/**'
   workflow_dispatch:
 
 # Two pushes in quick succession both publish the same release; without this the older run can finish last and overwrite the newer APK.
@@ -70,9 +70,11 @@ jobs:
           name: vados-gallery
           path: out/
 
-      # One release per version, tagged v<versionName>, its text the short changelog in RELEASE_NOTES.md. Bump versionName in app/build.gradle.kts with every change; a push that keeps the version replaces that release.
       - name: Publish release
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        if: >-
+          github.ref == 'refs/heads/master' &&
+          (github.event_name == 'workflow_dispatch' ||
+           (github.event_name == 'push' && vars.RELEASE_ON_PUSH == 'true'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

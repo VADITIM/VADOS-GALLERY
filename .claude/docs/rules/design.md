@@ -1,6 +1,6 @@
 # VAS on a phone — the gallery's design adaptation
 
-VADOS Gallery is built on **VAS, base register** (`VADOS-APPLICATION-SYSTEMS/dna/`), taken as **a taste,
+VADOS Gallery is built on **VAS, base register** (`VADOS-APPLICATION-SYSTEMS/architecture/`), taken as **a taste,
 not a copy**: the micro-labels, the accents per section, the motion grammar and the tempo stay; the
 hard terminal edges go. Softer, rounder, glassier — closer to a phone than to a console menu. This file
 records where it departs from VAS, and why. Everything not mentioned here is VAS as written.

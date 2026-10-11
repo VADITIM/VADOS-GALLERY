@@ -14,8 +14,8 @@ cuts the rest.
 |---|---|
 | Platform | Android 11+ (API 30), targeted at Android 16 on a Galaxy S25 |
 | Stack | Kotlin, Jetpack Compose, Coil 3. Native rendering throughout, no WebView |
-| Distribution | Sideloaded. A debug APK built by CI on every push |
-| Design | VAS (VADOS APPLICATION SYSTEMS), base register, adapted for a phone app — `docs/DESIGN.md` |
+| Distribution | Sideloaded. An APK built by CI on every push, published as a release on command |
+| Design | VAS (VADOS APPLICATION SYSTEMS), base register, adapted for a phone app — `docs/rules/design.md` |
 
 ## Sections
 

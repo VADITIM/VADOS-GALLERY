@@ -9,3 +9,5 @@ build/
 *.apk
 *.keystore
 !app/debug.keystore
+/.claude/settings.local.json
+/.claude/skills/vas/

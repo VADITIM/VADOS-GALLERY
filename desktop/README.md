@@ -4,8 +4,8 @@ VADOS Gallery as a native Qt 6 app for Arch under Hyprland: Recent, Albums and F
 bottom, Private behind a PIN, the trash, review, crop and draw, duplicates, similar shots, Locations, and a
 viewer that grows out of its tile. It opens the photos VAD/OS Files opens.
 
-What it does is `../docs/SPEC.md`; how it looks and moves is `../docs/DESIGN.md`; what the desktop does
-differently is `../docs/DESKTOP.md`.
+What it does is `../.claude/docs/spec.md`; how it looks and moves is `../.claude/docs/rules/design.md`; what the desktop does
+differently is `../.claude/docs/desktop.md`.
 
 ## Install
 

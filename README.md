@@ -4,12 +4,12 @@ A replacement for Samsung Gallery: three sections (Recent, Albums, Favorites), n
 like Apple Photos, and a ••• menu that holds three things instead of twenty. Native Android, built on
 the VAS design system.
 
-- **What it does and why:** [`docs/SPEC.md`](docs/SPEC.md)
-- **How it looks and moves:** [`docs/DESIGN.md`](docs/DESIGN.md)
+- **What it does and why:** [`.claude/docs/spec.md`](.claude/docs/spec.md)
+- **How it looks and moves:** [`.claude/docs/rules/design.md`](.claude/docs/rules/design.md)
 
 ## Install
 
-Every push to `master` publishes the APK at
+Each release publishes the APK at
 **[releases/latest](https://github.com/VADITIM/VADOS-GALLERY/releases/latest)**.
 Install **`vados-gallery-v<version>.apk`**, the optimised build. Only the release build is published.
 
@@ -27,7 +27,7 @@ To make it the default: open any photo from a file manager or chat and choose *G
 ## On Arch
 
 `desktop/` is the same gallery as a native Qt 6 app for Arch under Hyprland, opening the photos VAD/OS Files
-opens: see [`desktop/README.md`](desktop/README.md) and [`docs/DESKTOP.md`](docs/DESKTOP.md).
+opens: see [`desktop/README.md`](desktop/README.md) and [`.claude/docs/desktop.md`](.claude/docs/desktop.md).
 
 ## Build locally
 

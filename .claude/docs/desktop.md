@@ -1,11 +1,11 @@
 # VADOS Gallery on the desktop — the Arch port
 
-`desktop/` is VADOS Gallery written again for Arch under Hyprland: the same product (`docs/SPEC.md`),
-the same VAS adaptation (`docs/DESIGN.md`), in Qt 6 (QML + C++) instead of Compose. It is the stack of
+`desktop/` is VADOS Gallery written again for Arch under Hyprland: the same product (`docs/spec.md`),
+the same VAS adaptation (`docs/rules/design.md`), in Qt 6 (QML + C++) instead of Compose. It is the stack of
 VAD/OS Files, so the two apps share the squircle shader, the glyph inking, the freedesktop thumbnail
 cache and the trash, and talk to each other over the session bus.
 
-Everything in `docs/SPEC.md` and `docs/DESIGN.md` holds here unless this file says otherwise. These are
+Everything in `docs/spec.md` and `docs/rules/design.md` holds here unless this file says otherwise. These are
 the desktop's own decisions (the platform's part of VAS's 80/20), each with its reason.
 
 ## What the phone has that a desktop does not
