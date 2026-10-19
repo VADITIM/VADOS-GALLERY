@@ -157,6 +157,7 @@ internal fun BottomControls(controller: LibraryController, content: LibraryConte
         AnimatedVisibility(controller.shownBar(screen) == BottomBar.NAVIGATION, enter = TOP_ENTER, exit = TOP_EXIT) {
             PlacePills(controller, content, screen)
         }
+        SelectionSendBar(controller, screen)
         // Private's red reaches the nav on the cut, once the outgoing view has left, like every other accent.
         var isPrivateInk by remember { mutableStateOf(screen.isPrivateMode) }
         LaunchedEffect(screen.isPrivateMode) {
@@ -366,7 +367,28 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen, i
     }
 }
 
-// Picked photos: in the trash, restore or delete for good; elsewhere share, favourite, set as cover, move, take into or out of Private, or delete.
+// Share and PDF for picked photos, a glass pill of their own above the actions' bar so the bar keeps its room; kept while it leaves, so it pops away showing what it had.
+@Composable
+private fun SelectionSendBar(controller: LibraryController, screen: LibraryScreen) {
+    var selectedItems by remember { mutableStateOf(emptyList<MediaItem>()) }
+    if (screen.selectedItems.isNotEmpty()) selectedItems = screen.selectedItems
+    AnimatedVisibility(controller.shownBar(screen) == BottomBar.PHOTOS && !screen.isInTrash, enter = TOP_ENTER, exit = TOP_EXIT) {
+        Box(Modifier.padding(bottom = 8.dp).glass(Shapes.capsule)) {
+            Row(Modifier.padding(5.dp)) {
+                IconButton(onClick = { controller.actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+                // Photos only; videos in the selection are left out of it.
+                OptionalButton(selectedItems.any { !it.isVideo }) {
+                    IconButton(onClick = {
+                        controller.actions.toPdf(selectedItems)
+                        controller.clearSelection()
+                    }) { PdfIcon(Palette.textBody) }
+                }
+            }
+        }
+    }
+}
+
+// Picked photos: in the trash, restore or delete for good; elsewhere favourite, set as cover, move, take into or out of Private, or delete.
 @Composable
 private fun PhotoActions(controller: LibraryController, content: LibraryContent, screen: LibraryScreen, isLeaving: Boolean) {
     val selection = controller.selection
@@ -386,14 +408,6 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             // Out of the trash there is no coming back.
             IconButton(onClick = { confirmDelete { actions.deleteForever(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
             return@Row
-        }
-        IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
-        // Photos only; videos in the selection are left out of it.
-        OptionalButton(selectedItems.any { !it.isVideo }) {
-            IconButton(onClick = {
-                actions.toPdf(selectedItems)
-                controller.clearSelection()
-            }) { PdfIcon(Palette.textBody) }
         }
         // Favourites every selected photo, or takes them all out once all of them are favourites; the selection stays, so it can be undone with another tap.
         // An emptied selection counts as none, or the heart flashes red while the bar leaves.

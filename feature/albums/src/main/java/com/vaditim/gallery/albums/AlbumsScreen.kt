@@ -244,7 +244,11 @@ fun AlbumsScreen(
                     GroupRow(
                         stack = entry,
                         isOpen = isOpen,
-                        onOpenChange = { open -> setOpen(entry.name, open) },
+                        // Flagged as moving in the same frame as the tap, so the rows under it follow the group's height from its first pixel instead of gliding after it and landing late.
+                        onOpenChange = { open ->
+                            if (isOpen != open) movingGroups = movingGroups + entry.name
+                            setOpen(entry.name, open)
+                        },
                         onMotion = { isMoving -> movingGroups = if (isMoving) movingGroups + entry.name else movingGroups - entry.name },
                         isPicking = isPicking,
                         selectedPaths = selectedPaths,
@@ -406,6 +410,8 @@ private fun GroupRow(
     }
     LaunchedEffect(isShown) {
         if (!isShown) isPulled = false
+        // Whatever opened or closed it (a tap, the back gesture, a peek), the rows below follow it frame by frame until it has landed.
+        if (time.value != (if (isShown) 1f else 0f)) onMotion(true)
         val target = if (isShown) 1f else 0f
         // Started part way, by a pull, it takes only the share of the time that is left.
         time.animateTo(target, tween((Motion.STACK_MS * abs(target - time.value)).roundToInt(), easing = LinearEasing))
