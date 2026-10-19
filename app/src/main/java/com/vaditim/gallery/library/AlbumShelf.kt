@@ -72,6 +72,7 @@ sealed class AlbumShelf(val kind: AlbumShelfKind, val view: SettingsView, val st
             AlbumArrangement.favoriteAlbums.rename(old, new)
             stacks.renameAlbum(old, new)
             AlbumArrangement.favoriteAlbumOrder.rename(old, new)
+            AlbumArrangement.nameColors.move(old, new)
             onCoverMoved(old.hashCode().toLong(), new.hashCode().toLong())
             onRenamed(old, new)
         }

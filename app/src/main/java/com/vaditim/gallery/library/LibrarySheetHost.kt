@@ -347,6 +347,7 @@ private fun NameSheets(controller: LibraryController, screen: LibraryScreen) {
             label = "RENAME ALBUM",
             action = "RENAME",
             initialName = sheets.album?.name.orEmpty(),
+            colorKey = sheets.album?.relativePath,
             onConfirm = { name ->
                 sheets.album?.let { shelf.rename(it, name) }
                 sheets.dismiss()
@@ -357,6 +358,7 @@ private fun NameSheets(controller: LibraryController, screen: LibraryScreen) {
             label = "RENAME ALBUM",
             action = "RENAME",
             initialName = sheets.group?.name.orEmpty(),
+            colorKey = sheets.group?.let { AlbumArrangement.privateGroupKey(it.name) },
             onConfirm = { name ->
                 sheets.group?.let { if (name != it.name) actions.renameGroup(it, name) }
                 sheets.dismiss()

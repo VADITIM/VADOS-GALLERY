@@ -230,6 +230,7 @@ fun AlbumsScreen(
                             modifier = Modifier.jiggle(reorder, entry.key, isRearranging),
                             isSelected = album.relativePath in selectedPaths,
                             isLifted = reorder.draggedKey == entry.key,
+                            colorKey = album.relativePath,
                         )
                     }
                 }
@@ -604,6 +605,7 @@ private fun GroupRow(
                         isSelected = isSelected,
                         isList = false,
                         isLifted = heldId == album.id,
+                        colorKey = album.relativePath,
                         // The name waits until the card is well clear of the stack, so names never print over each other.
                         labelAlpha = { ((progressOf(index) - 0.5f) * 2f).coerceIn(0f, 1f) },
                         modifier = Modifier

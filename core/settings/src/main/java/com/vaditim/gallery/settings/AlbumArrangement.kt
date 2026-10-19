@@ -15,9 +15,13 @@ object AlbumArrangement {
     val favoriteStacks = AlbumStacks("favoriteStacks")
     val favoriteAlbums = FavoriteAlbums("favoriteAlbums", favoriteStacks)
     val albumNames = AlbumNames("albumNames")
+    val nameColors = NameColors("nameColors")
+
+    // A private group's key among the colours; albums use their path, Favorites albums their name.
+    fun privateGroupKey(name: String) = "private:$name"
 
     fun init(store: PreferenceStore) {
-        listOf(albumOrder, groupOrder, favoriteAlbumOrder, albumStacks, favoriteStacks, favoriteAlbums, albumNames).forEach { it.load(store) }
+        listOf(albumOrder, groupOrder, favoriteAlbumOrder, albumStacks, favoriteStacks, favoriteAlbums, albumNames, nameColors).forEach { it.load(store) }
     }
 }
 
@@ -116,6 +120,29 @@ class FavoriteAlbums(private val key: String, private val stacks: AlbumStacks) :
     fun delete(names: Collection<String>) = update(all.filter { it.name !in names })
 
     fun rename(old: String, new: String) = update(all.renamedAlbum(old, new))
+}
+
+// The colour a name was given while it was renamed, as ARGB by the same key the album or group is arranged by; a name with none keeps the default.
+class NameColors(private val key: String) : StoredValue() {
+    var byKey by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
+
+    override fun read() {
+        byKey = store.lines(key).mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { parts -> parts[1].toIntOrNull()?.let { parts[0] to it } } }.toMap()
+    }
+
+    fun set(itemKey: String, argb: Int?) = update(if (argb == null) byKey - itemKey else byKey + (itemKey to argb))
+
+    // A renamed thing keeps its colour.
+    fun move(old: String, new: String) {
+        val argb = byKey[old] ?: return
+        update(byKey - old + (new to argb))
+    }
+
+    private fun update(colors: Map<String, Int>) {
+        byKey = colors
+        store.putLines(key, colors.entries.map { "${it.key}\t${it.value}" })
+    }
 }
 
 // An album's name as shown, by folder path; renaming only ever changes this, never the folder, so nothing that saves into it is thrown off.

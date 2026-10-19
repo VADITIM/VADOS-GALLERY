@@ -55,6 +55,7 @@ import com.vaditim.gallery.components.jiggle
 import com.vaditim.gallery.components.rememberReorder
 import com.vaditim.gallery.components.reorderable
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.settings.Settings
 import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Palette
@@ -117,6 +118,7 @@ fun PrivateGroupsScreen(
                 modifier = reorderable(reorder, group.name, isEnabled = true).entrance().jiggle(reorder, group.name, isRearranging),
                 isSelected = group.name in selectedNames,
                 isLifted = reorder.draggedKey == group.name,
+                colorKey = AlbumArrangement.privateGroupKey(group.name),
             )
         }
         item(span = { GridItemSpan(maxLineSpan) }, contentType = "new-group") { Box(Modifier.entrance()) { AddCard("New album", onClick = onNewGroup) } }

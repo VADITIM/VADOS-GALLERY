@@ -2,6 +2,10 @@
 
 What changed in each feature version. Planned work is in `.claude/docs/roadmap.md`. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
 
+## 1.5: name colours (1.5.0)
+
+- **Name colour:** the rename sheet of an album, a Favorites album or a private group carries a colour wheel (hue around 360 degrees, saturation from the centre). The colour is kept when the name is confirmed, follows the item through a rename, and tints its name on the cover. `ColorWheel`, `NameColors`.
+
 ## 1.4: photos to PDF (1.4.0)
 
 - **PDF:** the selection bar of every photo grid has a PDF button that makes the selected photos into one PDF, a page each in the shape of its photo, saved to Documents with undo. Videos in the selection are left out. `MediaEditor.pdf`, `MediaActions.toPdf`.

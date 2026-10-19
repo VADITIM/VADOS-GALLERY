@@ -39,6 +39,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shadow
@@ -168,10 +169,12 @@ fun liftedShadow(isLifted: Boolean): Shadow? {
 
 // A cover with its name and count: a card in a grid, a row when there is one column. `isLifted` while it is the one being carried.
 @Composable
-fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = coverColumns() == 1, isLifted: Boolean = false) {
+fun CoverCard(name: String, cover: MediaItem?, count: Int, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, modifier: Modifier = Modifier, isSelected: Boolean = false, labelAlpha: () -> Float = { 1f }, isList: Boolean = coverColumns() == 1, isLifted: Boolean = false, colorKey: String? = null) {
     val request = rememberCoverRequest(cover)
     val sharpRequest = rememberSharpCoverRequest(cover)
-    val nameColor = if (LocalAccentedCoverNames.current) LocalAccent.current else Palette.textBright
+    // A colour given to the name while renaming wins over the section's and the default.
+    val givenColor = colorKey?.let { AlbumArrangement.nameColors.byKey[it] }?.let(::Color)
+    val nameColor = givenColor ?: if (LocalAccentedCoverNames.current) LocalAccent.current else Palette.textBright
     val shadow = liftedShadow(isLifted)
     if (isList) {
         Row(modifier.fillMaxWidth().pressable(onClick = onClick, pressedScale = 0.98f, onLongClick = onLongClick), verticalAlignment = Alignment.CenterVertically) {

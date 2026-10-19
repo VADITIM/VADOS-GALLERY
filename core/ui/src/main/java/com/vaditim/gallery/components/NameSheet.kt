@@ -41,6 +41,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.toArgb
+import com.vaditim.gallery.settings.AlbumArrangement
 import com.vaditim.gallery.vas.LocalAccent
 import com.vaditim.gallery.vas.MicroLabel
 import com.vaditim.gallery.vas.Motion
@@ -53,7 +55,9 @@ import kotlinx.coroutines.launch
 
 // One text field on a pane of glass, sitting on the keyboard. Used to name a new private group.
 @Composable
-fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, ground: Color = Palette.ground, initialName: String = "") {
+fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit, ground: Color = Palette.ground, initialName: String = "", colorKey: String? = null) {
+    // With a colour key, the name can also be given a colour from a wheel; it is kept only when the sheet is confirmed, and shows in the field as it is picked.
+    var picked by remember { mutableStateOf(colorKey?.let { AlbumArrangement.nameColors.byKey[it] }?.let(::Color)) }
     // A name being changed arrives selected whole, so typing replaces it at once.
     var field by remember { mutableStateOf(TextFieldValue(initialName, TextRange(0, initialName.length))) }
     val name = field.text
@@ -77,7 +81,12 @@ fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDism
             then()
         }
     }
-    val confirm = { if (name.isNotBlank()) leave { onConfirm(name.trim()) } }
+    val confirm = {
+        if (name.isNotBlank()) {
+            colorKey?.let { AlbumArrangement.nameColors.set(it, picked?.toArgb()) }
+            leave { onConfirm(name.trim()) }
+        }
+    }
     // The back gesture closes the sheet, not what lies behind it.
     BackHandler { leave(onDismiss) }
 
@@ -105,13 +114,26 @@ fun NameSheet(label: String, action: String, onConfirm: (String) -> Unit, onDism
                 value = field,
                 onValueChange = { field = it },
                 singleLine = true,
-                textStyle = Type.title,
+                textStyle = picked?.let { Type.title.copy(color = it) } ?: Type.title,
                 cursorBrush = SolidColor(LocalAccent.current),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { confirm() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
             )
+            if (colorKey != null) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                ColorWheel(picked, onPick = { picked = it })
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (colorKey != null && picked != null) {
+                    Box(
+                        Modifier
+                            .pressable(onClick = { picked = null })
+                            .clip(Shapes.capsule)
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
+                    ) {
+                        BasicText("RESET", style = Type.action.copy(color = Palette.textMuted))
+                    }
+                }
                 Box(
                     Modifier
                         .pressable(onClick = confirm)

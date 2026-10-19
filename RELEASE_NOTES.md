@@ -1,3 +1,3 @@
-# 1.4.0
+# 1.5.0
 
-- Selected photos can be made into one PDF, a page each, saved in Documents. The button sits in the selection bar, next to share.
+- Renaming an album or private group now has a colour wheel: pick any colour around the full circle and the name takes it, in the sheet as you pick and on its cover. Reset puts the default back.

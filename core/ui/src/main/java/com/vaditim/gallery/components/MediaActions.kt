@@ -242,7 +242,11 @@ class MediaActions(
     }
 
     fun renameGroup(group: PrivateGroup, newName: String) =
-        runVault("Renamed to ${newName.trim()}", "Could not rename ${group.name}") { vault.renameGroup(group, newName) }
+        runVault("Renamed to ${newName.trim()}", "Could not rename ${group.name}") {
+            vault.renameGroup(group, newName).also { isDone ->
+                if (isDone) AlbumArrangement.nameColors.move(AlbumArrangement.privateGroupKey(group.name), AlbumArrangement.privateGroupKey(newName.trim()))
+            }
+        }
 
     fun move(items: List<MediaItem>, album: Album) = move(items, album.relativePath, album.name)
 
