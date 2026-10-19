@@ -7,7 +7,10 @@ import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.content.ContentValues
 import android.graphics.Rect
+import android.graphics.pdf.PdfDocument
+import android.net.Uri
 import android.graphics.RectF
 import android.media.ExifInterface
 import android.media.MediaMetadataRetriever
@@ -69,6 +72,43 @@ class MediaEditor(private val context: Context) {
     }
 
     // The frame nearest to `positionMs`, as a full-size JPEG beside the video.
+    // Every picture on a page of its own, the page the picture's shape, in the order given; saved to Documents. Videos are left out.
+    suspend fun pdf(items: List<MediaItem>, onProgress: (Float) -> Unit = {}): Uri = withContext(Dispatchers.IO) {
+        val images = items.filterNot { it.isVideo }
+        require(images.isNotEmpty())
+        val document = PdfDocument()
+        try {
+            images.forEachIndexed { index, item ->
+                val source = if (item.uri.scheme == "content") ImageDecoder.createSource(context.contentResolver, item.uri) else ImageDecoder.createSource(File(item.uri.path!!))
+                // Decoded no larger than a page needs, so a long selection of large photos never holds more than one in memory.
+                val bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    val longest = maxOf(info.size.width, info.size.height)
+                    if (longest > PDF_PAGE_LONGEST_EDGE) {
+                        val ratio = PDF_PAGE_LONGEST_EDGE.toFloat() / longest
+                        decoder.setTargetSize((info.size.width * ratio).roundToInt().coerceAtLeast(1), (info.size.height * ratio).roundToInt().coerceAtLeast(1))
+                    }
+                }
+                val page = document.startPage(PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, index + 1).create())
+                page.canvas.drawBitmap(bitmap, 0f, 0f, null)
+                document.finishPage(page)
+                bitmap.recycle()
+                onProgress((index + 1f) / images.size)
+            }
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "Photos_${System.currentTimeMillis()}.pdf")
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOCUMENTS)
+            }
+            val uri = resolver.insert(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values) ?: error("No room for the PDF")
+            resolver.openOutputStream(uri)!!.use { document.writeTo(it) }
+            uri
+        } finally {
+            document.close()
+        }
+    }
+
     suspend fun saveFrame(item: MediaItem, positionMs: Long): File = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
@@ -202,6 +242,7 @@ class MediaEditor(private val context: Context) {
 
     private companion object {
         const val JPEG_QUALITY = 95
+        const val PDF_PAGE_LONGEST_EDGE = 2000
         const val PROGRESS_POLL_MS = 100L
         val KEPT_EXIF = listOf(
             ExifInterface.TAG_DATETIME, ExifInterface.TAG_DATETIME_ORIGINAL, ExifInterface.TAG_DATETIME_DIGITIZED,

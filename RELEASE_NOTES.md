@@ -1,3 +1,3 @@
-# 1.3.13
+# 1.4.0
 
-- A photo opened in the trash says "Was originally in" its album, above the nav.
+- Selected photos can be made into one PDF, a page each, saved in Documents. The button sits in the selection bar, next to share.

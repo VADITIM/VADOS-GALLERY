@@ -324,6 +324,25 @@ private fun LineGlyph(color: Color, size: Dp, draw: DrawScope.(unit: Float, stro
 
 private fun path(unit: Float, build: Path.(Float) -> Unit): Path = Path().apply { build(unit) }
 
+// A page with its corner folded and lines of text: the selection made into a PDF.
+@Composable
+fun PdfIcon(color: Color, size: Dp = 22.dp) = LineGlyph(color, size) { unit, stroke ->
+    drawPath(path(unit) { u ->
+        moveTo(14f * u, 2.8f * u)
+        lineTo(6.6f * u, 2.8f * u)
+        arcTo(Rect(4.8f * u, 2.8f * u, 8.4f * u, 6.4f * u), 270f, -90f, false)
+        lineTo(4.8f * u, 19.8f * u)
+        arcTo(Rect(4.8f * u, 18f * u, 8.4f * u, 21.6f * u), 180f, -90f, false)
+        lineTo(17.4f * u, 21.6f * u)
+        arcTo(Rect(15.6f * u, 18f * u, 19.2f * u, 21.6f * u), 90f, -90f, false)
+        lineTo(19.2f * u, 8f * u)
+        lineTo(14f * u, 2.8f * u)
+        lineTo(14f * u, 8f * u)
+        lineTo(19.2f * u, 8f * u)
+    }, color, style = stroke)
+    drawPath(path(unit) { u -> moveTo(8.6f * u, 13f * u); lineTo(15.4f * u, 13f * u); moveTo(8.6f * u, 16.6f * u); lineTo(13f * u, 16.6f * u) }, color, style = stroke)
+}
+
 @Composable
 fun ShareIcon(color: Color, size: Dp = 22.dp) = SvgGlyph(color, size, viewBox = 120.94f, viewBoxWidth = 122.88f, paths = arrayOf(SHARE))
 

@@ -90,6 +90,21 @@ class MediaActions(
         context.startActivity(Intent.createChooser(send, null))
     }
 
+    // The selected photos as one PDF in Documents, a page each; offered for taking back, which deletes the file.
+    fun toPdf(items: List<MediaItem>) {
+        val images = items.filterNot { it.isVideo }
+        if (images.isEmpty()) return
+        scope.launch {
+            announce("Making PDF…")
+            runCatching { editor.pdf(images) }
+                .onSuccess { uri ->
+                    Haptics.confirm(context)
+                    offerUndo(summary(images.size, images.size, "Saved PDF to Documents")) { runCatching { context.contentResolver.delete(uri, null, null) } }
+                }
+                .onFailure { if (it !is kotlinx.coroutines.CancellationException) notify("Could not make the PDF") }
+        }
+    }
+
     // A crop, trim, turn or drawing saved as a copy beside the original. The returned job is cancelled when the editor is left mid-save.
     fun crop(item: MediaItem, crop: RectF, startMs: Long, endMs: Long, onProgress: (Float) -> Unit, quarterTurns: Int = 0, strokes: List<DrawnStroke> = emptyList(), onFinished: (Boolean) -> Unit): Job = scope.launch {
         val result = runCatching { if (item.isVideo) editor.editVideo(item, crop, startMs, endMs, onProgress, quarterTurns) else editor.cropImage(item, crop, quarterTurns, strokes) }

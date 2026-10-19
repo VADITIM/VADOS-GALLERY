@@ -68,6 +68,7 @@ import com.vaditim.gallery.components.LocalButtonPop
 import com.vaditim.gallery.components.LockIcon
 import com.vaditim.gallery.components.OptionalButton
 import com.vaditim.gallery.components.MoveIcon
+import com.vaditim.gallery.components.PdfIcon
 import com.vaditim.gallery.components.RestoreIcon
 import com.vaditim.gallery.components.SectionBar
 import com.vaditim.gallery.components.ShareIcon
@@ -387,6 +388,13 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             return@Row
         }
         IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+        // Photos only; videos in the selection are left out of it.
+        OptionalButton(selectedItems.any { !it.isVideo }) {
+            IconButton(onClick = {
+                actions.toPdf(selectedItems)
+                controller.clearSelection()
+            }) { PdfIcon(Palette.textBody) }
+        }
         // Favourites every selected photo, or takes them all out once all of them are favourites; the selection stays, so it can be undone with another tap.
         // An emptied selection counts as none, or the heart flashes red while the bar leaves.
         val isAllFavorite = selectedItems.isNotEmpty() && selectedItems.all { it.isFavorite }
