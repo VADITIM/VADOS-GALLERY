@@ -24,9 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -47,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
@@ -373,36 +372,39 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen, i
 
 private fun isSendBarShown(controller: LibraryController, screen: LibraryScreen): Boolean = controller.shownBar(screen) == BottomBar.PHOTOS && !screen.isInTrash
 
-// Share and PDF for picked photos, a glass pill of their own above the actions' bar, as large as the nav; kept while it leaves, so it pops away showing what it had.
-// A delete waiting on Confirm turns the pill into the Confirm button, and back.
+// Share and PDF for picked photos, a glass pill of their own above the actions' bar, as tall as the nav; kept while it leaves, so it pops away showing what it had.
+// A delete waiting on Confirm turns the pill itself into Confirm: its buttons pop away, the pill fills red and its width follows to the label, and back.
 @Composable
 private fun SelectionSendBar(controller: LibraryController, screen: LibraryScreen, metrics: BarMetrics) {
     val selection = controller.selection
     var selectedItems by remember { mutableStateOf(emptyList<MediaItem>()) }
     if (screen.selectedItems.isNotEmpty()) selectedItems = screen.selectedItems
-    val density = LocalDensity.current
+    val isConfirming = selection.pendingDelete != null
+    val redAlpha by animateFloatAsState(if (isConfirming) 1f else 0f, tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut), label = "send-confirm-fill")
+    val navHeight = with(LocalDensity.current) { metrics.navigationHeight.toDp() }
     AnimatedVisibility(isSendBarShown(controller, screen), enter = TOP_ENTER, exit = TOP_EXIT) {
-        val navSize = if (metrics.navigationWidth > 0) Modifier.size(with(density) { metrics.navigationWidth.toDp() }, with(density) { metrics.navigationHeight.toDp() }) else Modifier
-        Box(Modifier.padding(bottom = 8.dp).glass(Shapes.capsule).then(navSize), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.padding(bottom = 8.dp)
+                .then(if (isConfirming) Modifier.pressable(onClick = {
+                    val delete = selection.pendingDelete
+                    selection.pendingDelete = null
+                    delete?.invoke()
+                }) else Modifier)
+                .glass(Shapes.capsule)
+                .drawBehind { drawRect(Palette.danger, alpha = redAlpha) }
+                .then(if (metrics.navigationHeight > 0) Modifier.height(navHeight) else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
             AnimatedContent(
-                selection.pendingDelete != null,
-                transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))) },
+                isConfirming,
+                transitionSpec = { TOP_POP_IN.togetherWith(TOP_POP_OUT).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
                 contentAlignment = Alignment.Center,
                 label = "send-confirm",
-            ) { isConfirming ->
-                if (isConfirming) {
-                    Box(
-                        Modifier.padding(5.dp).fillMaxSize()
-                            .pressable(onClick = {
-                                val delete = selection.pendingDelete
-                                selection.pendingDelete = null
-                                delete?.invoke()
-                            })
-                            .background(Palette.danger, Shapes.capsule),
-                        contentAlignment = Alignment.Center,
-                    ) { ConfirmLabel() }
+            ) { isShowingConfirm ->
+                if (isShowingConfirm) {
+                    Box(Modifier.padding(horizontal = 24.dp)) { ConfirmLabel() }
                 } else {
-                    Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { controller.actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
                         // Photos only; videos in the selection are left out of it.
                         OptionalButton(selectedItems.any { !it.isVideo }) {

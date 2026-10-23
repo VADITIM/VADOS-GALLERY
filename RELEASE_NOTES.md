@@ -1,4 +1,4 @@
-# 1.5.2
+# 1.5.3
 
-- The share and PDF bar over a selection is now the same size as the nav bar below it.
-- Deleting selected photos no longer adds a Confirm pill above the two bars: the share and PDF bar turns into the Confirm button and back.
+- The share and PDF bar over a selection is back to its own width and now exactly as tall as the nav bar.
+- Waiting on Confirm, that bar turns into the Confirm button itself: its buttons pop away, it fills red and narrows to the label, and turns back the same way.
