@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -59,6 +61,7 @@ import com.vaditim.gallery.components.CloseIcon
 import com.vaditim.gallery.components.CropIcon
 import com.vaditim.gallery.components.MoreIcon
 import com.vaditim.gallery.media.MediaItem
+import com.vaditim.gallery.components.ConfirmLabel
 import com.vaditim.gallery.components.ConfirmPill
 import com.vaditim.gallery.components.FavoriteHeart
 import com.vaditim.gallery.components.HeartIcon
@@ -152,12 +155,13 @@ internal fun BoxScope.FavoritesCorner(controller: LibraryController, screen: Lib
 internal fun BottomControls(controller: LibraryController, content: LibraryContent, screen: LibraryScreen, metrics: BarMetrics, modifier: Modifier) {
     val selection = controller.selection
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        ConfirmPill(selection.pendingDelete, onDone = { selection.pendingDelete = null })
+        // Over the share and PDF bar the wait is shown in that bar itself, so no third pill stacks above the two.
+        ConfirmPill(selection.pendingDelete.takeIf { !isSendBarShown(controller, screen) }, onDone = { selection.pendingDelete = null })
         // The pills above the nav go with it, popping away as a selection's bar comes.
         AnimatedVisibility(controller.shownBar(screen) == BottomBar.NAVIGATION, enter = TOP_ENTER, exit = TOP_EXIT) {
             PlacePills(controller, content, screen)
         }
-        SelectionSendBar(controller, screen)
+        SelectionSendBar(controller, screen, metrics)
         // Private's red reaches the nav on the cut, once the outgoing view has left, like every other accent.
         var isPrivateInk by remember { mutableStateOf(screen.isPrivateMode) }
         LaunchedEffect(screen.isPrivateMode) {
@@ -367,21 +371,47 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen, i
     }
 }
 
-// Share and PDF for picked photos, a glass pill of their own above the actions' bar so the bar keeps its room; kept while it leaves, so it pops away showing what it had.
+private fun isSendBarShown(controller: LibraryController, screen: LibraryScreen): Boolean = controller.shownBar(screen) == BottomBar.PHOTOS && !screen.isInTrash
+
+// Share and PDF for picked photos, a glass pill of their own above the actions' bar, as large as the nav; kept while it leaves, so it pops away showing what it had.
+// A delete waiting on Confirm turns the pill into the Confirm button, and back.
 @Composable
-private fun SelectionSendBar(controller: LibraryController, screen: LibraryScreen) {
+private fun SelectionSendBar(controller: LibraryController, screen: LibraryScreen, metrics: BarMetrics) {
+    val selection = controller.selection
     var selectedItems by remember { mutableStateOf(emptyList<MediaItem>()) }
     if (screen.selectedItems.isNotEmpty()) selectedItems = screen.selectedItems
-    AnimatedVisibility(controller.shownBar(screen) == BottomBar.PHOTOS && !screen.isInTrash, enter = TOP_ENTER, exit = TOP_EXIT) {
-        Box(Modifier.padding(bottom = 8.dp).glass(Shapes.capsule)) {
-            Row(Modifier.padding(5.dp)) {
-                IconButton(onClick = { controller.actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
-                // Photos only; videos in the selection are left out of it.
-                OptionalButton(selectedItems.any { !it.isVideo }) {
-                    IconButton(onClick = {
-                        controller.actions.toPdf(selectedItems)
-                        controller.clearSelection()
-                    }) { PdfIcon(Palette.textBody) }
+    val density = LocalDensity.current
+    AnimatedVisibility(isSendBarShown(controller, screen), enter = TOP_ENTER, exit = TOP_EXIT) {
+        val navSize = if (metrics.navigationWidth > 0) Modifier.size(with(density) { metrics.navigationWidth.toDp() }, with(density) { metrics.navigationHeight.toDp() }) else Modifier
+        Box(Modifier.padding(bottom = 8.dp).glass(Shapes.capsule).then(navSize), contentAlignment = Alignment.Center) {
+            AnimatedContent(
+                selection.pendingDelete != null,
+                transitionSpec = { fadeIn(tween(Motion.STATE_MS)).togetherWith(fadeOut(tween(Motion.STATE_MS))) },
+                contentAlignment = Alignment.Center,
+                label = "send-confirm",
+            ) { isConfirming ->
+                if (isConfirming) {
+                    Box(
+                        Modifier.padding(5.dp).fillMaxSize()
+                            .pressable(onClick = {
+                                val delete = selection.pendingDelete
+                                selection.pendingDelete = null
+                                delete?.invoke()
+                            })
+                            .background(Palette.danger, Shapes.capsule),
+                        contentAlignment = Alignment.Center,
+                    ) { ConfirmLabel() }
+                } else {
+                    Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { controller.actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+                        // Photos only; videos in the selection are left out of it.
+                        OptionalButton(selectedItems.any { !it.isVideo }) {
+                            IconButton(onClick = {
+                                controller.actions.toPdf(selectedItems)
+                                controller.clearSelection()
+                            }) { PdfIcon(Palette.textBody) }
+                        }
+                    }
                 }
             }
         }

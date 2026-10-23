@@ -4,6 +4,7 @@ What changed in each feature version. Planned work is in `.claude/docs/roadmap.m
 
 ## 1.5: name colours (1.5.0)
 
+- **1.5.2:** the share and PDF pill is sized to the nav (`BarMetrics`), and a delete waiting on Confirm turns that pill into the Confirm button (`SelectionSendBar`, `ConfirmLabel`) instead of stacking a third pill; the lone `ConfirmPill` stays for trash, covers and the viewer.
 - **1.5.1:** a group opened or closed by a tap flags itself as moving in the same frame (`AlbumsScreen`, `GroupRow`), so the rows under it follow its height instead of gliding after it and landing a second time. Share and PDF of a photo selection moved into their own pill above the actions' bar (`SelectionSendBar`); PDF has a new icon.
 - **Name colour:** the rename sheet of an album, a Favorites album or a private group carries a colour wheel (hue around 360 degrees, saturation from the centre). The colour is kept when the name is confirmed, follows the item through a rename, and tints its name on the cover. `ColorWheel`, `NameColors`.
 

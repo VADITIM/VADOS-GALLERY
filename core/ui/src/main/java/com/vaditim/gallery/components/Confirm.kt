@@ -33,10 +33,15 @@ fun ConfirmPill(pending: (() -> Unit)?, onDone: () -> Unit) {
                 .background(Palette.danger, Shapes.capsule)
                 .padding(horizontal = 19.dp, vertical = 10.dp),
         ) {
-            // A fifth larger than the other labels, so the one irreversible tap is the easiest to find.
-            BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep, fontSize = Type.microLabel.fontSize * 1.2f, letterSpacing = Type.microLabel.letterSpacing * 1.2f))
+            ConfirmLabel()
         }
     }
+}
+
+// A fifth larger than the other labels, so the one irreversible tap is the easiest to find.
+@Composable
+fun ConfirmLabel() {
+    BasicText("CONFIRM", style = Type.microLabel.copy(color = Palette.sunkenDeep, fontSize = Type.microLabel.fontSize * 1.2f, letterSpacing = Type.microLabel.letterSpacing * 1.2f))
 }
 
 // The delete button that is waiting on Confirm stays marked, so it is clear what Confirm is for.
