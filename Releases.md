@@ -4,6 +4,7 @@ What changed in each feature version. Planned work is in `.claude/docs/roadmap.m
 
 ## 1.5: name colours (1.5.0)
 
+- **1.5.4:** share/PDF, Confirm and undo are one pill (`SelectionSendBar` with `SendFace`): its own Confirm or PDF hands it over to that change's undo offer (`LibrarySelection.handOver`, `Motion.UNDO_HANDOVER_MS`), which it holds in place while the lone `UndoPill` stays hidden; the undo text and button are shared as `UndoContent`.
 - **1.5.3:** the share and PDF pill keeps its own width and takes only the nav's height; Confirm is now the pill itself, its buttons popping out while it fills red and its width follows to the label.
 - **1.5.2:** the share and PDF pill is sized to the nav (`BarMetrics`), and a delete waiting on Confirm turns that pill into the Confirm button (`SelectionSendBar`, `ConfirmLabel`) instead of stacking a third pill; the lone `ConfirmPill` stays for trash, covers and the viewer.
 - **1.5.1:** a group opened or closed by a tap flags itself as moving in the same frame (`AlbumsScreen`, `GroupRow`), so the rows under it follow its height instead of gliding after it and landing a second time. Share and PDF of a photo selection moved into their own pill above the actions' bar (`SelectionSendBar`); PDF has a new icon.

@@ -15,6 +15,7 @@ import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
@@ -77,6 +78,7 @@ import com.vaditim.gallery.components.ShareIcon
 import com.vaditim.gallery.components.TrashIcon
 import com.vaditim.gallery.components.TypedLabel
 import com.vaditim.gallery.components.TypewriterText
+import com.vaditim.gallery.components.UndoContent
 import com.vaditim.gallery.components.VisibleMonth
 import com.vaditim.gallery.components.pendingMark
 import com.vaditim.gallery.components.rememberOwnAccent
@@ -372,44 +374,91 @@ private fun CoverActions(controller: LibraryController, screen: LibraryScreen, i
 
 private fun isSendBarShown(controller: LibraryController, screen: LibraryScreen): Boolean = controller.shownBar(screen) == BottomBar.PHOTOS && !screen.isInTrash
 
+// What the share and PDF pill is showing: its buttons, the Confirm it turns into for a waiting delete, or the undo pill it turns into after its own Confirm or PDF.
+private enum class SendFace { SEND, CONFIRM, UNDO }
+
 // Share and PDF for picked photos, a glass pill of their own above the actions' bar, as tall as the nav; kept while it leaves, so it pops away showing what it had.
-// A delete waiting on Confirm turns the pill itself into Confirm: its buttons pop away, the pill fills red and its width follows to the label, and back.
+// It is one pill through all its faces: a delete waiting on Confirm turns it into Confirm, and its Confirm or PDF turns it on into the undo pill once that change's offer comes.
+// Each time its content pops out and in, its width follows and its fill changes, glass to red to the undo pill's solid pane, and back to glass when a new selection takes it.
 @Composable
 private fun SelectionSendBar(controller: LibraryController, screen: LibraryScreen, metrics: BarMetrics) {
     val selection = controller.selection
+    val actions = controller.actions
     var selectedItems by remember { mutableStateOf(emptyList<MediaItem>()) }
     if (screen.selectedItems.isNotEmpty()) selectedItems = screen.selectedItems
-    val isConfirming = selection.pendingDelete != null
-    val redAlpha by animateFloatAsState(if (isConfirming) 1f else 0f, tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut), label = "send-confirm-fill")
+    val isSelecting = isSendBarShown(controller, screen)
+    val offer = actions.undoOffer
+    val isHoldingOffer = !isSelecting && selection.holdsUndo(offer)
+    val heldOffer = rememberKept(offer, !isHoldingOffer)
+    // Waiting for the offer, and while leaving, it keeps the face it had.
+    val keptFace = remember { arrayOf(SendFace.SEND) }
+    keptFace[0] = when {
+        isSelecting && selection.pendingDelete != null -> SendFace.CONFIRM
+        isSelecting -> SendFace.SEND
+        isHoldingOffer -> SendFace.UNDO
+        else -> keptFace[0]
+    }
+    val face = keptFace[0]
+    LaunchedEffect(selection.isHandingOver) {
+        if (selection.isHandingOver) {
+            delay(Motion.UNDO_HANDOVER_MS)
+            selection.isHandingOver = false
+        }
+    }
+    LaunchedEffect(offer, isSelecting) {
+        if (isSelecting) {
+            // A new selection takes the pill back; the offer it held goes with it.
+            if (selection.isHoldingUndo) offer?.let(actions::expireUndo)
+            selection.isHoldingUndo = false
+            selection.isHandingOver = false
+        } else if (offer == null) {
+            selection.isHoldingUndo = false
+        } else if (selection.holdsUndo(offer)) {
+            selection.isHoldingUndo = true
+            selection.isHandingOver = false
+        }
+    }
+    val fill by animateColorAsState(
+        when (face) {
+            SendFace.SEND -> Color.Transparent
+            SendFace.CONFIRM -> Palette.danger
+            // Solid, as the undo pill is, since it may stand over the open photo.
+            SendFace.UNDO -> Palette.panelSolid
+        },
+        tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut),
+        label = "send-fill",
+    )
     val navHeight = with(LocalDensity.current) { metrics.navigationHeight.toDp() }
-    AnimatedVisibility(isSendBarShown(controller, screen), enter = TOP_ENTER, exit = TOP_EXIT) {
+    AnimatedVisibility(isSelecting || selection.isHandingOver || isHoldingOffer, enter = TOP_ENTER, exit = TOP_EXIT) {
         Box(
             Modifier.padding(bottom = 8.dp)
-                .then(if (isConfirming) Modifier.pressable(onClick = {
+                .then(if (face == SendFace.CONFIRM && isSelecting) Modifier.pressable(onClick = {
                     val delete = selection.pendingDelete
                     selection.pendingDelete = null
+                    selection.handOver(actions.undoOffer)
                     delete?.invoke()
                 }) else Modifier)
                 .glass(Shapes.capsule)
-                .drawBehind { drawRect(Palette.danger, alpha = redAlpha) }
+                .drawBehind { drawRect(fill) }
                 .then(if (metrics.navigationHeight > 0) Modifier.height(navHeight) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             AnimatedContent(
-                isConfirming,
+                face,
                 transitionSpec = { TOP_POP_IN.togetherWith(TOP_POP_OUT).using(SizeTransform(clip = false) { _, _ -> tween(Motion.STATE_MS * 2, easing = Motion.powerThreeInOut) }) },
                 contentAlignment = Alignment.Center,
-                label = "send-confirm",
-            ) { isShowingConfirm ->
-                if (isShowingConfirm) {
-                    Box(Modifier.padding(horizontal = 24.dp)) { ConfirmLabel() }
-                } else {
-                    Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { controller.actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+                label = "send-face",
+            ) { shownFace ->
+                when (shownFace) {
+                    SendFace.CONFIRM -> Box(Modifier.padding(horizontal = 24.dp)) { ConfirmLabel() }
+                    SendFace.UNDO -> heldOffer?.let { UndoContent(it, onUndo = actions::undo) }
+                    SendFace.SEND -> Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
                         // Photos only; videos in the selection are left out of it.
                         OptionalButton(selectedItems.any { !it.isVideo }) {
                             IconButton(onClick = {
-                                controller.actions.toPdf(selectedItems)
+                                selection.handOver(actions.undoOffer)
+                                actions.toPdf(selectedItems)
                                 controller.clearSelection()
                             }) { PdfIcon(Palette.textBody) }
                         }

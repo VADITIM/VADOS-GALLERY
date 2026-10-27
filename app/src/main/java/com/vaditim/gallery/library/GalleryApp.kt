@@ -237,6 +237,7 @@ private fun Library(viewModel: GalleryViewModel) {
                 onUndo = controller.actions::undo,
                 onExpired = controller.actions::expireUndo,
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = BAR_ROOM),
+                isHeldElsewhere = controller.selection.holdsUndo(controller.actions.undoOffer),
             )
         }
     }

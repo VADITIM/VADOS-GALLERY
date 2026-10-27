@@ -93,6 +93,8 @@ object Motion {
 
     // How long any change can still be taken back from the pill above the bar, whatever it was.
     const val UNDO_MS = 2500
+    // How long a pill whose own button made the change waits for that change's undo offer, to turn into it, before it pops away without one.
+    const val UNDO_HANDOVER_MS = 1500L
 
     // The glide down to the newest photos when their section is tapped again: a base, more for each screen of distance, never longer than the cap.
     const val SCROLL_TO_END_MS = 400

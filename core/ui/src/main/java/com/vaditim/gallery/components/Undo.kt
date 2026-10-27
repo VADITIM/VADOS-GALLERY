@@ -36,8 +36,9 @@ private val PILL_HEIGHT = 52.dp
 class UndoOffer(val message: String, val durationMs: Int = Motion.UNDO_MS, val revert: (() -> Unit)? = null)
 
 // The pill that stands above the bar after a delete, a move or a new cover. It keeps the last offer while sliding out, so its text does not vanish mid-animation.
+// An offer held elsewhere (the share and PDF pill, which turns into this one after its own Confirm or PDF) still runs out here, but is not shown.
 @Composable
-fun UndoPill(offer: UndoOffer?, onUndo: (UndoOffer) -> Unit, onExpired: (UndoOffer) -> Unit, modifier: Modifier = Modifier) {
+fun UndoPill(offer: UndoOffer?, onUndo: (UndoOffer) -> Unit, onExpired: (UndoOffer) -> Unit, modifier: Modifier = Modifier, isHeldElsewhere: Boolean = false) {
     var shown by remember { mutableStateOf(offer) }
     if (offer != null) shown = offer
     LaunchedEffect(offer) {
@@ -47,22 +48,28 @@ fun UndoPill(offer: UndoOffer?, onUndo: (UndoOffer) -> Unit, onExpired: (UndoOff
         }
     }
     AnimatedVisibility(
-        visible = offer != null,
+        visible = offer != null && !isHeldElsewhere,
         modifier = modifier,
         enter = fadeIn(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.powerTwoOut)) + slideInVertically(tween(Motion.OVERLAY_ENTER_MS, easing = Motion.backOut)) { it },
         exit = fadeOut(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) + slideOutVertically(tween(Motion.OVERLAY_LEAVE_MS, easing = Motion.powerTwoIn)) { it },
     ) {
         val current = shown ?: return@AnimatedVisibility
         // A solid pane rather than glass: the pill also floats over the viewer, where the blur source would be the grid hidden behind the photo.
-        val canRevert = current.revert != null
-        Row(
-            // Without the button the pill keeps the same height and evens its ends.
-            Modifier.heightIn(min = PILL_HEIGHT).clip(Shapes.capsule).background(Palette.panelSolid).padding(start = 18.dp, end = if (canRevert) 4.dp else 18.dp, top = 2.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            BasicText(current.message, style = Type.value.copy(color = Palette.textBright), maxLines = 1)
-            if (canRevert) IconButton(onClick = { onUndo(current) }) { RestoreIcon(LocalAccent.current) }
-        }
+        UndoContent(current, onUndo, Modifier.heightIn(min = PILL_HEIGHT).clip(Shapes.capsule).background(Palette.panelSolid))
+    }
+}
+
+// What the undo pill says, and its button when the change can be reversed; the pill around it is the caller's.
+@Composable
+fun UndoContent(offer: UndoOffer, onUndo: (UndoOffer) -> Unit, modifier: Modifier = Modifier) {
+    val canRevert = offer.revert != null
+    Row(
+        // Without the button the pill keeps the same height and evens its ends.
+        modifier.padding(start = 18.dp, end = if (canRevert) 4.dp else 18.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        BasicText(offer.message, style = Type.value.copy(color = Palette.textBright), maxLines = 1)
+        if (canRevert) IconButton(onClick = { onUndo(offer) }) { RestoreIcon(LocalAccent.current) }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.vaditim.gallery.components.Selection
+import com.vaditim.gallery.components.UndoOffer
 import com.vaditim.gallery.media.MediaItem
 
 // What is picked out on screen, and the delete waiting on Confirm above the bar; anything else the user does lets that delete go.
@@ -50,4 +51,17 @@ class LibrarySelection(private val onTick: () -> Unit) {
     fun confirmThen(action: () -> Unit) {
         pendingDelete = action
     }
+
+    // The share and PDF pill turns into the undo pill after its own Confirm or PDF, rather than popping away while another pill rises in its place:
+    // it waits a moment for an offer newer than the one standing when it was pressed, then holds that offer, and whatever follows it, until it runs out.
+    var isHandingOver by mutableStateOf(false)
+    var isHoldingUndo by mutableStateOf(false)
+    private var handoverFrom: UndoOffer? = null
+
+    fun handOver(standing: UndoOffer?) {
+        handoverFrom = standing
+        isHandingOver = true
+    }
+
+    fun holdsUndo(offer: UndoOffer?): Boolean = offer != null && (isHoldingUndo || isHandingOver && offer !== handoverFrom)
 }
