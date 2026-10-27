@@ -94,7 +94,8 @@ object TrashThrow {
         if (source != null) return Flight(item, Rect(source.coordinates.positionInWindow(), source.coordinates.size.toSize()), source.picture(), source.isWhole)
         // Only picked tiles are thrown, and a picked tile stands smaller than its bounds.
         val tile = TileBounds.of(item.id) ?: return null
-        return Flight(item, Rect.fromCenter(tile.center, tile.width * SELECTED_TILE_SCALE, tile.height * SELECTED_TILE_SCALE), TileImages.of(item.id), isWhole = false)
+        val inset = Offset(tile.width, tile.height) * ((1f - SELECTED_TILE_SCALE) / 2f)
+        return Flight(item, Rect(tile.topLeft + inset, tile.bottomRight - inset), TileImages.of(item.id), isWhole = false)
     }
 
     internal fun land(thrown: Throw) {
