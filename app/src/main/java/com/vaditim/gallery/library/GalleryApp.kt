@@ -71,6 +71,7 @@ import com.vaditim.gallery.components.ShareIcon
 import com.vaditim.gallery.components.SheetRow
 import com.vaditim.gallery.components.TimelineAbove
 import com.vaditim.gallery.components.TimelineAboveHost
+import com.vaditim.gallery.components.TrashThrowLayer
 import com.vaditim.gallery.components.UndoPill
 import com.vaditim.gallery.components.revealItem
 import com.vaditim.gallery.components.VisibleMonth
@@ -239,6 +240,8 @@ private fun Library(viewModel: GalleryViewModel) {
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = BAR_ROOM),
                 isHeldElsewhere = controller.selection.holdsUndo(controller.actions.undoOffer),
             )
+            // Over the bar too, so a thrown photo lands on its trash button.
+            TrashThrowLayer(Modifier.zIndex(2f))
         }
     }
 }

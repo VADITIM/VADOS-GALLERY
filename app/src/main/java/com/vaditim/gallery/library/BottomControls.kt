@@ -76,6 +76,8 @@ import com.vaditim.gallery.components.RestoreIcon
 import com.vaditim.gallery.components.SectionBar
 import com.vaditim.gallery.components.ShareIcon
 import com.vaditim.gallery.components.TrashIcon
+import com.vaditim.gallery.components.TrashThrow
+import com.vaditim.gallery.components.trashTarget
 import com.vaditim.gallery.components.TypedLabel
 import com.vaditim.gallery.components.TypewriterText
 import com.vaditim.gallery.components.UndoContent
@@ -309,7 +311,7 @@ private fun rememberViewerPhoto(controller: LibraryController, content: LibraryC
 private fun ViewerActions(controller: LibraryController, item: MediaItem, source: ViewerSource) {
     val bar = controller.viewer.bar
     val actions = controller.actions
-    val deleteModifier = Modifier.pendingMark(bar.isPendingDelete)
+    val deleteModifier = Modifier.pendingMark(bar.isPendingDelete).trashTarget()
     Row(Modifier.padding(5.dp)) {
         IconButton(onClick = { actions.share(listOf(item)) }) { ShareIcon(Palette.textBody) }
         if (source.isTrash) {
@@ -393,6 +395,8 @@ private fun SelectionSendBar(controller: LibraryController, screen: LibraryScree
     // Waiting for the offer, and while leaving, it keeps the face it had.
     val keptFace = remember { arrayOf(SendFace.SEND) }
     keptFace[0] = when {
+        // Confirmed, the selection stays while its photos fly into the trash; the pill stays Confirm meanwhile.
+        isSelecting && selection.isHandingOver -> keptFace[0]
         isSelecting && selection.pendingDelete != null -> SendFace.CONFIRM
         isSelecting -> SendFace.SEND
         isHoldingOffer -> SendFace.UNDO
@@ -476,18 +480,21 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
     val sheets = controller.sheets
     val actions = controller.actions
     val selectedItems = rememberKept(screen.selectedItems, isLeaving)
-    // Every delete waits for Confirm.
+    // Every delete waits for Confirm, then the photos are thrown into the trash button and go once they are in, the selection with them.
     val confirmDelete: (() -> Unit) -> Unit = { delete ->
         selection.confirmThen {
-            delete()
-            controller.clearSelection()
+            TrashThrow.throwAway(selectedItems) {
+                delete()
+                controller.clearSelection()
+            }
         }
     }
+    val deleteModifier = Modifier.pendingMark(selection.pendingDelete != null).trashTarget()
     Row(Modifier.padding(5.dp)) {
         if (screen.isInTrash) {
             IconButton(onClick = { sheets.show(AppSheet.TRASH_RESTORE) }) { RestoreIcon(LocalAccent.current) }
             // Out of the trash there is no coming back.
-            IconButton(onClick = { confirmDelete { actions.deleteForever(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
+            IconButton(onClick = { confirmDelete { actions.deleteForever(selectedItems) } }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
             return@Row
         }
         // Favourites every selected photo, or takes them all out once all of them are favourites; the selection stays, so it can be undone with another tap.
@@ -507,12 +514,12 @@ private fun PhotoActions(controller: LibraryController, content: LibraryContent,
             // Private's Recent mixes every private album, so its photos only leave Private from there.
             if (screen.gridSource != ViewerSource.PrivateRecent) IconButton(onClick = { sheets.show(AppSheet.SELECTION_GROUP) }) { MoveIcon(Palette.textBody) }
             IconButton(onClick = { sheets.show(AppSheet.SELECTION_MOVE) }) { LockIcon(Palette.textBody, isOpen = true) }
-            IconButton(onClick = { confirmDelete { actions.trashPrivate(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
+            IconButton(onClick = { confirmDelete { actions.trashPrivate(selectedItems) } }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
         } else {
             // The same bar as in albums; inside Favorites, moving goes between its own albums.
             IconButton(onClick = { sheets.show(if (screen.section == Section.FAVORITES) AppSheet.FAVORITE_ALBUM_PICK else AppSheet.SELECTION_MOVE) }) { MoveIcon(Palette.textBody) }
             IconButton(onClick = { sheets.show(AppSheet.SELECTION_GROUP) }) { LockIcon(Palette.textBody) }
-            IconButton(onClick = { confirmDelete { actions.trash(selectedItems) } }, modifier = Modifier.pendingMark(selection.pendingDelete != null)) { TrashIcon(Palette.danger) }
+            IconButton(onClick = { confirmDelete { actions.trash(selectedItems) } }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
         }
     }
 }

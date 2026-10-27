@@ -127,7 +127,7 @@ Four actions, always visible while the chrome is shown:
 |---|---|
 | **SHARE** | The system share sheet |
 | **FAVORITE** | Toggles favourite, lit in the section accent when on; turning it on pops the heart and throws dots and sparkles off it, like a like button; turning it off drains the fill out of the heart from the top while it dips a little, rather than swapping icons. Swiping to another photo never plays either |
-| **DELETE** | Moves to the trash (recoverable for 30 days, the system's own trash) |
+| **DELETE** | Moves to the trash (recoverable for 30 days, the system's own trash). Once confirmed, the photo is thrown into the trash button: it shrinks along a short arc onto the button and fades into it while the button swells, the same from a grid selection, the viewer and duplicates |
 | **•••** | The menu below |
 
 ### The ••• menu

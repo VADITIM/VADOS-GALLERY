@@ -52,6 +52,10 @@ import com.vaditim.gallery.components.FadingOverflow
 import com.vaditim.gallery.components.IconButton
 import com.vaditim.gallery.components.Segments
 import com.vaditim.gallery.components.TrashIcon
+import com.vaditim.gallery.components.TrashThrow
+import coil3.memory.MemoryCache
+import com.vaditim.gallery.components.trashSource
+import com.vaditim.gallery.components.trashTarget
 import com.vaditim.gallery.components.formatSize
 import com.vaditim.gallery.components.pendingMark
 import com.vaditim.gallery.media.DuplicateFinder
@@ -148,7 +152,8 @@ fun DuplicatesScreen(
                     Modifier
                         .pressable(onClick = {
                             val picked = marked
-                            pendingDelete = if (pendingDelete == null) { { onDelete(picked) } } else null
+                            // Confirmed, the copies are thrown into the trash button and go once they are in.
+                            pendingDelete = if (pendingDelete == null) { { TrashThrow.throwAway(picked) { onDelete(picked) } } } else null
                         })
                         .pendingMark(pendingDelete != null)
                         .clip(Shapes.capsule)
@@ -157,7 +162,7 @@ fun DuplicatesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    TrashIcon(Palette.danger, size = 18.dp)
+                    Box(Modifier.trashTarget()) { TrashIcon(Palette.danger, size = 18.dp) }
                     BasicText("${marked.size} · ${formatSize(marked.sumOf { it.sizeBytes })}", style = Type.action.copy(color = Palette.textBright))
                 }
             }
@@ -218,10 +223,17 @@ private fun DuplicateTile(item: MediaItem, isMarked: Boolean, onToggle: () -> Un
     val accent = LocalAccent.current
     val shade by animateFloatAsState(if (isMarked) MARKED_SHADE else 0f, tween(Motion.STATE_MS), label = "duplicate-shade")
     val markColor by animateColorAsState(if (isMarked) Palette.danger else accent, tween(Motion.STATE_MS), label = "duplicate-mark")
+    // The picture the tile drew, which flies if it is deleted.
+    var picture by remember(item.id) { mutableStateOf<MemoryCache.Key?>(null) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).pressable(onClick = onToggle, pressedScale = 0.95f, onLongClick = onPeek).clip(Shapes.tile).background(Palette.surface)) {
+        // Away while its copy flies into the trash.
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1f).trashSource(item.id, picture = { picture }).pressable(onClick = onToggle, pressedScale = 0.95f, onLongClick = onPeek)
+                .graphicsLayer { alpha = if (TrashThrow.isThrown(item.id)) 0f else 1f }
+                .clip(Shapes.tile).background(Palette.surface),
+        ) {
             // Private photos are not in MediaStore and have no cached thumbnail; they are decoded from the file at the tile's size.
-            AsyncImage(model = if (item.uri.scheme == "content") Thumbnail.of(item, TILE_PIXELS) else item.uri, contentDescription = item.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(model = if (item.uri.scheme == "content") Thumbnail.of(item, TILE_PIXELS) else item.uri, contentDescription = item.name, contentScale = ContentScale.Crop, onSuccess = { picture = it.result.memoryCacheKey }, modifier = Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = shade }.background(Palette.viewerGround))
             Box(Modifier.align(Alignment.TopEnd).padding(6.dp).clip(Shapes.capsule).background(Palette.panelSolid).padding(horizontal = 8.dp, vertical = 5.dp)) {
                 if (isMarked) TrashIcon(markColor, size = 14.dp) else CheckIcon(markColor, size = 14.dp)

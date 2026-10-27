@@ -96,6 +96,12 @@ object Motion {
     // How long a pill whose own button made the change waits for that change's undo offer, to turn into it, before it pops away without one.
     const val UNDO_HANDOVER_MS = 1500L
 
+    // A deleted photo thrown into the trash button: each flight, the step between photos thrown together and the most that step adds up to, then how long a thrown photo stays hidden while the delete takes it off screen.
+    const val TRASH_THROW_MS = 300
+    const val TRASH_THROW_STAGGER_MS = 15
+    const val TRASH_THROW_STAGGER_MAX_MS = 120
+    const val TRASH_HIDE_MS = 2000L
+
     // The glide down to the newest photos when their section is tapped again: a base, more for each screen of distance, never longer than the cap.
     const val SCROLL_TO_END_MS = 400
     const val SCROLL_TO_END_PER_SCREEN_MS = 60

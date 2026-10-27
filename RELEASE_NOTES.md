@@ -1,5 +1,5 @@
-# 1.5.4
+# 1.6.0
 
-- The share and PDF bar, Confirm and the undo pill are now one pill: after Confirm or PDF the bar turns into the undo pill in place instead of popping away while another pill rises.
-- Each change pops the old content out and the new in, while the pill's width and colour follow, from glass to red to the undo pill's dark pane.
-- Starting a new selection while it shows the undo pill turns it back into share and PDF.
+- Deleting photos now throws them into the trash: once you confirm, each photo shrinks along a short arc onto the trash button and fades into it, and the button swells as it swallows them.
+- Works the same for a selection in any grid (Recent, Favorites, albums, Private, locations, the trash), for the open photo in the viewer, and in Duplicates.
+- A photo the system does not let go comes back to its place.

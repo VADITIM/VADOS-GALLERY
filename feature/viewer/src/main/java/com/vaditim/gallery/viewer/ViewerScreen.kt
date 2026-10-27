@@ -104,6 +104,9 @@ import com.vaditim.gallery.components.ShareIcon
 import com.vaditim.gallery.components.SheetRow
 import com.vaditim.gallery.components.SplitSheetRow
 import com.vaditim.gallery.components.TileImages
+import coil3.memory.MemoryCache
+import com.vaditim.gallery.components.TrashThrow
+import com.vaditim.gallery.components.trashSource
 import com.vaditim.gallery.components.TrashIcon
 import com.vaditim.gallery.components.calendarWeekLabel
 import com.vaditim.gallery.components.dayOf
@@ -279,12 +282,16 @@ fun BoxScope.ViewerScreen(
                         video?.player?.pause()
                         cropping = current
                     }
+                    // Confirmed, the photo is thrown into the trash button and goes once it is in.
                     bar?.onDelete = {
                         pendingDelete = {
-                            when {
-                                isTrash -> actions.deleteForever(listOf(current))
-                                isPrivate -> actions.trashPrivate(listOf(current))
-                                else -> actions.trash(listOf(current))
+                            val deleted = current
+                            TrashThrow.throwAway(listOf(deleted)) {
+                                when {
+                                    isTrash -> actions.deleteForever(listOf(deleted))
+                                    isPrivate -> actions.trashPrivate(listOf(deleted))
+                                    else -> actions.trash(listOf(deleted))
+                                }
                             }
                         }
                     }
@@ -428,6 +435,8 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
     var swipeOffset by remember { mutableFloatStateOf(0f) }
     // The picture's own proportions, so the rounded frame hugs the photo rather than the screen; read off the decoded image because the stored width and height ignore rotation.
     var ratio by remember(item.id) { mutableStateOf(if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else null) }
+    // The picture the photo drew, which flies if it is deleted.
+    var picture by remember(item.id) { mutableStateOf<MemoryCache.Key?>(null) }
     // A motion photo's clip, playing while the photo is held.
     var motion by remember(item.id) { mutableStateOf<VideoState?>(null) }
     DisposableEffect(item.id) { onDispose { motion?.player?.release() } }
@@ -630,8 +639,11 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
         Box(
             Modifier
                 .then((video?.ratio ?: ratio)?.let { Modifier.aspectRatio(it) } ?: Modifier.fillMaxSize())
-                // One layer does the zoom and the rounding, so the clip scales with the photo instead of living in a layer of its own.
+                // A delete throws the photo from here, as it was drawn.
+                .trashSource(item.id, picture = { picture ?: TileImages.of(item.id) }, isWhole = true)
+                // One layer does the zoom and the rounding, so the clip scales with the photo instead of living in a layer of its own; it is away while its copy flies into the trash.
                 .graphicsLayer {
+                    alpha = if (TrashThrow.isThrown(item.id)) 0f else 1f
                     scaleX = scale
                     scaleY = scale
                     translationX = offset.x
@@ -640,7 +652,7 @@ private fun ViewerPage(item: MediaItem, video: VideoState?, onTap: () -> Unit, o
                     clip = true
                 },
         ) {
-            FullPhoto(item.uri, item.name, isZoomed = scale > 1.01f, placeholderKey = TileImages.of(item.id), onRatio = { ratio = it }, modifier = Modifier.fillMaxSize())
+            FullPhoto(item.uri, item.name, isZoomed = scale > 1.01f, placeholderKey = TileImages.of(item.id), onRatio = { ratio = it }, onPicture = { picture = it }, modifier = Modifier.fillMaxSize())
             // The still frame shows until the video has its first picture, then the video draws over it.
             if (video != null) VideoSurface(video, Modifier.fillMaxSize())
             motion?.let { VideoSurface(it, Modifier.fillMaxSize()) }

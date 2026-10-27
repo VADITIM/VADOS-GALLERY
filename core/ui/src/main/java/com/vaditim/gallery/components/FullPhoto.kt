@@ -20,7 +20,7 @@ import coil3.size.Size
 // A photo at full quality: drawn screen-sized with smooth filtering, and once it is zoomed the full-resolution decode lays itself over it, so the pixels hold up close.
 @Composable
 // `placeholderKey`: the tile it was opened from, drawn until the photo itself is decoded.
-fun FullPhoto(uri: Uri, contentDescription: String?, isZoomed: Boolean, modifier: Modifier = Modifier, placeholderKey: MemoryCache.Key? = null, onRatio: (Float) -> Unit = {}) {
+fun FullPhoto(uri: Uri, contentDescription: String?, isZoomed: Boolean, modifier: Modifier = Modifier, placeholderKey: MemoryCache.Key? = null, onRatio: (Float) -> Unit = {}, onPicture: (MemoryCache.Key?) -> Unit = {}) {
     val context = LocalContext.current
     val screenRequest = remember(uri) { ImageRequest.Builder(context).data(uri).placeholderMemoryCacheKey(placeholderKey).build() }
     // Once asked for, the sharp copy stays, so zooming back out and in again does not flicker.
@@ -32,7 +32,10 @@ fun FullPhoto(uri: Uri, contentDescription: String?, isZoomed: Boolean, modifier
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
             filterQuality = FilterQuality.High,
-            onSuccess = { success -> onRatio(success.result.image.width.toFloat() / success.result.image.height) },
+            onSuccess = { success ->
+                onRatio(success.result.image.width.toFloat() / success.result.image.height)
+                onPicture(success.result.memoryCacheKey)
+            },
             modifier = Modifier.fillMaxSize(),
         )
         if (wantsOriginal) {

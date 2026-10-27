@@ -2,6 +2,10 @@
 
 What changed in each feature version. Planned work is in `.claude/docs/roadmap.md`. Patch versions (x.x.1, x.x.2 …) are fixes and small adjustments; they are folded into the feature version they belong to. `RELEASE_NOTES.md` holds only the text of the latest release.
 
+## 1.6: thrown into the trash (1.6.0)
+
+- **Trash throw:** a confirmed delete throws its photos into the trash button (`TrashThrow` in `:core:ui`): a copy of each flies from its tile or from the open photo (`trashSource`) on a short arc to the button (`trashTarget`), shrinking and fading into it, and the button swells; the originals hide meanwhile and the delete runs once they are in (`Motion.TRASH_THROW_MS`). Grid selections, the viewer and Duplicates all use it.
+
 ## 1.5: name colours (1.5.0)
 
 - **1.5.4:** share/PDF, Confirm and undo are one pill (`SelectionSendBar` with `SendFace`): its own Confirm or PDF hands it over to that change's undo offer (`LibrarySelection.handOver`, `Motion.UNDO_HANDOVER_MS`), which it holds in place while the lone `UndoPill` stays hidden; the undo text and button are shared as `UndoContent`.

@@ -102,6 +102,8 @@ private const val MAX_COLUMNS = 6
 
 // How far a pinch has to travel before the grid steps one column: spreading past this shows fewer, larger photos.
 private const val PINCH_STEP = 1.28f
+// How small a picked tile stands, which a tile thrown into the trash starts its flight from.
+internal const val SELECTED_TILE_SCALE = 0.86f
 private const val AUTO_SCROLL_STEP = 22f
 private val GAP = 3.dp
 private val MONTH_FORMAT = DateTimeFormatter.ofPattern("MMMM yy", Locale.ENGLISH)
@@ -609,14 +611,19 @@ private fun Tile(
     LaunchedEffect(item.id, isSettled) {
         if (isSettled && !item.isVideo && MotionPhoto.knownFor(item) == null) isMotion = MotionPhoto.isMotion(context, item)
     }
-    val selectedScale by animateFloatAsState(if (isSelected) 0.86f else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
+    val selectedScale by animateFloatAsState(if (isSelected) SELECTED_TILE_SCALE else 1f, tween(Motion.STATE_MS, easing = Motion.backOut), label = "selected")
     DisposableEffect(item.id) { onDispose { TileBounds.forget(item.id) } }
     Box(
         modifier
             .aspectRatio(1f)
             .onGloballyPositioned { TileBounds.register(item.id, it) }
             .pressable(onClick = onClick, pressedScale = 0.94f)
-            .graphicsLayer { scaleX = selectedScale; scaleY = selectedScale }
+            // Away while a copy of it flies into the trash.
+            .graphicsLayer {
+                scaleX = selectedScale
+                scaleY = selectedScale
+                alpha = if (TrashThrow.isThrown(item.id)) 0f else 1f
+            }
             .clip(Shapes.tile)
             .background(Palette.sunken),
     ) {
