@@ -275,6 +275,21 @@ private fun LibraryEffects(controller: LibraryController, content: LibraryConten
     // An album emptied while open (its last photo unfavourited) closes itself.
     LaunchedEffect(screen.openFavorite == null) { if (screen.openFavorite == null) navigation.openFavoriteAlbum = null }
     LaunchedEffect(screen.openPrivateFavorite == null) { if (screen.openPrivateFavorite == null) navigation.openPrivateFavoriteGroup = null }
+    // A folder emptied while open (its last photo moved, deleted or hidden) closes itself, back to the list it was opened from. Only a folder seen with photos in it closes, so a new empty group can still be opened.
+    val openFolderSize: Int? = when (val place = navigation.albumsPlace) {
+        is AlbumsPlace.Folder -> content.album(place.albumId)?.items?.size ?: 0
+        is AlbumsPlace.PrivateFolder -> if (content.isPrivateUnlocked) content.privateGroup(place.name)?.items?.size ?: 0 else null
+        is AlbumsPlace.Location -> content.location(place.key)?.items?.size ?: 0
+        else -> null
+    }
+    var wasFolderFilled by remember(navigation.albumsPlace) { mutableStateOf(false) }
+    LaunchedEffect(navigation.albumsPlace, openFolderSize) {
+        when {
+            openFolderSize == null -> Unit
+            openFolderSize > 0 -> wasFolderFilled = true
+            wasFolderFilled -> navigation.leaveEmptiedFolder()
+        }
+    }
 
     // Changing place lets go of the selection, the favourites-only filter and rearranging.
     LaunchedEffect(navigation.section, navigation.albumsPlace, screen.favoritesView, navigation.isPrivateMode, navigation.openPrivateFavoriteGroup, screen.isPrivateFavoritesGrouped) {

@@ -4,6 +4,7 @@ What changed in each feature version. Planned work is in `.claude/docs/roadmap.m
 
 ## 1.6: thrown into the trash (1.6.0)
 
+- **1.6.1:** an album, location or private group emptied while open closes itself, back to the list it was opened from (`LibraryNavigation.leaveEmptiedFolder`, in `LibraryEffects`); a folder only closes once it has been seen with photos, so a new empty group still opens.
 - **Trash throw:** a confirmed delete throws its photos into the trash button (`TrashThrow` in `:core:ui`): a copy of each flies from its tile or from the open photo (`trashSource`) on a short arc to the button (`trashTarget`), shrinking and fading into it, and the button swells; the originals hide meanwhile and the delete runs once they are in (`Motion.TRASH_THROW_MS`). Grid selections, the viewer and Duplicates all use it.
 
 ## 1.5: name colours (1.5.0)

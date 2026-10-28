@@ -54,6 +54,15 @@ class LibraryNavigation {
         if (isPrivateMode) leavePrivate() else albumsPlace = AlbumsPlace.Folders
     }
 
+    // A folder left empty while open goes back to the list it was opened from.
+    fun leaveEmptiedFolder() {
+        albumsPlace = when (albumsPlace) {
+            is AlbumsPlace.Location -> AlbumsPlace.Locations
+            is AlbumsPlace.PrivateFolder -> AlbumsPlace.PrivateGroups
+            else -> AlbumsPlace.Folders
+        }
+    }
+
     // Locking drops anyone standing in Private back to the albums list, and closes what showed private photos.
     fun onPrivateLocked() {
         isPrivateMode = false
