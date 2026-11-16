@@ -109,9 +109,9 @@ fun OptionalButton(isShown: Boolean, content: @Composable () -> Unit) {
 }
 
 @Composable
-fun IconButton(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun IconButton(onClick: () -> Unit, modifier: Modifier = Modifier, onLongClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     // Every icon button is an action (share, move, delete, favourite…), so each one answers with a short click.
-    Box(LocalButtonPop.current.then(modifier).pressable(onClick = onClick).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
+    Box(LocalButtonPop.current.then(modifier).pressable(onClick = onClick, onLongClick = onLongClick).clip(Shapes.capsule).size(width = 56.dp, height = 48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { content() }
 }
 
 @Composable

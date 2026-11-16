@@ -77,8 +77,37 @@ class MediaActions(
         if (undoOffer === offer) undoOffer = null
     }
 
-    fun share(items: List<MediaItem>) {
+    // Holding Share: straight to Blip, with no chooser in between.
+    fun shareToBlip(items: List<MediaItem>) {
         if (items.isEmpty()) return
+        val target = blipPackage(items)
+        if (target == null) {
+            notify("Blip is not installed")
+            return
+        }
+        share(items, target)
+    }
+
+    // The installed app that takes this share and is labelled Blip.
+    private fun blipPackage(items: List<MediaItem>): String? {
+        val probe = shareIntent(items).setType("*/*")
+        val manager = context.packageManager
+        return manager.queryIntentActivities(probe, 0)
+            .firstOrNull { it.loadLabel(manager).toString().equals("Blip", ignoreCase = true) }
+            ?.activityInfo?.packageName
+    }
+
+    fun share(items: List<MediaItem>, onlyPackage: String? = null) {
+        if (items.isEmpty()) return
+        val send = shareIntent(items)
+        if (onlyPackage != null) {
+            context.startActivity(send.setPackage(onlyPackage).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } else {
+            context.startActivity(Intent.createChooser(send, null))
+        }
+    }
+
+    private fun shareIntent(items: List<MediaItem>): Intent {
         val uris = ArrayList(items.map { shareableUri(it) })
         val send = if (uris.size == 1) {
             Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.first())
@@ -87,7 +116,7 @@ class MediaActions(
         }
         send.setType(if (items.all { it.isVideo }) "video/*" else if (items.none { it.isVideo }) "image/*" else "*/*")
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.startActivity(Intent.createChooser(send, null))
+        return send
     }
 
     // The selected photos as one PDF in Documents, a page each; offered for taking back, which deletes the file.

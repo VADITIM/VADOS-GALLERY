@@ -313,7 +313,7 @@ private fun ViewerActions(controller: LibraryController, item: MediaItem, source
     val actions = controller.actions
     val deleteModifier = Modifier.pendingMark(bar.isPendingDelete).trashTarget()
     Row(Modifier.padding(5.dp)) {
-        IconButton(onClick = { actions.share(listOf(item)) }) { ShareIcon(Palette.textBody) }
+        IconButton(onClick = { actions.share(listOf(item)) }, onLongClick = { actions.shareToBlip(listOf(item)) }) { ShareIcon(Palette.textBody) }
         if (source.isTrash) {
             IconButton(onClick = { actions.restore(listOf(item)) }) { RestoreIcon(LocalAccent.current) }
             IconButton(onClick = { bar.onDelete() }, modifier = deleteModifier) { TrashIcon(Palette.danger) }
@@ -457,7 +457,7 @@ private fun SelectionSendBar(controller: LibraryController, screen: LibraryScree
                     SendFace.CONFIRM -> Box(Modifier.padding(horizontal = 24.dp)) { ConfirmLabel() }
                     SendFace.UNDO -> heldOffer?.let { UndoContent(it, onUndo = actions::undo) }
                     SendFace.SEND -> Row(Modifier.padding(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { actions.share(selectedItems) }) { ShareIcon(Palette.textBody) }
+                        IconButton(onClick = { actions.share(selectedItems) }, onLongClick = { actions.shareToBlip(selectedItems) }) { ShareIcon(Palette.textBody) }
                         // Photos only; videos in the selection are left out of it.
                         OptionalButton(selectedItems.any { !it.isVideo }) {
                             IconButton(onClick = {
