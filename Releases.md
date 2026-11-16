@@ -4,6 +4,7 @@ What changed in each feature version. Planned work is in `.claude/docs/roadmap.m
 
 ## 1.6: thrown into the trash (1.6.0)
 
+- **1.6.3:** the app icon (`design/app-icon/icon.svg`) sits on the V/AS squircle, #181818 ground and #3a3a3a hairline, instead of the square gradient ground.
 - **1.6.2:** holding the Share button sends the photos straight to Blip, without the share sheet; a tap still opens the sheet (`MediaActions.shareToBlip`, `IconButton.onLongClick`).
 - **1.6.1:** an album, location or private group emptied while open closes itself, back to the list it was opened from (`LibraryNavigation.leaveEmptiedFolder`, in `LibraryEffects`); a folder only closes once it has been seen with photos, so a new empty group still opens.
 - **Trash throw:** a confirmed delete throws its photos into the trash button (`TrashThrow` in `:core:ui`): a copy of each flies from its tile or from the open photo (`trashSource`) on a short arc to the button (`trashTarget`), shrinking and fading into it, and the button swells; the originals hide meanwhile and the delete runs once they are in (`Motion.TRASH_THROW_MS`). Grid selections, the viewer and Duplicates all use it.
